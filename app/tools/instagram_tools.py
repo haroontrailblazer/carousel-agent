@@ -1,0 +1,287 @@
+"""Instagram Graph API publishing tool.
+
+Publishes the reviewed carousel bundle to Instagram via the Content Publishing
+API (Graph API version ``settings.ig_api_version``):
+
+1. Create one child media container per public URL — the FIRST url is the
+   cover VIDEO (``media_type=VIDEO`` + ``video_url``), the rest are images
+   (``image_url``); every child is created with ``is_carousel_item=true``.
+2. Poll each child container's ``status_code`` until ``FINISHED`` (bounded
+   retries; video transcoding is asynchronous on Instagram's side).
+3. Create the parent container with ``media_type=CAROUSEL``, the ordered
+   ``children`` ids and the caption, and poll it to ``FINISHED`` as well.
+4. ``POST /{ig_user_id}/media_publish`` with the parent container id.
+5. ``GET /{media_id}?fields=permalink`` and return both ids.
+
+All credentials come from :mod:`app.config` (``ig_user_id``,
+``ig_access_token``, ``ig_api_version``) — never hard-coded. Every HTTP call
+carries an explicit timeout, and any Graph API error payload is raised as a
+``RuntimeError`` that includes Instagram's error message.
+"""
+
+from __future__ import annotations
+
+import time
+from typing import Any, Mapping, Optional
+
+import httpx
+
+from app.config import settings
+
+# Instagram Graph API lives on the Facebook Graph host for IG professional
+# accounts connected through Facebook Login.
+_GRAPH_HOST = "https://graph.facebook.com"
+
+# Explicit network timeouts (seconds) for every request.
+_TIMEOUT = httpx.Timeout(60.0, connect=15.0)
+
+# Container status polling: video children can take a while to transcode.
+_POLL_INTERVAL_S = 5.0
+_MAX_POLL_ATTEMPTS = 60  # 60 * 5 s = up to 5 minutes per container
+
+# Instagram requires 2-10 children in a carousel.
+_MIN_CAROUSEL_CHILDREN = 2
+
+_TERMINAL_FAILURE_STATUSES = {"ERROR", "EXPIRED"}
+
+
+def _api_base() -> str:
+    """Return the versioned Graph API base URL (no trailing slash)."""
+    return f"{_GRAPH_HOST}/{settings.ig_api_version}"
+
+
+def _extract_error_message(payload: Any) -> Optional[str]:
+    """Pull a human-readable error message out of a Graph API JSON payload.
+
+    Graph API errors look like ``{"error": {"message": ..., "type": ...,
+    "code": ..., "error_subcode": ..., "error_user_msg": ...}}``. Returns
+    ``None`` when the payload carries no error object.
+    """
+    if not isinstance(payload, Mapping):
+        return None
+    error = payload.get("error")
+    if not isinstance(error, Mapping):
+        return None
+    parts: list[str] = []
+    message = error.get("message")
+    if message:
+        parts.append(str(message))
+    user_msg = error.get("error_user_msg")
+    if user_msg and user_msg != message:
+        parts.append(str(user_msg))
+    code = error.get("code")
+    subcode = error.get("error_subcode")
+    if code is not None:
+        code_txt = f"code={code}"
+        if subcode is not None:
+            code_txt += f", subcode={subcode}"
+        parts.append(f"({code_txt})")
+    return " ".join(parts) if parts else "Unknown Instagram Graph API error"
+
+
+def _graph_request(
+    client: httpx.Client,
+    method: str,
+    path: str,
+    *,
+    params: Optional[dict[str, Any]] = None,
+    data: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Issue one Graph API request and return the decoded JSON object.
+
+    Raises :class:`RuntimeError` with Instagram's own error message when the
+    response carries an ``error`` payload (regardless of HTTP status), and
+    falls back to ``raise_for_status`` for non-JSON failures.
+    """
+    url = f"{_api_base()}{path}"
+    response = client.request(method, url, params=params, data=data)
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if payload is not None:
+        error_message = _extract_error_message(payload)
+        if error_message is not None:
+            raise RuntimeError(
+                f"Instagram Graph API error on {method} {path}: {error_message}"
+            )
+    response.raise_for_status()
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            f"Instagram Graph API returned a non-JSON-object response on "
+            f"{method} {path}: {response.text[:500]}"
+        )
+    return payload
+
+
+def _create_child_container(
+    client: httpx.Client, public_url: str, *, is_video: bool
+) -> str:
+    """Create one carousel child container and return its container id."""
+    data: dict[str, Any] = {
+        "is_carousel_item": "true",
+        "access_token": settings.ig_access_token,
+    }
+    if is_video:
+        data["media_type"] = "VIDEO"
+        data["video_url"] = public_url
+    else:
+        data["image_url"] = public_url
+    payload = _graph_request(
+        client, "POST", f"/{settings.ig_user_id}/media", data=data
+    )
+    container_id = payload.get("id")
+    if not container_id:
+        raise RuntimeError(
+            f"Instagram did not return a container id for child media "
+            f"(url={public_url}): {payload}"
+        )
+    return str(container_id)
+
+
+def _wait_until_finished(client: httpx.Client, container_id: str) -> None:
+    """Poll a media container until its ``status_code`` is ``FINISHED``.
+
+    Bounded to ``_MAX_POLL_ATTEMPTS`` polls, ``_POLL_INTERVAL_S`` seconds
+    apart. Raises :class:`RuntimeError` on ``ERROR``/``EXPIRED`` statuses or
+    when the container never finishes within the polling budget.
+    """
+    last_status = "UNKNOWN"
+    for attempt in range(1, _MAX_POLL_ATTEMPTS + 1):
+        payload = _graph_request(
+            client,
+            "GET",
+            f"/{container_id}",
+            params={
+                "fields": "status_code,status",
+                "access_token": settings.ig_access_token,
+            },
+        )
+        last_status = str(payload.get("status_code", "UNKNOWN"))
+        if last_status == "FINISHED":
+            return
+        if last_status in _TERMINAL_FAILURE_STATUSES:
+            detail = payload.get("status", "")
+            raise RuntimeError(
+                f"Instagram media container {container_id} failed with status "
+                f"{last_status}: {detail}"
+            )
+        if attempt < _MAX_POLL_ATTEMPTS:
+            time.sleep(_POLL_INTERVAL_S)
+    raise RuntimeError(
+        f"Instagram media container {container_id} did not reach FINISHED "
+        f"after {_MAX_POLL_ATTEMPTS} polls "
+        f"({_MAX_POLL_ATTEMPTS * _POLL_INTERVAL_S:.0f} s); "
+        f"last status_code={last_status}"
+    )
+
+
+def _create_parent_container(
+    client: httpx.Client, child_ids: list[str], caption: str
+) -> str:
+    """Create the CAROUSEL parent container and return its id."""
+    payload = _graph_request(
+        client,
+        "POST",
+        f"/{settings.ig_user_id}/media",
+        data={
+            "media_type": "CAROUSEL",
+            "children": ",".join(child_ids),
+            "caption": caption,
+            "access_token": settings.ig_access_token,
+        },
+    )
+    parent_id = payload.get("id")
+    if not parent_id:
+        raise RuntimeError(
+            f"Instagram did not return a container id for the carousel "
+            f"parent: {payload}"
+        )
+    return str(parent_id)
+
+
+def publish_carousel(bundle: dict, public_urls: list[str]) -> dict:
+    """Publish the approved carousel to Instagram and return its identity.
+
+    Args:
+        bundle: The assembled ``Bundle`` as a plain dict (see
+            :class:`app.schemas.Bundle`); only ``caption`` is read here — the
+            media itself arrives through ``public_urls``.
+        public_urls: Publicly reachable HTTPS URLs for every slide in order.
+            The FIRST url must be the cover VIDEO (mp4); all remaining urls
+            are slide images (PNG/JPEG, 1080x1350).
+
+    Returns:
+        ``{"media_id": <published IG media id>, "permalink": <post url>}``.
+
+    Raises:
+        ValueError: When ``public_urls`` is out of Instagram's allowed range
+            (2 to ``settings.max_carousel_slides`` items).
+        RuntimeError: When credentials are missing or the Graph API returns
+            an error payload / a container fails or times out processing.
+    """
+    if len(public_urls) > settings.max_carousel_slides:
+        raise ValueError(
+            f"Carousel has {len(public_urls)} slides; Instagram allows at "
+            f"most {settings.max_carousel_slides}."
+        )
+    if len(public_urls) < _MIN_CAROUSEL_CHILDREN:
+        raise ValueError(
+            f"Carousel needs at least {_MIN_CAROUSEL_CHILDREN} slides; "
+            f"got {len(public_urls)}."
+        )
+    if not settings.ig_user_id or not settings.ig_access_token:
+        raise RuntimeError(
+            "Instagram credentials are not configured: set IG_USER_ID and "
+            "IG_ACCESS_TOKEN in the environment (.env)."
+        )
+
+    caption = str(bundle.get("caption", "") or "")
+
+    with httpx.Client(timeout=_TIMEOUT) as client:
+        # (1) Child containers — first is the cover video, rest are images.
+        child_ids: list[str] = []
+        for index, url in enumerate(public_urls):
+            child_ids.append(
+                _create_child_container(client, url, is_video=(index == 0))
+            )
+
+        # (2) Wait for every child (video transcode is asynchronous).
+        for child_id in child_ids:
+            _wait_until_finished(client, child_id)
+
+        # (3) Parent CAROUSEL container; poll it too before publishing.
+        parent_id = _create_parent_container(client, child_ids, caption)
+        _wait_until_finished(client, parent_id)
+
+        # (4) Publish.
+        publish_payload = _graph_request(
+            client,
+            "POST",
+            f"/{settings.ig_user_id}/media_publish",
+            data={
+                "creation_id": parent_id,
+                "access_token": settings.ig_access_token,
+            },
+        )
+        media_id = publish_payload.get("id")
+        if not media_id:
+            raise RuntimeError(
+                f"Instagram media_publish returned no media id: "
+                f"{publish_payload}"
+            )
+        media_id = str(media_id)
+
+        # (5) Permalink of the published post.
+        permalink_payload = _graph_request(
+            client,
+            "GET",
+            f"/{media_id}",
+            params={
+                "fields": "permalink",
+                "access_token": settings.ig_access_token,
+            },
+        )
+        permalink = str(permalink_payload.get("permalink", ""))
+
+    return {"media_id": media_id, "permalink": permalink}
