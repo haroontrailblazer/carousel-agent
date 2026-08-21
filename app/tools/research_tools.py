@@ -2,10 +2,10 @@
 
 Two ``FunctionTool``-wrapped functions:
 
-- :func:`search_web` — one web search via the OpenAI Responses API
+- :func:`search_web` - one web search via the OpenAI Responses API
   ``web_search`` built-in tool (verified working on this key), returning the
   synthesized answer plus its citation URLs.
-- :func:`save_research_brief` — validates the gathered material as a
+- :func:`save_research_brief` - validates the gathered material as a
   :class:`app.schemas.ResearchBrief`, writes it to session state under
   ``K_RESEARCH``, and merges any discovered official media URLs into the
   news item's ``media_urls`` so the First-Page Visual agent can clip them
@@ -14,7 +14,7 @@ Two ``FunctionTool``-wrapped functions:
 The search model is the utility model's bare OpenAI id (cheap; the Research
 agent itself does the judgment). Search is best-effort: failures return an
 ``error`` status result instead of raising, so a flaky network can never
-kill the pipeline — the agent falls back to the news item's own text.
+kill the pipeline - the agent falls back to the news item's own text.
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def search_web(query: str) -> dict:
 
     Returns:
         ``{"status": "ok", "answer": str, "sources": [url, ...]}`` on
-        success, or ``{"status": "error", "message": str}`` — on error,
+        success, or ``{"status": "error", "message": str}`` - on error,
         continue with the facts already gathered instead of retrying forever.
     """
     query = (query or "").strip()[:_MAX_QUERY_CHARS]
@@ -201,10 +201,10 @@ def save_research_brief(
 
     Args:
         summary: 3-6 sentence briefing on what happened and why it matters.
-        key_facts: List of ``{"fact": str, "source_url": str}`` entries —
+        key_facts: List of ``{"fact": str, "source_url": str}`` entries -
             exact numbers/names/dates, each with the URL it was verified at
             (empty source_url only for facts taken from the news item text).
-        suggested_angle: One line — the most compelling hook angle found.
+        suggested_angle: One line - the most compelling hook angle found.
         media_candidates: Direct URLs of OFFICIAL announcement videos/images
             (event clips, launch videos, demo footage) usable for the cover.
         sources: All URLs consulted.

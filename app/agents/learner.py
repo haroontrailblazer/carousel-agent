@@ -1,4 +1,4 @@
-"""Learner agent — stores review feedback and distills repeated themes into
+"""Learner agent - stores review feedback and distills repeated themes into
 permanent instruction ("harness") updates.
 
 A tool-using ``LlmAgent`` (``settings.utility_model``). All real work happens
@@ -9,12 +9,12 @@ inside one deterministic tool, :func:`store_feedback_and_distill`, which:
    :meth:`app.services.memory_service.PostgresMemoryService.store_feedback`;
 2. compares the new feedback against recent history
    (:meth:`~app.services.memory_service.PostgresMemoryService.recent_feedback`,
-   simple keyword overlap) — when a previously stored feedback shares a theme
+   simple keyword overlap) - when a previously stored feedback shares a theme
    with the current one (>= 2 similar feedbacks in total, as pinned by
    docs/CONTRACTS.md), the theme has proven recurrent;
 3. appends ONE distilled one-line rule under the ``## Learned rules`` section
-   of the matching skill file — ``skills/agents/<target>.md`` for most
-   targets, ``skills/design-skill.md`` for the template_design target —
+   of the matching skill file - ``skills/agents/<target>.md`` for most
+   targets, ``skills/design-skill.md`` for the template_design target -
    creating the section when missing and NEVER deleting existing content.
    Agent instruction files are never CREATED here: a bare stub would shadow
    the owning agent's full built-in default instruction on the next build,
@@ -105,7 +105,7 @@ def _resolve_memory_service(tool_context: ToolContext) -> PostgresMemoryService:
 
     Prefers the memory service wired into the current invocation; falls back
     to a module-level, settings-configured instance (constructing it performs
-    no I/O — the pool opens lazily on first use).
+    no I/O - the pool opens lazily on first use).
 
     Args:
         tool_context: The ADK tool context of the current call.
@@ -219,7 +219,7 @@ def _append_learned_rule(path: Path, rule_line: str) -> tuple[bool, str]:
         rule_line: Full rule line (starting with ``- ``), no trailing newline.
 
     Returns:
-        ``(appended, message)`` — ``appended`` is False for duplicates and
+        ``(appended, message)`` - ``appended`` is False for duplicates and
         for refused agent-instruction stubs.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -263,7 +263,7 @@ async def store_feedback_and_distill(tool_context: ToolContext) -> dict:
     """Store the reviewer's feedback and, when its theme repeats, append a
     distilled rule to the matching skill file (permanent harness update).
 
-    Call this tool exactly once, with no arguments — everything it needs is
+    Call this tool exactly once, with no arguments - everything it needs is
     read from session state. Learning is best-effort: errors are reported in
     the result, never raised.
 
@@ -315,7 +315,7 @@ async def store_feedback_and_distill(tool_context: ToolContext) -> dict:
             limit=_RECENT_FEEDBACK_LIMIT
         )
         await service.store_feedback(record)
-    except Exception as exc:  # noqa: BLE001 — learning must never break the run
+    except Exception as exc:  # noqa: BLE001 - learning must never break the run
         logger.exception("Storing feedback failed for run %s.", run_id)
         result = {
             "status": "error",
@@ -357,7 +357,7 @@ async def store_feedback_and_distill(tool_context: ToolContext) -> dict:
     if similar_count < _REPEAT_THRESHOLD:
         result["message"] = (
             f"Feedback stored; theme seen in {similar_count} earlier "
-            f"feedback(s) — below the repeat threshold "
+            f"feedback(s) - below the repeat threshold "
             f"({_REPEAT_THRESHOLD}), no rule distilled."
         )
         state[K_LEARNER_RESULT] = result
@@ -399,7 +399,7 @@ async def store_feedback_and_distill(tool_context: ToolContext) -> dict:
 # Instruction (fallback default; canonical copy lives in
 # skills/agents/learner.md so the Learner can evolve even itself).
 # NOTE: only "{run_id?}" and "{review_verdict?}" may appear as {identifier}
-# placeholders — ADK's instruction templating substitutes any bare
+# placeholders - ADK's instruction templating substitutes any bare
 # {state_key}.
 # ---------------------------------------------------------------------------
 DEFAULT_INSTRUCTION = """\
@@ -407,7 +407,7 @@ DEFAULT_INSTRUCTION = """\
 
 You are the Learner of the Carousel Factory. Every human verdict
 (approve or reject, with its feedback text) is a lesson. Your job is to make
-sure that lesson is stored — and, when the same complaint keeps repeating,
+sure that lesson is stored - and, when the same complaint keeps repeating,
 turned into a permanent one-line rule inside the pipeline's skill files so
 future runs never repeat the mistake.
 
@@ -421,9 +421,9 @@ The verdict being learned from:
 
 1. Call the tool store_feedback_and_distill exactly once, with no arguments.
    It stores the feedback record, checks recent feedback history for a
-   repeated theme (keyword overlap), and — when an earlier feedback already
+   repeated theme (keyword overlap), and - when an earlier feedback already
    shares the theme, i.e. the same complaint has now been made at least
-   twice — appends a distilled one-line rule under the "Learned rules"
+   twice - appends a distilled one-line rule under the "Learned rules"
    section of the matching skill file.
 2. Read the tool result and reply with at most two factual sentences:
    - status "stored" with rule_appended true: say the feedback was stored
@@ -437,7 +437,7 @@ The verdict being learned from:
 ## Hard rules
 
 - Never call anything except store_feedback_and_distill.
-- Never edit any file yourself and never invent what was stored or learned —
+- Never edit any file yourself and never invent what was stored or learned -
   only report what the tool returned.
 """
 
@@ -445,7 +445,7 @@ The verdict being learned from:
 def _ensure_skill_file() -> None:
     """Write the default instruction to skills/agents/learner.md.
 
-    Only when the file is missing — learned rules appended to this file must
+    Only when the file is missing - learned rules appended to this file must
     never be overwritten.
     """
     path = settings.skills_dir / "agents" / f"{AGENT_LEARNER}.md"

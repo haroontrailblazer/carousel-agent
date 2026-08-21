@@ -2,21 +2,21 @@
 
 Three jobs (see docs/CONTRACTS.md file map):
 
-1. ``find_source_clip(news)``   — pick the best sourced video (preferred) or
+1. ``find_source_clip(news)``   - pick the best sourced video (preferred) or
    image URL from a news item's ``media_urls``, its source page, every page
-   linked in its body text, and — when nothing sourced plays — a bounded web
+   linked in its body text, and - when nothing sourced plays - a bounded web
    search for an event clip. ``placeholder_background`` guarantees a cover can
    ALWAYS be built even with zero media found.
-2. ``download_and_trim(url)``   — fetch the clip via the yt-dlp Python API and
+2. ``download_and_trim(url)``   - fetch the clip via the yt-dlp Python API and
    trim it into the configured cover window (settings.cover_clip_min_s..max_s,
    default 4-15 s), silent H.264 mp4.
-3. ``compose_cover(...)``       — scale/center-crop the media to 1080x1350,
+3. ``compose_cover(...)``       - scale/center-crop the media to 1080x1350,
    composite the STRANGE-COVER overlay template plus a Pillow-rendered title
    block (warm-white, condensed extra-bold uppercase, lime-gradient highlight
    phrase) and produce the final cover mp4 + first-frame poster PNG.
 
-The cover is NEVER AI-generated (skills/cover-style.md): a sourced clip, or —
-fallback — the update's own image turned into a 6 s slow-zoom video.
+The cover is NEVER AI-generated (skills/cover-style.md): a sourced clip, or -
+fallback - the update's own image turned into a 6 s slow-zoom video.
 
 All ffmpeg work shells out to ``settings.ffmpeg_bin`` with explicit timeouts.
 All intermediate files live under a caller-provided run-specific ``workdir``
@@ -42,6 +42,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, download_range_func
 
 from app.config import settings
+from app.text_rules import require_no_em_dash
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -67,7 +68,7 @@ _HTTP_HEADERS = {
         "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
     )
 }
-# (connect, read) timeouts for every requests call — never hang the pipeline.
+# (connect, read) timeouts for every requests call - never hang the pipeline.
 _PAGE_TIMEOUT = (10, 30)
 _IMAGE_TIMEOUT = (10, 60)
 _FFMPEG_TIMEOUT_S = 300
@@ -83,13 +84,13 @@ _TITLE_MAX_WIDTH_FRAC = 0.63  # inner span between the template's arrow glyphs
 _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
 
 # Region of the template occupied by its baked-in EXAMPLE title text
-# ("STOP PROMPTING YOUR AI, GIVE IT A LOOP") — measured on the shipped
+# ("STOP PROMPTING YOUR AI, GIVE IT A LOOP") - measured on the shipped
 # STRANGE-COVER (1).png. It is scrubbed before compositing the real title.
 # Fractions of width/height; excludes the side arrow glyphs (0.093-0.167 and
 # 0.839-0.907) and the grid floor.
 _TEMPLATE_TEXT_BOX = (0.175, 0.705, 0.83, 0.872)  # (x0, y0, x1, y1)
 _TEXT_LUMA_THRESHOLD = 6  # max(R,G,B) above this inside the box = text pixel
-_TEXT_SCRUB_DILATION_X = 3  # px — also scrub the anti-aliased glyph edge ring
+_TEXT_SCRUB_DILATION_X = 3  # px - also scrub the anti-aliased glyph edge ring
 _TEXT_SCRUB_DILATION_Y = 2
 _FONT_CANDIDATES = (
     Path("C:/Windows/Fonts/bahnschrift.ttf"),
@@ -276,7 +277,7 @@ def _scrape_page_media(page_url: str) -> list[tuple[str, str, int]]:
 
     Returns:
         List of ``(url, kind, score)`` tuples; kind is 'video'/'image'/'unknown'.
-        Network failures return an empty list — scraping is best-effort.
+        Network failures return an empty list - scraping is best-effort.
     """
     try:
         resp = requests.get(page_url, headers=_HTTP_HEADERS, timeout=_PAGE_TIMEOUT)
@@ -365,7 +366,7 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
     ``source_url`` itself (it may be a YouTube/Vimeo watch page), media
     scraped off the source page (og:video / og:image / <video> / iframes),
     AND every page linked inside the item's body/summary text (each scraped
-    the same way — newsletter blurbs usually carry the links inline). When no
+    the same way - newsletter blurbs usually carry the links inline). When no
     sourced video is playable, a bounded web search (``ytsearch``) hunts for
     an event/announcement clip before falling back to the best image.
 
@@ -428,7 +429,7 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
 
     candidates.sort(key=lambda c: c[2], reverse=True)
 
-    # Best image candidate — reported alongside every result so the caller
+    # Best image candidate - reported alongside every result so the caller
     # can drop to the image path the moment video downloads fail, without
     # re-searching.
     image_url, image_origin = "", ""
@@ -466,13 +467,13 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
             )
         if _url_ext(url) in VIDEO_EXTS:
             # Direct video file that yt-dlp could not probe (e.g. signed CDN
-            # URL) — trust the extension and let download_and_trim try.
+            # URL) - trust the extension and let download_and_trim try.
             return result(
                 True, url, True, 0.0, origin,
                 "direct video file (probe skipped/failed)",
             )
 
-    # No sourced video played — hunt the web for an event/announcement clip
+    # No sourced video played - hunt the web for an event/announcement clip
     # (the original spec: "a small video piece on that event from web").
     query = search_query.strip() or str(news.get("title") or "").strip()
     searched = _search_video_online(query)
@@ -491,7 +492,7 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
     return result(
         False, "", False, 0.0, "",
         "no video or image candidates found (media_urls, source page, "
-        "body links and web search all came up empty) — use "
+        "body links and web search all came up empty) - use "
         "placeholder_background for a text-only cover",
     )
 
@@ -632,7 +633,7 @@ def placeholder_background(workdir: str = "") -> str:
 
     Used when NO sourced media exists at all: a subtle top-to-bottom dark
     gradient the STRANGE-COVER overlay + title composite onto, so a cover is
-    ALWAYS produced. Pure Pillow — this is a drawn background, not AI-generated
+    ALWAYS produced. Pure Pillow - this is a drawn background, not AI-generated
     imagery, so it does not violate the sourced-cover rule.
 
     Args:
@@ -694,7 +695,7 @@ def download_image(url: str, workdir: str = "") -> str:
 
 
 # ---------------------------------------------------------------------------
-# 3) compose_cover — title rendering + overlay + ffmpeg render
+# 3) compose_cover - title rendering + overlay + ffmpeg render
 # ---------------------------------------------------------------------------
 
 
@@ -835,7 +836,7 @@ def _scrub_template_text(tpl: Image.Image) -> Image.Image:
     ("STOP PROMPTING YOUR AI, GIVE IT A LOOP") rendered into the dissolve
     zone. Every text-colored pixel inside ``_TEMPLATE_TEXT_BOX`` is replaced
     with pure black whose alpha is linearly interpolated from the nearest
-    non-text background pixels on the same row — seamless even where the
+    non-text background pixels on the same row - seamless even where the
     grain dissolve is only partially opaque. Arrows and grid are untouched.
     """
     width, height = tpl.size
@@ -995,6 +996,7 @@ def compose_cover(
         RuntimeError: When ffmpeg rendering fails.
         FileNotFoundError: When ``media_path`` does not exist.
     """
+    require_no_em_dash([title, highlight], "cover copy")
     media = Path(media_path)
     if not media.exists():
         raise FileNotFoundError(f"media file not found: {media_path}")

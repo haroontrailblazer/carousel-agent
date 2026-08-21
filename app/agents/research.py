@@ -1,18 +1,18 @@
-"""Research agent — gathers verified facts BEFORE anything is planned.
+"""Research agent - gathers verified facts BEFORE anything is planned.
 
 First agent of the generate phase. A tool-using ``LlmAgent`` on
 ``settings.planner_model`` (facts shape everything downstream, so it gets the
 strong model) with two tools from :mod:`app.tools.research_tools`:
 
-- ``search_web`` — live web search (OpenAI Responses ``web_search``) with
+- ``search_web`` - live web search (OpenAI Responses ``web_search``) with
   citations; called several times with focused queries.
-- ``save_research_brief`` — validates and stores the
+- ``save_research_brief`` - validates and stores the
   :class:`app.schemas.ResearchBrief` under ``K_RESEARCH`` and merges official
   media URLs it found into the news item's ``media_urls`` (so the First-Page
   Visual agent can clip the announcement footage without any change).
 
 Hand-off contract: the planner and phrasing agents receive the brief through
-``{research_brief?}`` instruction templating — research NEVER writes copy or
+``{research_brief?}`` instruction templating - research NEVER writes copy or
 plans slides itself. On a "facts are wrong/outdated" rejection the Feedback
 Router targets ``research``, which forces a full re-plan (see the
 ``_REWORK_DEPENDENTS`` map in app/orchestrator.py).
@@ -37,19 +37,19 @@ from app.tools.research_tools import save_research_brief, search_web
 DEFAULT_INSTRUCTION = """\
 # Research agent
 
-You are the Research agent of the Carousel Factory — the FIRST agent to touch
+You are the Research agent of the Carousel Factory - the FIRST agent to touch
 a news item. Everything downstream (the editorial plan, the slide copy, the
 cover) is built on the facts you gather. A thin newsletter blurb becomes a
 rich, accurate carousel only because of your work; a fact you get wrong ships
 to Instagram.
 
-## Input — the news item
+## Input - the news item
 
 {news_item}
 
 ## Corrections (highest priority)
 
-Rework feedback from the human reviewer for THIS run — when non-empty it
+Rework feedback from the human reviewer for THIS run - when non-empty it
 overrides everything below (e.g. "the numbers are outdated" means re-verify
 every number against primary sources):
 
@@ -64,20 +64,20 @@ Standing notes from past reviews: {recent_feedback_notes?}
    lists, who said what, how it compares to the previous version/competitors.
 2. Call search_web with 2-5 FOCUSED queries (one topic each). Always try to
    find:
-   - the OFFICIAL announcement (company blog/docs/keynote) — the primary
+   - the OFFICIAL announcement (company blog/docs/keynote) - the primary
      source for every number;
    - concrete specs/pricing/benchmarks with exact figures;
    - one interesting reaction or comparison that sharpens the angle;
    - official announcement VIDEOS or images (keynote clips, demo footage,
-     launch pages) — collect their direct URLs as media candidates for the
+     launch pages) - collect their direct URLs as media candidates for the
      cover.
 3. Call save_research_brief exactly once with:
-   - summary: 3-6 sentences — what happened, what is genuinely new, why the
+   - summary: 3-6 sentences - what happened, what is genuinely new, why the
      audience should care.
    - key_facts: every fact the carousel may state, as
-     {"fact": "...", "source_url": "..."} — numbers, names, dates VERBATIM
+     {"fact": "...", "source_url": "..."} - numbers, names, dates VERBATIM
      from the source. Facts you could not verify anywhere do NOT go in.
-   - suggested_angle: one line — the most compelling hook you found.
+   - suggested_angle: one line - the most compelling hook you found.
    - media_candidates: direct URLs of official videos/images found (empty
      list if none).
    - sources: every URL you consulted.
@@ -88,14 +88,14 @@ Standing notes from past reviews: {recent_feedback_notes?}
 
 - NEVER invent a fact, number or quote. Unverified claims stay out; if
   searches fail, save a brief built only from the news item's own text (with
-  empty source_urls) — an honest thin brief beats a padded fake one.
+  empty source_urls) - an honest thin brief beats a padded fake one.
 - Prefer primary sources (the company itself) over coverage of coverage.
-- If search_web returns status "error", continue with what you have — call it
+- If search_web returns status "error", continue with what you have - call it
   at most 5 times total.
 - Call save_research_brief exactly once; if it returns an error, fix the
   arguments and call it once more.
 - You research and hand over. You never write slide copy, never plan the
-  carousel, never pick the cover — that is the downstream agents' job.
+  carousel, never pick the cover - that is the downstream agents' job.
 """
 
 
@@ -124,8 +124,8 @@ def build_research_agent() -> LlmAgent:
         name=AGENT_RESEARCH,
         model=resolve_model(settings.planner_model),
         description=(
-            "Research: web-searches the news item first — official "
-            "announcement, exact specs/numbers, reactions, official media — "
+            "Research: web-searches the news item first - official "
+            "announcement, exact specs/numbers, reactions, official media - "
             "and hands a verified, source-cited brief to the planner, "
             "phrasing and cover agents."
         ),

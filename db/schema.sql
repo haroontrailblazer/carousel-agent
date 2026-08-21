@@ -1,4 +1,4 @@
--- Carousel Factory — operational schema (Supabase / Postgres 14+).
+-- Carousel Factory - operational schema (Supabase / Postgres 14+).
 -- Idempotent: safe to apply repeatedly (CREATE ... IF NOT EXISTS only).
 -- Apply with e.g.:  psql "$DATABASE_URL" -f db/schema.sql
 -- (strip the "+asyncpg" marker from the URL first, if present)

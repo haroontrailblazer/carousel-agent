@@ -2,19 +2,19 @@
 
 Exposes:
 
-* ``root_agent`` — the module-level :class:`app.orchestrator.CarouselOrchestrator`
+* ``root_agent`` - the module-level :class:`app.orchestrator.CarouselOrchestrator`
   instance that ``adk web`` / ``adk run`` discover (they import
   ``app.agent`` and read ``root_agent``), with all eleven pipeline agents as
   ``sub_agents`` so the agent graph renders.
-* ``build_root_agent()`` — builds a FRESH agent tree. Agent builders re-read
+* ``build_root_agent()`` - builds a FRESH agent tree. Agent builders re-read
   their ``skills/agents/<name>.md`` instruction files, so a fresh tree picks
   up rules the Learner agent appended since the last build.
-* ``build_runner()`` — a :class:`google.adk.runners.Runner` wired to the
+* ``build_runner()`` - a :class:`google.adk.runners.Runner` wired to the
   production services (``DatabaseSessionService`` on
   ``settings.database_url``, ``SupabaseArtifactService`` on Supabase S3
   storage, ``PostgresMemoryService``) with graceful in-memory fallbacks
   (``InMemorySessionService`` / ``InMemoryArtifactService`` /
-  ``InMemoryMemoryService`` — names verified against installed google-adk
+  ``InMemoryMemoryService`` - names verified against installed google-adk
   2.7.0) whenever the environment is not configured, so ``adk web`` works out
   of the box.
 
@@ -22,7 +22,7 @@ Runner constructor verified against installed google-adk 2.7.0
 (``google/adk/runners.py``): all-keyword ``Runner(*, app=None, app_name=None,
 agent=None, node=None, plugins=None, artifact_service=None, session_service,
 memory_service=None, credential_service=None, plugin_close_timeout=5.0,
-auto_create_session=False)`` — ``session_service`` is required; passing
+auto_create_session=False)`` - ``session_service`` is required; passing
 ``agent`` requires ``app_name``.
 """
 
@@ -140,7 +140,7 @@ def _build_session_service() -> BaseSessionService:
             )
     else:
         logger.warning(
-            "DATABASE_URL not set; using InMemorySessionService — sessions "
+            "DATABASE_URL not set; using InMemorySessionService - sessions "
             "will not survive a restart and the review API cannot resume "
             "runs from another process."
         )
@@ -164,7 +164,7 @@ def _build_artifact_service() -> BaseArtifactService:
         logger.warning(
             "Supabase S3 settings missing (SUPABASE_S3_ENDPOINT / "
             "SUPABASE_S3_ACCESS_KEY / SUPABASE_S3_SECRET_KEY); using "
-            "InMemoryArtifactService — artifacts stay local to this process "
+            "InMemoryArtifactService - artifacts stay local to this process "
             "and no public URLs can be signed for publishing."
         )
     from google.adk.artifacts import InMemoryArtifactService
@@ -182,7 +182,7 @@ def _build_memory_service() -> BaseMemoryService:
     if settings.database_url:
         return PostgresMemoryService()
     logger.warning(
-        "DATABASE_URL not set; using InMemoryMemoryService — recent-feedback "
+        "DATABASE_URL not set; using InMemoryMemoryService - recent-feedback "
         "injection and permanent feedback storage are disabled."
     )
     from google.adk.memory import InMemoryMemoryService
@@ -194,7 +194,7 @@ def build_runner(agent: Optional[BaseAgent] = None) -> Runner:
     """Build a Runner wired to the configured (or fallback) services.
 
     Used by the fetcher to start pipeline runs and by the review API to
-    resume paused ones — both must share the same ``settings.app_name`` and
+    resume paused ones - both must share the same ``settings.app_name`` and
     session database so they address the same sessions.
 
     Args:

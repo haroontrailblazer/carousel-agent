@@ -1,22 +1,22 @@
-"""FastAPI review surface — the human side of the Carousel Factory review gate.
+"""FastAPI review surface - the human side of the Carousel Factory review gate.
 
 The Review Dispatcher pauses each pipeline run on a ``LongRunningFunctionTool``
 (``await_human_review``) after mailing the reviewers Approve/Reject links that
 point here:
 
-* ``GET  /review/{run_id}/approve`` — renders a CONFIRM page only. NO state
+* ``GET  /review/{run_id}/approve`` - renders a CONFIRM page only. NO state
   changes on GET: corporate mail scanners prefetch links, so a click in the
   mail must never decide anything by itself.
-* ``GET  /review/{run_id}/reject``  — same, with a REQUIRED feedback box
+* ``GET  /review/{run_id}/reject``  - same, with a REQUIRED feedback box
   asking what exactly is not good (facts / first visual / texts / slide design /
   CTA / structure / other).
-* ``POST /review/{run_id}/submit``  — the actual decision. Loads the pending
+* ``POST /review/{run_id}/submit``  - the actual decision. Loads the pending
   review (session id + paused function call id) via
   :func:`app.services.db.load_pending_review`, stores the verdict with
   :func:`app.services.db.record_verdict`, builds a ``types.Content`` carrying
   a ``types.Part(function_response=...)`` addressed to the original
   ``await_human_review`` call id, and resumes the pipeline in a background
-  task via ``app.agent.build_runner().run_async(...)`` — the HTTP response
+  task via ``app.agent.build_runner().run_async(...)`` - the HTTP response
   returns immediately with a "rework/publish is underway" page.
 
 Resume addressing convention (must match ``fetcher.fetch_news``):
@@ -25,7 +25,7 @@ Resume addressing convention (must match ``fetcher.fetch_news``):
 authoritative). Verified against installed google-adk 2.7.0
 (``google/adk/runners.py``): the root agent is a ``BaseAgent`` orchestrator,
 so ``Runner.run_async(new_message=<function-response Content>)`` starts a NEW
-invocation whose ``user_content`` is that function response — exactly what the
+invocation whose ``user_content`` is that function response - exactly what the
 dispatcher's ``before_agent_callback`` consumes to write the verdict to state.
 
 Run locally::
@@ -61,7 +61,7 @@ try:  # pragma: no cover - trivial import wiring
 except Exception:  # pragma: no cover - env dependent
     AWAIT_REVIEW_TOOL_NAME = "await_human_review"
 
-# Fixed pipeline user id — sessions are addressed by (app_name, user_id,
+# Fixed pipeline user id - sessions are addressed by (app_name, user_id,
 # session_id); the fetcher seeds sessions with this user id.
 try:  # pragma: no cover - trivial import wiring
     from fetcher.fetch_news import PIPELINE_USER_ID
@@ -157,7 +157,7 @@ def _confirm_page(run_id: str, status: str, error: str = "") -> HTMLResponse:
 
     Args:
         run_id: The run being reviewed (display + form action).
-        status: ``"approved"`` or ``"rejected"`` — decides the form variant.
+        status: ``"approved"`` or ``"rejected"`` - decides the form variant.
         error: Optional validation error to show (e.g. missing reject feedback).
 
     Returns:
@@ -178,7 +178,7 @@ def _confirm_page(run_id: str, status: str, error: str = "") -> HTMLResponse:
         field = (
             '<label for="feedback">Any feedback for next time? (optional)</label>'
             '<textarea id="feedback" name="feedback" '
-            'placeholder="Optional — noted for future carousels."></textarea>'
+            'placeholder="Optional - noted for future carousels."></textarea>'
         )
         button = '<button type="submit" class="approve">Approve &amp; publish</button>'
     else:
@@ -191,9 +191,9 @@ def _confirm_page(run_id: str, status: str, error: str = "") -> HTMLResponse:
         field = (
             f'<label for="feedback">{html.escape(_REJECT_QUESTION)}</label>'
             '<textarea id="feedback" name="feedback" required autofocus '
-            'placeholder="e.g. the first visual is not good — the clip is '
+            'placeholder="e.g. the first visual is not good - the clip is '
             'unrelated to the story"></textarea>'
-            '<p class="hint">Feedback is required to reject — it is routed '
+            '<p class="hint">Feedback is required to reject - it is routed '
             "verbatim to the agents that must redo their work.</p>"
         )
         button = (
@@ -217,7 +217,7 @@ def _done_page(run_id: str, status: str) -> HTMLResponse:
     rid = html.escape(run_id)
     if status == "approved":
         badge = '<span class="badge approve">Approved</span>'
-        heading = "Approved — publishing is underway"
+        heading = "Approved - publishing is underway"
         blurb = (
             "The pipeline has resumed and is publishing the carousel to "
             "Instagram. A confirmation mail with the post link will arrive "
@@ -225,7 +225,7 @@ def _done_page(run_id: str, status: str) -> HTMLResponse:
         )
     else:
         badge = '<span class="badge reject">Rejected</span>'
-        heading = "Rejected — rework is underway"
+        heading = "Rejected - rework is underway"
         blurb = (
             "The pipeline has resumed: your feedback is being routed to the "
             "responsible agents and the affected parts are being redone. A "
@@ -309,7 +309,7 @@ async def _restore_pending_review(
     ``submit_verdict`` consumes the ``pending_reviews`` row before the resume
     is known to have succeeded; if the resume then dies the run would be
     stranded with no retry path (the mail links would render "Nothing
-    pending"). Restoring the row lets the reviewer simply re-submit — a
+    pending"). Restoring the row lets the reviewer simply re-submit - a
     duplicate resume is harmless because the dispatcher's consumed-id guard
     turns it into a no-op for an already-recorded verdict.
 
@@ -350,10 +350,10 @@ async def _resume_pipeline(
 ) -> None:
     """Resume the paused run with the reviewer's verdict (background work).
 
-    Builds a fresh Runner (``app.agent.build_runner`` — same app_name and
+    Builds a fresh Runner (``app.agent.build_runner`` - same app_name and
     session database as the paused run) and streams the resumed invocation to
     completion: rejected verdicts end at the next review pause, approved ones
-    at ``done``. Errors are logged, never raised — the HTTP response has long
+    at ``done``. Errors are logged, never raised - the HTTP response has long
     been sent by the time this runs. On failure or timeout the consumed
     ``pending_reviews`` row is restored so the reviewer can re-submit.
 
@@ -374,7 +374,7 @@ async def _resume_pipeline(
     runner = None
     try:
         # Deferred import: building the agent tree is heavy and needs the full
-        # agent/tool dependency stack — the API itself must start without it.
+        # agent/tool dependency stack - the API itself must start without it.
         from app.agent import build_runner
 
         runner = build_runner()
@@ -466,7 +466,7 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="Carousel Factory — Review API",
+    title="Carousel Factory - Review API",
     description=(
         "Human review gate: confirm pages for the Approve/Reject mail links "
         "and the submit endpoint that resumes the paused pipeline."
@@ -504,7 +504,7 @@ async def index() -> JSONResponse:
 
 @app.get("/healthz", include_in_schema=False)
 async def healthz() -> JSONResponse:
-    """Cloud Run / uptime health check — no dependencies touched."""
+    """Cloud Run / uptime health check - no dependencies touched."""
     return JSONResponse({"status": "ok"})
 
 
@@ -536,12 +536,12 @@ async def submit_verdict(
     ``pending_reviews`` row, store the verdict in the ``feedback`` table, then
     fire the pipeline resume as a background task and answer immediately with
     a done page. Unknown run ids and double-submits (row already consumed)
-    get a graceful info page — no errors, no duplicate resumes.
+    get a graceful info page - no errors, no duplicate resumes.
 
     Args:
         run_id: The run the mail links point at.
-        status: Form field — ``"approved"`` or ``"rejected"``.
-        feedback: Form field — reviewer text; optional on approve only.
+        status: Form field - ``"approved"`` or ``"rejected"``.
+        feedback: Form field - reviewer text; optional on approve only.
 
     Returns:
         The done page (or a re-rendered form / info / error page).
@@ -582,7 +582,7 @@ async def submit_verdict(
             "(DATABASE_URL). Details are in the service log.",
         )
     if pending is None:
-        # Unknown run id OR the review was already submitted — either way
+        # Unknown run id OR the review was already submitted - either way
         # there is nothing to resume, so answer gracefully.
         return _not_pending_page(run_id)
 
@@ -599,7 +599,7 @@ async def submit_verdict(
 
     # Consume the pending review NOW so a double-submit (retry, second tab)
     # finds nothing pending instead of resuming twice. The dispatcher clears
-    # it again on resume — clearing is idempotent. If the background resume
+    # it again on resume - clearing is idempotent. If the background resume
     # fails or times out, _resume_pipeline restores this row so the reviewer
     # can re-submit instead of being stranded on "Nothing pending".
     try:

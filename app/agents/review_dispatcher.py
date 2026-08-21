@@ -1,17 +1,17 @@
-"""Review Dispatcher agent — mails the human review and pauses the pipeline.
+"""Review Dispatcher agent - mails the human review and pauses the pipeline.
 
 The two-sided human-in-the-loop gate of the Carousel Factory:
 
 - **Outbound** (phase ``review``): the ``send_review_mail`` tool pulls local
   preview files out of the artifact store, mails the reviewers via
   :func:`app.tools.gmail_tools.send_review_email` (Approve/Reject links), and
-  increments ``K_REVIEW_ROUND``. The LLM then calls ``await_human_review`` — a
+  increments ``K_REVIEW_ROUND``. The LLM then calls ``await_human_review`` - a
   :class:`google.adk.tools.LongRunningFunctionTool` that returns ``None``.
   Verified against installed google-adk 2.7.0
   (``flows/llm_flows/functions.py``): a long-running tool returning a falsy
   value produces NO function-response event, the model-response event carries
   the pending call id in ``Event.long_running_tool_ids``, and
-  ``Event.is_final_response()`` becomes True — the invocation ends *paused*.
+  ``Event.is_final_response()`` becomes True - the invocation ends *paused*.
   The tool persists ``(run_id, session_id, function_call_id)`` via
   :func:`app.services.db.save_pending_review`, taking the id from
   ``tool_context.function_call_id`` (2.7.0 ``Context`` populates it from the
@@ -20,7 +20,7 @@ The two-sided human-in-the-loop gate of the Carousel Factory:
 - **Inbound** (resume): the review API builds ``types.Content`` with a
   ``types.Part(function_response=...)`` matching the pending call id/name and
   payload ``{"status": "approved"|"rejected", "feedback": "..."}``, then calls
-  the Runner again — a NEW invocation whose ``user_content`` is that function
+  the Runner again - a NEW invocation whose ``user_content`` is that function
   response (2.7.0 rearranges async function responses into history in
   ``flows/llm_flows/contents.py``). This module handles it twice over for
   robustness:
@@ -33,12 +33,12 @@ The two-sided human-in-the-loop gate of the Carousel Factory:
      (e.g. round 2 review entered after an in-invocation rework loop).
   2. The LLM is instructed (via a dynamic ``InstructionProvider`` directive)
      to call the ``set_verdict`` tool, which re-reads the authoritative
-     payload from ``tool_context.user_content`` — so even a confused model
+     payload from ``tool_context.user_content`` - so even a confused model
      cannot record a verdict different from what the human submitted.
 
 State signalling uses ``temp:`` keys (``State.TEMP_PREFIX`` in 2.7.0), which
 are invocation-visible immediately (``State.__setitem__`` mutates the live
-``session.state`` dict) but are not durably persisted — exactly the lifetime
+``session.state`` dict) but are not durably persisted - exactly the lifetime
 needed to tell "fresh verdict" from "already-consumed verdict".
 """
 
@@ -86,13 +86,13 @@ _DIRECTIVE_HANDLE_VERDICT = "handle_verdict"
 _DEFAULT_INSTRUCTION = """\
 # Review Dispatcher
 
-You are the Review Dispatcher of the Carousel Factory pipeline — the human-in-
+You are the Review Dispatcher of the Carousel Factory pipeline - the human-in-
 the-loop gate. A finished carousel Bundle sits in session state; nothing gets
 published without a human verdict, and you are the agent that requests it and
 records it. You operate in exactly one of two modes per run. A "CURRENT MODE"
-directive is appended to this instruction on every run — obey it literally.
+directive is appended to this instruction on every run - obey it literally.
 
-## Mode SEND_MAIL — request a review and pause
+## Mode SEND_MAIL - request a review and pause
 
 1. Call `send_review_mail` (no arguments). It mails the reviewers a preview
    (cover poster + slide thumbnails + caption) with Approve/Reject links and
@@ -105,13 +105,13 @@ directive is appended to this instruction on every run — obey it literally.
    Reply with one short sentence describing the failure so the operator can
    fix it.
 
-## Mode HANDLE_VERDICT — record the human's decision
+## Mode HANDLE_VERDICT - record the human's decision
 
 The paused run has resumed: the latest message contains the reviewer's
 response from `await_human_review` with their status and feedback.
 
 1. Call `set_verdict` with that exact status ("approved" or "rejected") and
-   the exact feedback text — verbatim, never paraphrased. The tool itself
+   the exact feedback text - verbatim, never paraphrased. The tool itself
    re-reads the authoritative reviewer response, so honesty is enforced.
 2. Do NOT call `send_review_mail` or `await_human_review` in this mode.
 3. After the tool succeeds, reply with one short sentence stating the verdict
@@ -122,7 +122,7 @@ response from `await_human_review` with their status and feedback.
 - Never invent, soften or reinterpret reviewer feedback: it is recorded
   verbatim and later routed to the responsible agents.
 - One review mail per run, maximum. Rounds are counted automatically.
-- You never publish and never edit content — you only dispatch the review
+- You never publish and never edit content - you only dispatch the review
   and record the verdict.
 """
 
@@ -216,7 +216,7 @@ async def _clear_pending_review_quietly(run_id: str) -> None:
         return
     try:
         await db.clear_pending_review(run_id)
-    except Exception as exc:  # DB may be absent in local runs — never fatal
+    except Exception as exc:  # DB may be absent in local runs - never fatal
         logger.warning("Could not clear pending review for run %s: %s", run_id, exc)
 
 
@@ -227,7 +227,7 @@ async def capture_verdict_on_resume(
 
     Runs before every dispatcher LLM turn. When the invocation was started by
     the review API's function response (and it has not been consumed yet), the
-    Verdict is written to ``K_VERDICT`` directly — the pipeline stays correct
+    Verdict is written to ``K_VERDICT`` directly - the pipeline stays correct
     even if the model never calls ``set_verdict``. The chosen mode is stamped
     into ``temp:`` state so the instruction provider issues a stable directive
     for every LLM call within this run.
@@ -237,7 +237,7 @@ async def capture_verdict_on_resume(
             ``user_content`` of the invocation).
 
     Returns:
-        Always ``None`` — the agent proceeds normally; the state delta alone
+        Always ``None`` - the agent proceeds normally; the state delta alone
         is committed by ``BaseAgent._handle_before_agent_callback``.
     """
     state = callback_context.state
@@ -274,7 +274,7 @@ async def send_review_mail(tool_context: ToolContext) -> dict:
     Loads the preview artifacts (cover poster, body slides, CTA slide) from
     the artifact store, writes them to local files under the workdir, and
     sends the review email via the Gmail API. Increments the review round in
-    session state — but only after the mail was actually sent.
+    session state - but only after the mail was actually sent.
 
     Returns:
         ``{"status": "sent", "message_id": ..., "round": ...}`` on success or
@@ -289,7 +289,7 @@ async def send_review_mail(tool_context: ToolContext) -> dict:
     if not raw_bundle:
         return {
             "status": "error",
-            "error": f"'{K_BUNDLE}' missing from state — run stitch_verify first.",
+            "error": f"'{K_BUNDLE}' missing from state - run stitch_verify first.",
         }
     try:
         bundle = (
@@ -362,7 +362,7 @@ async def _materialize_artifact(
 
     Returns:
         The absolute local path as ``str``, or ``""`` when the artifact is
-        unavailable (missing service, missing artifact, no inline bytes) — the
+        unavailable (missing service, missing artifact, no inline bytes) - the
         mail then simply carries fewer previews.
     """
     if not filename:
@@ -390,7 +390,7 @@ async def await_human_review(tool_context: ToolContext) -> None:
     id) so the review API can address the resume to exactly this call.
 
     Returns:
-        ``None`` — google-adk 2.7.0 builds no function-response event for a
+        ``None`` - google-adk 2.7.0 builds no function-response event for a
         falsy long-running result, which is what pauses the invocation.
     """
     state = tool_context.state
@@ -431,7 +431,7 @@ async def set_verdict(
 
     Call after the run resumed with the reviewer's response. The authoritative
     values are re-read from the resuming function response itself whenever it
-    is present — the ``status``/``feedback`` arguments only matter when no
+    is present - the ``status``/``feedback`` arguments only matter when no
     reviewer response exists in the invocation (manual override paths).
 
     Args:
@@ -495,7 +495,7 @@ def _ensure_default_instruction_file() -> None:
 
     The file is the editable source of truth for this agent's instruction
     (the Learner agent appends learned rules to it), so it is only created
-    when missing — an existing file is never overwritten.
+    when missing - an existing file is never overwritten.
     """
     path = settings.skills_dir / "agents" / f"{AGENT_REVIEW_DISPATCHER}.md"
     if not path.exists():
@@ -507,7 +507,7 @@ def _instruction_provider(ctx: ReadonlyContext) -> str:
     """Assemble the dispatcher instruction with the current-mode directive.
 
     InstructionProvider (google-adk 2.7.0 resolves callables with
-    ``bypass_state_injection=True`` — no ``{var}`` templating pitfalls).
+    ``bypass_state_injection=True`` - no ``{var}`` templating pitfalls).
     Loads ``skills/agents/review_dispatcher.md`` fresh from disk, then appends
     run context and the SEND_MAIL / HANDLE_VERDICT directive computed by the
     ``before_agent_callback`` (with an equivalent read-only fallback when the
@@ -537,7 +537,7 @@ def _instruction_provider(ctx: ReadonlyContext) -> str:
         parts.append(
             "## Context: latest correction feedback (highest priority)\n\n"
             "This run went through corrections driven by the feedback below. "
-            "Treat it as the authoritative context when summarizing — the new "
+            "Treat it as the authoritative context when summarizing - the new "
             "review round exists because of it:\n\n"
             f"{rework}"
         )
@@ -580,9 +580,9 @@ def build_review_dispatcher_agent() -> LlmAgent:
     Returns:
         An :class:`~google.adk.agents.LlmAgent` named
         :data:`app.state.AGENT_REVIEW_DISPATCHER` running
-        ``settings.utility_model`` with three tools — ``send_review_mail``,
+        ``settings.utility_model`` with three tools - ``send_review_mail``,
         ``await_human_review`` (LongRunningFunctionTool: pauses the
-        invocation) and ``set_verdict`` — plus a ``before_agent_callback``
+        invocation) and ``set_verdict`` - plus a ``before_agent_callback``
         that deterministically records the resumed verdict in ``K_VERDICT``.
         Tool-using agent: no ``output_schema``; all state is written inside
         tools/callbacks via the 2.7.0 delta-aware context state.

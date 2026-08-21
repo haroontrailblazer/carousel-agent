@@ -1,4 +1,4 @@
-"""Shared Pydantic schemas — the data contract between all agents.
+"""Shared Pydantic schemas - the data contract between all agents.
 
 Every agent reads/writes these shapes through session state (see app/state.py).
 Keep field names stable: the orchestrator, tools and review API all rely on them.
@@ -9,12 +9,23 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.text_rules import require_no_em_dash
 
 CarouselStyle = Literal["points", "prose"]
 CTAType = Literal["follow", "comment", "redirect"]
 VerdictStatus = Literal["approved", "rejected"]
 Severity = Literal["critical", "major", "minor"]
+
+
+class PublishedTextModel(BaseModel):
+    """Base model that rejects em dashes from audience-facing text."""
+
+    @model_validator(mode="after")
+    def validate_no_em_dash(self) -> "PublishedTextModel":
+        require_no_em_dash(self.model_dump(mode="python"), self.__class__.__name__)
+        return self
 
 
 class NewsItem(BaseModel):
@@ -39,7 +50,7 @@ class ResearchFact(BaseModel):
 
 
 class ResearchBrief(BaseModel):
-    """Output of the Research agent — the fact base the plan is built on."""
+    """Output of the Research agent - the fact base the plan is built on."""
 
     summary: str  # 3-6 sentence briefing on what happened and why it matters
     key_facts: list[ResearchFact] = Field(default_factory=list)
@@ -48,7 +59,7 @@ class ResearchBrief(BaseModel):
     sources: list[str] = Field(default_factory=list)  # all URLs consulted
 
 
-class SlidePlan(BaseModel):
+class SlidePlan(PublishedTextModel):
     """What one body slide should say (decided by the planner)."""
 
     index: int  # 1-based; slide 1 is the cover, so body slides start at 2
@@ -56,7 +67,7 @@ class SlidePlan(BaseModel):
     key_points: list[str] = Field(default_factory=list)
 
 
-class CarouselPlan(BaseModel):
+class CarouselPlan(PublishedTextModel):
     """The Editorial Planner's decision for the whole carousel."""
 
     style: CarouselStyle
@@ -69,7 +80,7 @@ class CarouselPlan(BaseModel):
     slides: list[SlidePlan] = Field(default_factory=list)  # body slides only
 
 
-class CoverSpec(BaseModel):
+class CoverSpec(PublishedTextModel):
     """Output of the First-Page Visual agent."""
 
     video_artifact: str = ""  # artifact filename of the final 4-8 s cover video
@@ -81,12 +92,12 @@ class CoverSpec(BaseModel):
     used_fallback_image: bool = False  # True when no clip found; static cover built
 
 
-class SlideCopy(BaseModel):
+class SlideCopy(PublishedTextModel):
     index: int
     lines: list[str] = Field(default_factory=list)  # <= plan.max_lines_per_slide
 
 
-class CopySet(BaseModel):
+class CopySet(PublishedTextModel):
     """Output of the Content Phrasing agent."""
 
     slides: list[SlideCopy] = Field(default_factory=list)
@@ -116,7 +127,7 @@ class QAReport(BaseModel):
     issues: list[QAIssue] = Field(default_factory=list)
 
 
-class Bundle(BaseModel):
+class Bundle(PublishedTextModel):
     """The assembled carousel, ready for review/publish."""
 
     cover: CoverSpec

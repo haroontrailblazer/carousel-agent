@@ -1,4 +1,4 @@
-# Cover Style — First Page of Every Carousel
+# Cover Style - First Page of Every Carousel
 
 The cover is the strongest frame of the winning-carousel system. It uses the
 existing sourced-media pipeline and overlay mechanics while adopting the
@@ -37,11 +37,12 @@ Legacy orange is not used for new cover text or accent furniture.
 ## Title rules
 
 - Maximum 9 words total; 5-7 words is preferred.
-- Lead with tension, consequence, or a surprising mechanism—not a generic
+- Lead with tension, consequence, or a surprising mechanism-not a generic
   announcement such as "X IS HERE".
 - `hook_highlight` must be a verbatim substring of `hook_title` and contain the
   consequence or turn in the idea.
 - Use punctuation only when it improves spoken rhythm; no emoji or hashtags.
+- Never use an em dash. Use a period, comma, or colon instead.
 - The title must remain readable at feed-thumbnail size.
 
 Example shape: `YOUR AGENT LOOKS SMART UNTIL REALITY HITS`, highlighting

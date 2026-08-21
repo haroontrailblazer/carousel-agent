@@ -3,10 +3,10 @@
 A single lazily-created connection pool over ``settings.database_url`` backs
 the operational tables defined in ``db/schema.sql``:
 
-- ``news_queue``      — fetched news items waiting for a pipeline run
-- ``runs``            — one row per pipeline run (phase tracking)
-- ``feedback``        — every human verdict + feedback text (learning input)
-- ``pending_reviews`` — the paused review invocation (session + call id)
+- ``news_queue``      - fetched news items waiting for a pipeline run
+- ``runs``            - one row per pipeline run (phase tracking)
+- ``feedback``        - every human verdict + feedback text (learning input)
+- ``pending_reviews`` - the paused review invocation (session + call id)
 
 Nothing here touches the network at import time: the pool is created on the
 first call that needs it. When ``DATABASE_URL`` is unset every public function
@@ -101,7 +101,7 @@ async def close_pool() -> None:
 
 
 def url_hash(url: str) -> str:
-    """Stable sha256 hex digest of a URL — the news_queue dedupe key."""
+    """Stable sha256 hex digest of a URL - the news_queue dedupe key."""
     return hashlib.sha256(url.strip().encode("utf-8")).hexdigest()
 
 
@@ -142,7 +142,7 @@ async def enqueue_news(item: dict) -> dict:
             explicitly, otherwise it is derived from source_url/url/id/title.
 
     Returns:
-        ``{"id": str, "url_hash": str, "enqueued": bool}`` — ``enqueued`` is
+        ``{"id": str, "url_hash": str, "enqueued": bool}`` - ``enqueued`` is
         False when an item with the same hash already exists (its stored id
         is returned instead).
     """
@@ -276,7 +276,7 @@ async def update_run_phase(
 
 
 # ---------------------------------------------------------------------------
-# pending_reviews — the paused LongRunningFunctionTool call
+# pending_reviews - the paused LongRunningFunctionTool call
 # ---------------------------------------------------------------------------
 
 

@@ -1,4 +1,4 @@
-"""Token/cost traceability — Langfuse tracing + process-level image usage.
+"""Token/cost traceability - Langfuse tracing + process-level image usage.
 
 Two complementary layers (both optional, both fail-soft):
 
@@ -8,7 +8,7 @@ Two complementary layers (both optional, both fail-soft):
    cost, computed by Langfuse from the model id). Requires
    ``LANGFUSE_PUBLIC_KEY`` / ``LANGFUSE_SECRET_KEY`` in the environment
    (loaded from .env by ``app.config``); without them it is a logged no-op.
-   Call it once per process, BEFORE the first model call — ``app.agent``
+   Call it once per process, BEFORE the first model call - ``app.agent``
    (imported by ``adk web``), the fetcher CLI and the review API all do.
 2. **In-run totals.** The orchestrator aggregates ``Event.usage_metadata``
    from every child event into session state under
@@ -35,7 +35,7 @@ _langfuse_client: Optional[Any] = None
 
 #: Process-level accumulator for OpenAI Images API token usage. Image tools
 #: run outside any ADK model call, so their usage cannot ride on
-#: ``Event.usage_metadata`` — they deposit here and the orchestrator drains it.
+#: ``Event.usage_metadata`` - they deposit here and the orchestrator drains it.
 _image_usage: dict[str, int] = {
     "image_input_tokens": 0,
     "image_output_tokens": 0,
@@ -60,7 +60,7 @@ def init_observability() -> bool:
         if not (settings.langfuse_public_key and settings.langfuse_secret_key):
             logger.info(
                 "Langfuse not configured (LANGFUSE_PUBLIC_KEY / "
-                "LANGFUSE_SECRET_KEY unset) — per-call traces disabled; run "
+                "LANGFUSE_SECRET_KEY unset) - per-call traces disabled; run "
                 "token totals still accumulate in session state."
             )
             return False
@@ -79,7 +79,7 @@ def init_observability() -> bool:
         except Exception as exc:
             _langfuse_client = None
             logger.warning(
-                "Langfuse init failed (%s) — continuing without tracing.", exc
+                "Langfuse init failed (%s) - continuing without tracing.", exc
             )
             return False
 

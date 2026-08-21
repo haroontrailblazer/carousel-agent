@@ -1,4 +1,4 @@
-"""Publisher agent — publishes the approved carousel to Instagram.
+"""Publisher agent - publishes the approved carousel to Instagram.
 
 A tool-using ``LlmAgent`` (``settings.utility_model``). Because google-adk
 2.7.0 tool-calling agents deliver results through tools (not
@@ -8,7 +8,7 @@ A tool-using ``LlmAgent`` (``settings.utility_model``). Because google-adk
 1. reads the approved :class:`app.schemas.Bundle` from ``state[K_BUNDLE]``;
 2. signs a public HTTPS URL for every ``bundle.ordered_artifacts`` entry via
    :meth:`app.services.artifact_service.SupabaseArtifactService.public_url`
-   (cover video first — its aspect ratio governs the carousel);
+   (cover video first - its aspect ratio governs the carousel);
 3. calls :func:`app.tools.instagram_tools.publish_carousel`;
 4. sends the confirmation mail via
    :func:`app.tools.gmail_tools.send_confirmation_email`;
@@ -85,7 +85,7 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
     API, sends the confirmation email, and records the outcome in session
     state (``publish_result``) and the ``runs`` table.
 
-    Call this tool exactly once, with no arguments — everything it needs is
+    Call this tool exactly once, with no arguments - everything it needs is
     read from session state.
 
     Returns:
@@ -124,7 +124,7 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
     run_id = str(state.get(K_RUN_ID) or "")
     session = tool_context.session
 
-    # (1) Public URLs — one presigned HTTPS GET per artifact, in order.
+    # (1) Public URLs - one presigned HTTPS GET per artifact, in order.
     try:
         service = _resolve_artifact_service(tool_context)
         public_urls: list[str] = []
@@ -136,7 +136,7 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
                 filename=filename,
             )
             public_urls.append(url)
-    except Exception as exc:  # noqa: BLE001 — ValueError/FileNotFoundError/S3
+    except Exception as exc:  # noqa: BLE001 - ValueError/FileNotFoundError/S3
         logger.exception("Could not sign public URLs for the bundle.")
         return {
             "status": "error",
@@ -144,14 +144,14 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
         }
 
     # (2) Publish to Instagram (sync Graph API client with its own polling
-    # loop — run in a worker thread so the event loop stays responsive).
+    # loop - run in a worker thread so the event loop stays responsive).
     try:
         ig_result: dict[str, Any] = await asyncio.to_thread(
             instagram_tools.publish_carousel,
             bundle.model_dump(mode="json"),
             public_urls,
         )
-    except Exception as exc:  # noqa: BLE001 — ValueError/RuntimeError/HTTP
+    except Exception as exc:  # noqa: BLE001 - ValueError/RuntimeError/HTTP
         logger.exception("Instagram publish failed for run %s.", run_id)
         result = {
             "status": "error",
@@ -164,7 +164,7 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
     media_id = str(ig_result.get("media_id", ""))
     permalink = str(ig_result.get("permalink", ""))
 
-    # (3) Confirmation mail — best-effort: the post is already live, so a
+    # (3) Confirmation mail - best-effort: the post is already live, so a
     # mail failure must not fail the publish.
     confirmation_message_id = ""
     mail_error = ""
@@ -177,7 +177,7 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
         logger.exception("Confirmation mail failed for run %s.", run_id)
         mail_error = str(exc)
 
-    # (4) Record completion in the runs table — best-effort as well.
+    # (4) Record completion in the runs table - best-effort as well.
     db_error = ""
     if run_id:
         try:
@@ -211,13 +211,13 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
 # ---------------------------------------------------------------------------
 # Instruction (fallback default; canonical copy lives in
 # skills/agents/publisher.md so the Learner can evolve it).
-# NOTE: only "{run_id?}" may appear as an {identifier} placeholder — ADK's
+# NOTE: only "{run_id?}" may appear as an {identifier} placeholder - ADK's
 # instruction templating substitutes any bare {state_key}.
 # ---------------------------------------------------------------------------
 DEFAULT_INSTRUCTION = """\
 # Publisher
 
-You are the Publisher of the Carousel Factory — the final step of the
+You are the Publisher of the Carousel Factory - the final step of the
 pipeline, running only AFTER a human approved the carousel. Everything you
 need is already in session state; the tool does all real work.
 
@@ -237,12 +237,12 @@ Run id: {run_id?}
      permalink, and do NOT call the tool again.
    - status "error": reply "PUBLISH FAILED: " followed by the tool's message.
      You may retry the tool at most ONCE, and only when the message clearly
-     looks transient (a timeout or temporary network problem) — never retry
+     looks transient (a timeout or temporary network problem) - never retry
      validation or credential errors.
 
 ## Hard rules
 
-- Never invent a permalink or media id — only report what the tool returned.
+- Never invent a permalink or media id - only report what the tool returned.
 - Never call anything except publish_approved_carousel.
 - Keep the final reply to at most three sentences.
 """
@@ -251,7 +251,7 @@ Run id: {run_id?}
 def _ensure_skill_file() -> None:
     """Write the default instruction to skills/agents/publisher.md.
 
-    Only when the file is missing — the Learner agent appends "Learned rules"
+    Only when the file is missing - the Learner agent appends "Learned rules"
     to this file, and those must never be overwritten.
     """
     path = settings.skills_dir / "agents" / f"{AGENT_PUBLISHER}.md"

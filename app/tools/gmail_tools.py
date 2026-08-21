@@ -1,4 +1,4 @@
-"""Gmail tools — review-request and publish-confirmation mails.
+"""Gmail tools - review-request and publish-confirmation mails.
 
 Used by the Review Dispatcher agent (``send_review_email``) and the Publisher
 agent (``send_confirmation_email``). Auth is the Gmail API OAuth "installed
@@ -8,7 +8,7 @@ The interactive browser flow only runs on attended local sessions (see
 ``GMAIL_ALLOW_INTERACTIVE_AUTH``); unattended runs with a missing/expired
 token raise ``RuntimeError`` instead of blocking on a browser redirect.
 
-Nothing in this module touches the network at import time — credentials and
+Nothing in this module touches the network at import time - credentials and
 the Gmail service are built lazily inside the send functions.
 """
 
@@ -122,7 +122,7 @@ def _load_credentials() -> Credentials:
             )
         if not _interactive_auth_allowed():
             raise RuntimeError(
-                "Gmail token missing/expired — re-run interactive auth locally "
+                "Gmail token missing/expired - re-run interactive auth locally "
                 "(set GMAIL_ALLOW_INTERACTIVE_AUTH=1) to regenerate the token "
                 f"file at {token_path} (settings.gmail_token_path). Interactive "
                 "OAuth is disabled in unattended runs so the pipeline fails "
@@ -159,7 +159,7 @@ def _recipients() -> list[str]:
     """Reviewer addresses from settings; fail loudly if none configured."""
     if not settings.reviewer_emails:
         raise RuntimeError(
-            "REVIEWER_EMAILS is empty — cannot send review/confirmation mail."
+            "REVIEWER_EMAILS is empty - cannot send review/confirmation mail."
         )
     return settings.reviewer_emails
 
@@ -267,7 +267,7 @@ def send_review_email(run_id: str, bundle: dict, round_no: int) -> dict:
     """Mail the reviewers a carousel preview with Approve/Reject links.
 
     Args:
-        run_id: Pipeline run id — becomes part of the review URLs.
+        run_id: Pipeline run id - becomes part of the review URLs.
         bundle: The assembled ``Bundle`` as a dict. Must additionally carry
             ``preview_paths``: local file paths of the poster frame and the
             slide PNGs (list, poster first; or ``{"poster": ..., "slides":
@@ -319,7 +319,7 @@ def send_review_email(run_id: str, bundle: dict, round_no: int) -> dict:
     html_body = f"""
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222;">
   <h2 style="margin-bottom:4px;">Carousel review needed
-    <span style="color:{_BRAND_ORANGE};">— round {int(round_no)}</span></h2>
+    <span style="color:{_BRAND_ORANGE};">- round {int(round_no)}</span></h2>
   <h3 style="margin-top:0;font-weight:normal;">{safe_title}</h3>
   {poster_html}
   {slides_html}
@@ -329,8 +329,8 @@ def send_review_email(run_id: str, bundle: dict, round_no: int) -> dict:
     {_button_html("REJECT", reject_url, _REJECT_RED)}
   </div>
   <p style="font-size:14px;color:#444;background:#f6f6f6;padding:12px;border-radius:6px;">
-    <b>Approve</b> — feedback is <i>optional</i> (anything you add still teaches the pipeline).<br>
-    <b>Reject</b> — feedback is <b>required</b>: say exactly what is not good
+    <b>Approve</b> - feedback is <i>optional</i> (anything you add still teaches the pipeline).<br>
+    <b>Reject</b> - feedback is <b>required</b>: say exactly what is not good
     (first visual / texts / design / CTA / other) so the right agent can redo it.
   </p>
   <p style="font-size:12px;color:#999;">Run {html.escape(run_id)} · review round {int(round_no)}
@@ -339,7 +339,7 @@ def send_review_email(run_id: str, bundle: dict, round_no: int) -> dict:
 """
 
     text_body = (
-        f"Carousel review needed — round {int(round_no)}\n"
+        f"Carousel review needed - round {int(round_no)}\n"
         f"Title: {news_title}\n\n"
         f"Approve (feedback optional): {approve_url}\n"
         f"Reject (feedback REQUIRED): {reject_url}\n\n"
@@ -402,7 +402,7 @@ def send_confirmation_email(run_id: str, ig_permalink: str) -> dict:
     msg = EmailMessage()
     msg["From"] = settings.gmail_sender
     msg["To"] = ", ".join(recipients)
-    msg["Subject"] = f"[Published] Carousel live — run {run_id}"
+    msg["Subject"] = f"[Published] Carousel live - run {run_id}"
     msg.set_content(text_body)
     msg.add_alternative(html_body, subtype="html")
 

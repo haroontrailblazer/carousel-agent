@@ -1,4 +1,4 @@
-"""Template Design agent — renders the carousel BODY slides as PNG artifacts.
+"""Template Design agent - renders the carousel BODY slides as PNG artifacts.
 
 Builds an :class:`~google.adk.agents.LlmAgent` (utility model) whose single
 tool, :func:`render_body_slides`, reads the approved ``CarouselPlan`` /
@@ -50,8 +50,8 @@ _BARE_IMAGE_RE = re.compile(r"([\w\-./\\]+\.(?:png|jpe?g|webp))\b", re.IGNORECAS
 _DEFAULT_INSTRUCTION = """\
 # Template Design agent
 
-You render the BODY slides of an Instagram carousel — every slide between the
-cover and the final CTA — as 1080x1350 (4:5) PNG images that follow the design
+You render the BODY slides of an Instagram carousel - every slide between the
+cover and the final CTA - as 1080x1350 (4:5) PNG images that follow the design
 system in skills/design-skill.md (ink/paper rhythm, one lime-accent element,
 content-aware layout archetype, slide-number tag, and swipe-cue arrow).
 
@@ -61,7 +61,7 @@ content-aware layout archetype, slide-number tag, and swipe-cue arrow).
    normal run). The tool reads the approved plan and copy from session state,
    renders one PNG per body slide, saves each PNG as an artifact and records
    the rendered slide list in state. You never retype, rewrite, summarise or
-   "improve" the copy yourself — the tool passes the approved copy to the
+   "improve" the copy yourself - the tool passes the approved copy to the
    image renderer VERBATIM, and a downstream QA agent rejects slides whose
    rendered text drifts from the approved copy.
 2. If the tool returns status "error", read its message. If some slides were
@@ -81,7 +81,7 @@ HIGHEST-PRIORITY instruction and overrides everything else:
   call `render_body_slides` with `indices` set to just those carousel slide
   numbers so only they are re-rendered; the other slides are kept.
 - If the feedback is about the copy or the plan, the upstream agents have
-  already updated state — re-render ALL body slides (no arguments) so every
+  already updated state - re-render ALL body slides (no arguments) so every
   slide reflects the corrected copy.
 - If the feedback is general ("design feels off", "too busy"), re-render ALL
   body slides and mention in your reply that a template/design change may need
@@ -100,7 +100,7 @@ def _ensure_default_instruction_file() -> None:
     """Write the fallback instruction to ``skills/agents/template_design.md`` if absent.
 
     The file is the editable source of truth for this agent's instruction, so
-    it is only created when missing — an existing file is never overwritten.
+    it is only created when missing - an existing file is never overwritten.
     (The Learner routes template_design rules to ``skills/design-skill.md``,
     but seeding this file too guarantees any rule ever appended here lands in
     a file already carrying the full default instruction, never a bare stub
@@ -219,7 +219,7 @@ async def render_body_slides(
 
     Reads the approved plan and copy from session state, renders one
     1080x1350 PNG per body slide with the design-system template (the approved
-    copy is passed to the renderer VERBATIM — never edited), saves each PNG as
+    copy is passed to the renderer VERBATIM - never edited), saves each PNG as
     a session artifact, and writes the rendered slide list to state.
 
     Args:
@@ -240,7 +240,7 @@ async def render_body_slides(
         return {
             "status": "error",
             "message": (
-                f"No approved copy found in state['{K_COPY}'] — the phrasing "
+                f"No approved copy found in state['{K_COPY}'] - the phrasing "
                 "agent must run before body slides can be rendered."
             ),
         }
@@ -288,7 +288,7 @@ async def render_body_slides(
         filename = f"slide_{slide.index:02d}.png"
         out_path = out_dir / filename
         try:
-            # generate_slide_image blocks on a slow image API call — keep the
+            # generate_slide_image blocks on a slow image API call - keep the
             # event loop free by running it in a worker thread.
             layout_hint = _layout_hint(slide)
             written = await asyncio.to_thread(
@@ -305,7 +305,7 @@ async def render_body_slides(
                 filename,
                 types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
             )
-        except Exception as exc:  # noqa: BLE001 — surface any failure to the LLM
+        except Exception as exc:  # noqa: BLE001 - surface any failure to the LLM
             logger.exception("Body slide %s failed to render.", slide.index)
             # Persist whatever succeeded so a retry can target just the rest.
             if rendered or existing:

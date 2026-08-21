@@ -1,5 +1,5 @@
 /*
- * Carousel Factory — C4 architecture (Structurizr DSL)
+ * Carousel Factory - C4 architecture (Structurizr DSL)
  *
  * A Google ADK multi-agent pipeline that turns AI/product news (new model
  * releases, Lovable/Supabase updates, ...) into human-approved, auto-published
@@ -11,13 +11,13 @@
  *   Option B (online): paste this file into https://structurizr.com/dsl
  *
  * Views defined below:
- *   L1-Context        — system context
- *   L2-Containers     — deployable pieces
- *   L3-AgentPipeline  — the agents inside the ADK runtime
- *   HappyPath         — news item → review mail (dynamic)
- *   RejectRework      — rejection → targeted re-generation → re-review (dynamic)
- *   ApprovePublish    — approval → Instagram auto-publish (dynamic)
- *   Production        — deployment (Cloud Run + Supabase)
+ *   L1-Context        - system context
+ *   L2-Containers     - deployable pieces
+ *   L3-AgentPipeline  - the agents inside the ADK runtime
+ *   HappyPath         - news item → review mail (dynamic)
+ *   RejectRework      - rejection → targeted re-generation → re-review (dynamic)
+ *   ApprovePublish    - approval → Instagram auto-publish (dynamic)
+ *   Production        - deployment (Cloud Run + Supabase)
  */
 workspace "Carousel Factory" "Google ADK multi-agent pipeline that turns AI/product news into human-approved, auto-published Instagram carousels" {
 
@@ -40,18 +40,18 @@ workspace "Carousel Factory" "Google ADK multi-agent pipeline that turns AI/prod
 
             pipeline = container "ADK Agent Pipeline" "google-adk runtime hosting the agent pipeline, the human-review pause and the targeted rework loop." "Python, google-adk, FastAPI, Cloud Run" {
                 root = component "Root Orchestrator" "Custom agent that runs the happy path in order, pauses the run while waiting for the human verdict, and triggers targeted rework after a rejection." "ADK custom BaseAgent" "Agent"
-                research = component "Research Agent" "Runs FIRST: web-searches the update — official announcement, exact specs/numbers/prices with source URLs, the sharpest angle, official announcement media — and hands a verified fact brief to the planner, phrasing and cover agents. On 'facts are wrong' rejections only this agent re-runs, forcing a re-plan." "ADK LlmAgent + OpenAI Responses web_search tool" "Agent"
+                research = component "Research Agent" "Runs FIRST: web-searches the update - official announcement, exact specs/numbers/prices with source URLs, the sharpest angle, official announcement media - and hands a verified fact brief to the planner, phrasing and cover agents. On 'facts are wrong' rejections only this agent re-runs, forcing a re-plan." "ADK LlmAgent + OpenAI Responses web_search tool" "Agent"
                 planner = component "Editorial Planner Agent" "The 'main agent'. Reads the news item and the research brief and decides the carousel plan: points vs prose style, slide count, max lines per slide, hook title and a CTA-type hint." "ADK LlmAgent (OpenAI via LiteLLM), structured output" "Agent"
-                visual = component "First-Page Visual Agent" "Builds ONLY the cover: finds a 4-8 s clip of the update from the source itself (announcement/event video, trimmed via yt-dlp + FFmpeg) or falls back to the update's own image, then composites the bottom black gradient and the absolute-positioned hook title. Source clips are third-party media (rights check); downloads from cloud IPs are best-effort — the image fallback covers failures." "ADK LlmAgent + yt-dlp + FFmpeg tools" "Agent"
-                phrasing = component "Content Phrasing Agent" "Writes the final wording for every slide following the plan — bullet points or max-4-line prose per slide — and enforces line/character budgets." "ADK LlmAgent (OpenAI via LiteLLM)" "Agent"
+                visual = component "First-Page Visual Agent" "Builds ONLY the cover: finds a 4-8 s clip of the update from the source itself (announcement/event video, trimmed via yt-dlp + FFmpeg) or falls back to the update's own image, then composites the bottom black gradient and the absolute-positioned hook title. Source clips are third-party media (rights check); downloads from cloud IPs are best-effort - the image fallback covers failures." "ADK LlmAgent + yt-dlp + FFmpeg tools" "Agent"
+                phrasing = component "Content Phrasing Agent" "Writes the final wording for every slide following the plan - bullet points or max-4-line prose per slide - and enforces line/character budgets." "ADK LlmAgent (OpenAI via LiteLLM)" "Agent"
                 template = component "Template Design Agent" "Generates all body slides (2..n-1) with gpt-image-2, giving it the designer's template as reference image plus the phrased copy, following the design skill." "ADK LlmAgent + gpt-image-2 (OpenAI Images API)" "Agent"
                 cta = component "CTA Agent" "Chooses one of three CTA types (follow-for-more / comment / redirect to Substack or YouTube) based on the content, and renders the CTA slide in the same template family." "ADK LlmAgent + gpt-image-2 (OpenAI Images API)" "Agent"
                 stitch = component "Stitch & Verify Agent" "Assembles cover video + body slides + CTA slide into the carousel bundle, runs QA checks (slide order, text overflow, generated-slide text vs approved copy, brand rules, video length 4-8 s), then hands over for review." "ADK agent + FFmpeg/Pillow QA tools" "Agent"
                 dispatcher = component "Review Dispatcher" "Sends the review mail (carousel preview + Approve / Reject links) to the configured reviewer addresses and parks the run as pending-review." "Gmail API tool + ADK LongRunningFunctionTool" "Agent"
-                router = component "Feedback Router" "Reads rejection feedback, identifies the responsible agent(s) — e.g. 'the first visual is not good' maps to the First-Page Visual Agent — and re-runs only those, passing the feedback as prompt." "ADK LlmAgent + custom routing" "Agent"
+                router = component "Feedback Router" "Reads rejection feedback, identifies the responsible agent(s) - e.g. 'the first visual is not good' maps to the First-Page Visual Agent - and re-runs only those, passing the feedback as prompt." "ADK LlmAgent + custom routing" "Agent"
                 publisher = component "Publisher Agent" "After approval: uploads media, builds the caption, publishes the carousel through the Instagram Graph API, then sends a confirmation mail." "ADK agent + Instagram Graph API tool" "Agent"
                 learner = component "Feedback Memory & Skill Updater" "Stores every piece of feedback in long-term memory and distills recurring feedback into updates of agent instructions and the design skill ('harness updates')." "Custom ADK MemoryService (Postgres/pgvector) + skill-writer tool" "Agent"
-                services = component "ADK Platform Services" "Shared plumbing used by all agents: DatabaseSessionService (sessions/state), ArtifactService (media), MemoryService (custom BaseMemoryService on Postgres/pgvector — feedback memory recalled at generation time)." "google-adk services"
+                services = component "ADK Platform Services" "Shared plumbing used by all agents: DatabaseSessionService (sessions/state), ArtifactService (media), MemoryService (custom BaseMemoryService on Postgres/pgvector - feedback memory recalled at generation time)." "google-adk services"
             }
 
             review = container "Review & Approval API" "Public endpoints behind the Approve/Reject links in the review mail. Approve accepts optional feedback; Reject opens a small form where feedback is compulsory and asks what exactly is not good (first visual? texts? design?). Links land on a confirm page so mail-scanner prefetch cannot auto-approve. Resumes the paused run with the verdict." "Supabase Edge Functions (or FastAPI routes on Cloud Run)"

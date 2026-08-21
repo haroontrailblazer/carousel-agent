@@ -76,7 +76,7 @@ def _parse_version(object_key: str, prefix: str) -> Optional[int]:
     S3 (like GCS) has a flat namespace, so a prefix listing for artifact
     ``a/`` also returns objects of any artifact nested under it (``a/b/3``).
     An object holds a version of the artifact denoted by ``prefix`` only when
-    its key is exactly ``{prefix}{version}`` — anything with a further ``/``
+    its key is exactly ``{prefix}{version}`` - anything with a further ``/``
     belongs to a different artifact and must be skipped.
 
     Args:
@@ -91,7 +91,7 @@ def _parse_version(object_key: str, prefix: str) -> Optional[int]:
     if "/" in suffix:
         return None
     # int() also accepts whitespace, underscores and non-ASCII digits, none of
-    # which _object_key() can produce — reject them explicitly.
+    # which _object_key() can produce - reject them explicitly.
     if not (suffix.isascii() and suffix.isdigit()):
         logger.warning(
             "Skipping object %s: key does not end with a version number.",
@@ -175,7 +175,7 @@ class SupabaseArtifactService(BaseArtifactService):
                 videos can be several MB, so this is generous).
 
         Raises:
-            ValueError: If the endpoint or credentials are not configured —
+            ValueError: If the endpoint or credentials are not configured -
                 callers (app/agent.py) catch this and fall back to the
                 in-memory artifact service for local `adk web` runs.
         """
@@ -514,7 +514,7 @@ class SupabaseArtifactService(BaseArtifactService):
 
         meta_doc: dict[str, Any] = {}
         if custom_metadata:
-            # GCS coerces every metadata value to str — match that.
+            # GCS coerces every metadata value to str - match that.
             meta_doc[_META_CUSTOM] = {
                 k: str(v) for k, v in custom_metadata.items()
             }

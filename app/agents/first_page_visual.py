@@ -1,15 +1,15 @@
-"""First-Page Visual agent — builds the sourced cover video (slide 1).
+"""First-Page Visual agent - builds the sourced cover video (slide 1).
 
 The cover is a 4-8 second 1080x1350 video composed from media SOURCED from the
-news update itself (never AI-generated): the announcement/event clip, or — as a
-fallback — the update's best image turned into a 6 s slow-zoom video.  The
+news update itself (never AI-generated): the announcement/event clip, or - as a
+fallback - the update's best image turned into a 6 s slow-zoom video.  The
 STRANGE-COVER overlay template plus the plan's hook title (white, with the
 lime-gradient highlight phrase) are composited on top by
 ``app.tools.media_tools.compose_cover``.
 
 The agent's tools write the final :class:`~app.schemas.CoverSpec` into session
 state under ``K_COVER`` and save the rendered video + poster into the artifact
-service — the agent itself has no ``output_schema`` (in ADK 2.7.0 tool-using
+service - the agent itself has no ``output_schema`` (in ADK 2.7.0 tool-using
 agents write state from inside tools via ``tool_context.state``).
 
 Exposes :func:`build_first_page_visual_agent`.
@@ -39,9 +39,10 @@ from app.state import (
     get_model,
     set_model,
 )
+from app.text_rules import require_no_em_dash
 from app.tools import media_tools
 
-# Stable artifact filenames — the artifact service versions them per save, so
+# Stable artifact filenames - the artifact service versions them per save, so
 # rework rounds simply create a new version under the same name.
 COVER_VIDEO_ARTIFACT = "cover.mp4"
 COVER_POSTER_ARTIFACT = "cover-poster.png"
@@ -106,9 +107,9 @@ async def find_source_clip(
         duration_s (float, 0.0 when unknown), origin
         ('media_urls' | 'source_url' | 'source_page' | 'body_url' |
         'body_page' | 'web_search' | ''), image_url + image_origin (the best
-        STILL-image candidate, always reported — download_image it when video
+        STILL-image candidate, always reported - download_image it when video
         downloads fail, BEFORE considering the placeholder), note (str).
-        When nothing at all is found, found is false — build the cover from
+        When nothing at all is found, found is false - build the cover from
         create_placeholder_background instead of giving up.
     """
     news = _news_dict(tool_context)
@@ -145,9 +146,9 @@ async def download_and_trim(
 
     Returns:
         On success: ok (true), clip_path (local trimmed mp4),
-        source_path (the untrimmed downloaded source file, '' if not kept —
+        source_path (the untrimmed downloaded source file, '' if not kept -
         pass it to retrim_clip to cut a DIFFERENT moment), note.
-        On failure: ok (false) and error (str) — try the next candidate.
+        On failure: ok (false) and error (str) - try the next candidate.
     """
     workdir = _run_workdir(tool_context)
     try:
@@ -230,7 +231,7 @@ async def retrim_clip(
     """Cut a DIFFERENT short moment out of an already-downloaded video.
 
     Use during rework when the reviewer wants another part of the clip: pass
-    the source_path returned by download_and_trim (preferred — it holds the
+    the source_path returned by download_and_trim (preferred - it holds the
     full downloaded footage) or any local video path, plus the wanted start
     offset in seconds.
 
@@ -351,6 +352,10 @@ async def build_cover(
             ),
         }
     final_highlight = highlight.strip() or (plan.hook_highlight.strip() if plan else "")
+    try:
+        require_no_em_dash([final_title, final_highlight], "cover copy")
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
     if final_highlight and final_highlight.upper() not in final_title.upper():
         warnings.append(
             f"highlight {final_highlight!r} is not a verbatim substring of the "
@@ -424,7 +429,7 @@ async def build_cover(
 
 
 # ---------------------------------------------------------------------------
-# Default instruction (mirrored in skills/agents/first_page_visual.md — the
+# Default instruction (mirrored in skills/agents/first_page_visual.md - the
 # on-disk file wins at build time; this string is the fallback if it is gone).
 # ---------------------------------------------------------------------------
 
@@ -440,14 +445,14 @@ other slide, never write body copy or captions, and never AI-generate media.
 - News item: {news_item?}
 - Carousel plan: {carousel_plan?}
 - Current cover (empty on the first pass): {cover?}
-- REWORK FEEDBACK — when present this is the human reviewer's correction and
+- REWORK FEEDBACK - when present this is the human reviewer's correction and
   OVERRIDES everything else: {rework_feedback?}
 - Distilled feedback from past runs: {recent_feedback_notes?}
 
 ## Hard rules
 
 1. The cover is NEVER AI-generated. It is sourced from the update: the
-   announcement/event clip (trimmed into the cover window), or — fallback —
+   announcement/event clip (trimmed into the cover window), or - fallback -
    the update's own image (poster, paper screenshot, product UI, blog hero)
    turned into a 6 s slow-zoom cover video. Only when NOTHING sourced exists
    anywhere: a plain drawn dark background (create_placeholder_background).
@@ -456,10 +461,10 @@ other slide, never write body copy or captions, and never AI-generate media.
    hook_highlight. Only override them when rework feedback explicitly asks for
    a different title. The highlight must stay a VERBATIM substring of the
    title; keep the title to ~9 words or fewer.
-4. You MUST finish by calling build_cover successfully — that is what saves
+4. You MUST finish by calling build_cover successfully - that is what saves
    the cover artifacts and records the CoverSpec for the rest of the pipeline.
 
-## Workflow — the sourcing ladder (NEVER stop before rung 5)
+## Workflow - the sourcing ladder (NEVER stop before rung 5)
 
 1. Call find_source_clip to pick the best sourced media (video preferred).
    It scans the news media_urls, the source page, every page LINKED in the
@@ -470,7 +475,7 @@ other slide, never write body copy or captions, and never AI-generate media.
    local short clip. If the download fails (403s are common on video hosts),
    try at most ONE more video: another plausible URL from media_urls or one
    re-call of find_source_clip with a sharper search_query.
-3. When video downloads keep failing — or only an image was found — use the
+3. When video downloads keep failing - or only an image was found - use the
    image: the find_source_clip result ALWAYS carries image_url (e.g. the
    article's og:image / poster). Call download_image with it. A real sourced
    image beats a placeholder every time.
@@ -479,11 +484,11 @@ other slide, never write body copy or captions, and never AI-generate media.
 5. ALWAYS call build_cover with the local media path, is_video set
    accordingly, and source_media_url set to the original URL for provenance
    (empty for the placeholder). Leave title and highlight empty so the plan's
-   hook is used. The cover MUST be created on every run — a text-only cover
+   hook is used. The cover MUST be created on every run - a text-only cover
    on the placeholder background is the worst acceptable outcome, no cover at
    all is never acceptable.
 6. Finish with a one-paragraph summary: which media you used (URL and origin
-   — media_urls / source_page / body_page / web_search / placeholder),
+   - media_urls / source_page / body_page / web_search / placeholder),
    sourced clip vs image vs placeholder, final duration, and the artifact
    filenames. If you used the placeholder, say so explicitly so the reviewer
    knows no sourced media existed.
@@ -500,12 +505,12 @@ other slide, never write body copy or captions, and never AI-generate media.
 When rework feedback is present, treat it as your highest-priority
 instruction and rebuild the cover accordingly:
 
-- "different moment / wrong part of the clip" — call retrim_clip on the
+- "different moment / wrong part of the clip" - call retrim_clip on the
   source_path kept from download_and_trim with a new start_s (or download a
   different candidate URL), then rebuild.
-- "title / wording is off" — call build_cover with explicit title and
+- "title / wording is off" - call build_cover with explicit title and
   highlight overrides (highlight must remain a verbatim substring).
-- "bad image / wrong media" — pick the next-best media candidate (rerun
+- "bad image / wrong media" - pick the next-best media candidate (rerun
   find_source_clip or use another media_urls entry) and rebuild.
 
 Always finish rework by calling build_cover again so the CoverSpec in state
@@ -535,9 +540,9 @@ def build_first_page_visual_agent() -> LlmAgent:
         model=resolve_model(settings.utility_model),
         description=(
             "Builds the carousel's cover (slide 1): a short 1080x1350 video "
-            "sourced from the news update (never AI-generated) — announcement "
+            "sourced from the news update (never AI-generated) - announcement "
             "clip, page-scraped or web-searched media, image fallback, or a "
-            "drawn placeholder as last resort — composited with the "
+            "drawn placeholder as last resort - composited with the "
             "STRANGE-COVER template and the plan's hook title."
         ),
         instruction=instruction,

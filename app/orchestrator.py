@@ -1,4 +1,4 @@
-"""Carousel Factory orchestrator — the re-entrant phase state machine.
+"""Carousel Factory orchestrator - the re-entrant phase state machine.
 
 ``CarouselOrchestrator`` is a custom :class:`google.adk.agents.BaseAgent`
 implementing the pipeline pinned in docs/CONTRACTS.md::
@@ -11,7 +11,7 @@ Design points (verified against the installed google-adk 2.7.0 source):
 
 * **Re-entrancy.** The human-review pause ends the invocation; the resume is a
   NEW invocation. Everything the machine needs therefore lives in session
-  state under the ``K_*`` keys from :mod:`app.state` — ``_run_async_impl``
+  state under the ``K_*`` keys from :mod:`app.state` - ``_run_async_impl``
   reads ``ctx.session.state`` on entry and routes purely on it (e.g. a fresh
   ``K_VERDICT`` in the ``review`` phase means "continue past review").
 * **State writes.** A custom BaseAgent commits state by yielding an
@@ -27,7 +27,7 @@ Design points (verified against the installed google-adk 2.7.0 source):
   LongRunningFunctionTool fires, the model-response event carries
   ``long_running_tool_ids``; like the shipped ``SequentialAgent`` this
   orchestrator checks ``ctx.should_pause_invocation(event)`` on every child
-  event and returns immediately when it trips — the invocation ends paused
+  event and returns immediately when it trips - the invocation ends paused
   with ``K_PHASE`` still ``review``.
 * **Progress.** One concise text event (author = orchestrator name, e.g.
   ``[phase] generate -> qa``) is emitted at every phase transition for
@@ -197,11 +197,11 @@ def _merge_token_usage(state: Any, holder: dict[str, Any]) -> dict[str, Any]:
 
     Zeroes the pending counters so every count is committed exactly once.
     The image counts come from a process-level accumulator
-    (``observability.pop_image_usage``) — with a single pipeline run per
+    (``observability.pop_image_usage``) - with a single pipeline run per
     process (the local + Cloud Run setup) attribution is exact.
 
     Returns:
-        A state delta — ``{K_TOKEN_USAGE: totals}`` — or ``{}`` when nothing
+        A state delta - ``{K_TOKEN_USAGE: totals}`` - or ``{}`` when nothing
         new was counted since the last merge.
     """
     tokens: dict[str, int] = holder.get("tokens") or {}
@@ -263,23 +263,23 @@ class CarouselOrchestrator(BaseAgent):
 
     Phases (state key ``K_PHASE``):
 
-    * *(missing)* — init: stamp ``K_RUN_ID`` / round counters, inject recent
+    * *(missing)* - init: stamp ``K_RUN_ID`` / round counters, inject recent
       reviewer feedback from the memory service, synthesize an ad-hoc
       ``NewsItem`` from the user message when the fetcher did not seed one.
-    * ``generate`` — planner → first_page_visual → phrasing →
+    * ``generate`` - planner → first_page_visual → phrasing →
       template_design → cta.
-    * ``qa`` — stitch_verify assembles the Bundle + QAReport; critical issues
+    * ``qa`` - stitch_verify assembles the Bundle + QAReport; critical issues
       auto-route to ``rework`` (no mail), otherwise → ``review``.
-    * ``review`` — review_dispatcher mails the reviewers and pauses on
+    * ``review`` - review_dispatcher mails the reviewers and pauses on
       ``await_human_review``; on resume the recorded ``K_VERDICT`` routes to
       ``publish`` (approved) or ``rework`` (rejected).
-    * ``rework`` — learner + feedback_router (human rejections only), then
+    * ``rework`` - learner + feedback_router (human rejections only), then
       re-run ONLY the targeted agents (planner implies its dependents);
       increments ``K_REWORK_ROUND`` and hard-stops at
       ``settings.max_rework_rounds``; → ``qa``.
-    * ``publish`` — learner (store optional approval feedback) → publisher;
+    * ``publish`` - learner (store optional approval feedback) → publisher;
       → ``done`` on success.
-    * ``done`` — final summary event, stop.
+    * ``done`` - final summary event, stop.
     """
 
     NAME: ClassVar[str] = ORCHESTRATOR_NAME
@@ -358,7 +358,7 @@ class CarouselOrchestrator(BaseAgent):
         try:
             review_round = int(state.get(K_REVIEW_ROUND) or 0)
             await db.update_run_phase(run_id, phase, review_round=review_round)
-        except Exception as exc:  # DB may be absent in local runs — never fatal
+        except Exception as exc:  # DB may be absent in local runs - never fatal
             logger.debug("runs-table phase update skipped (%s).", exc)
 
     async def _recent_feedback_notes(self, ctx: InvocationContext) -> str:
@@ -389,7 +389,7 @@ class CarouselOrchestrator(BaseAgent):
         """Run one child agent, re-yielding its events.
 
         Sets ``holder["paused"]`` when a yielded event pauses the invocation
-        (the Review Dispatcher's long-running ``await_human_review`` call) —
+        (the Review Dispatcher's long-running ``await_human_review`` call) -
         the caller must then stop driving further agents and return.
 
         Args:
@@ -499,7 +499,7 @@ class CarouselOrchestrator(BaseAgent):
             holder["halted"] = True
             yield self._progress(
                 ctx,
-                "[qa] stitch_verify produced no QA report — halting; phase "
+                "[qa] stitch_verify produced no QA report - halting; phase "
                 "stays 'qa', re-run the pipeline to retry.",
             )
             return
@@ -523,7 +523,7 @@ class CarouselOrchestrator(BaseAgent):
             ctx,
             PHASE_QA,
             PHASE_REWORK,
-            note="QA failed — auto rework, no review mail; targets: "
+            note="QA failed - auto rework, no review mail; targets: "
             + (", ".join(targets) or "(router default)"),
             holder=holder,
         )
@@ -561,7 +561,7 @@ class CarouselOrchestrator(BaseAgent):
                 yield self._progress(
                     ctx,
                     "[review] dispatcher finished without pausing or recording "
-                    "a verdict (review mail failure?) — halting; phase stays "
+                    "a verdict (review mail failure?) - halting; phase stays "
                     "'review', re-run the pipeline to retry.",
                 )
                 return
@@ -601,7 +601,7 @@ class CarouselOrchestrator(BaseAgent):
                 extra_delta={K_REWORK_PLAN: None, K_VERDICT: None},
                 note=(
                     f"HARD STOP: rework round cap of "
-                    f"{settings.max_rework_rounds} reached without approval — "
+                    f"{settings.max_rework_rounds} reached without approval - "
                     "manual intervention required"
                 ),
                 holder=holder,
@@ -624,7 +624,7 @@ class CarouselOrchestrator(BaseAgent):
             if holder["paused"]:
                 return
         # QA auto-rework arrives here with K_REWORK_PLAN already written by
-        # stitch_verify and no verdict — learner/router are skipped.
+        # stitch_verify and no verdict - learner/router are skipped.
 
         plan = _safe_model(state, K_REWORK_PLAN, ReworkPlan)
         targets = _expand_rework_targets(plan.targets if plan is not None else [])
@@ -663,7 +663,7 @@ class CarouselOrchestrator(BaseAgent):
             PHASE_REWORK,
             PHASE_QA,
             extra_delta={K_REWORK_PLAN: None, K_VERDICT: None},
-            note=f"round {next_round} pieces regenerated — re-verifying",
+            note=f"round {next_round} pieces regenerated - re-verifying",
             holder=holder,
         )
         await self._record_phase_quietly(state, PHASE_QA)
@@ -703,7 +703,7 @@ class CarouselOrchestrator(BaseAgent):
         holder["halted"] = True
         yield self._progress(
             ctx,
-            f"[publish] publish failed ({message}) — halting; phase stays "
+            f"[publish] publish failed ({message}) - halting; phase stays "
             "'publish', re-run the pipeline to retry (the publisher is "
             "idempotent and will not double-post).",
         )
@@ -778,7 +778,7 @@ class CarouselOrchestrator(BaseAgent):
             else:
                 yield self._progress(
                     ctx,
-                    f"[error] unknown phase '{phase}' in session state — "
+                    f"[error] unknown phase '{phase}' in session state - "
                     "halting; fix or clear the 'phase' key to recover.",
                 )
                 return
@@ -804,7 +804,7 @@ class CarouselOrchestrator(BaseAgent):
         yield self._progress(
             ctx,
             f"[error] phase-machine step budget ({_MAX_PHASE_STEPS}) exceeded "
-            "— stopping this invocation; state is preserved, re-run to "
+            "- stopping this invocation; state is preserved, re-run to "
             "continue.",
         )
 

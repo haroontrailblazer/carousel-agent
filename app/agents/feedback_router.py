@@ -1,4 +1,4 @@
-"""Feedback Router agent — maps human review feedback to rework targets.
+"""Feedback Router agent - maps human review feedback to rework targets.
 
 A schema-only ``LlmAgent`` (no tools, per the ADK guidance for structured
 output) on ``settings.utility_model``. It reads the reviewer's verdict from
@@ -253,7 +253,7 @@ def _sanitize_rework_plan(
 
     - every target is a canonical ``REWORKABLE_AGENTS`` name (aliases are
       normalized, unknowns dropped, duplicates removed, order preserved);
-    - at least one target exists — keyword-derived from the feedback text,
+    - at least one target exists - keyword-derived from the feedback text,
       with the planner as the final catch-all (planner implies a full
       regenerate of dependents);
     - ``reasons`` holds exactly one entry per chosen target;
@@ -263,7 +263,7 @@ def _sanitize_rework_plan(
         callback_context: ADK callback context (mutable session state).
 
     Returns:
-        ``None`` — no extra content event; the state delta is still emitted.
+        ``None`` - no extra content event; the state delta is still emitted.
     """
     state = callback_context.state
     verdict = get_model(state, K_VERDICT, Verdict)
@@ -331,46 +331,46 @@ def _sanitize_rework_plan(
 # Instruction (fallback default; canonical copy lives in
 # skills/agents/feedback_router.md so the Learner can evolve it).
 # NOTE: only "{review_verdict?}" and "{rework_feedback?}" may appear as
-# {identifier} placeholders — ADK's instruction templating substitutes any
+# {identifier} placeholders - ADK's instruction templating substitutes any
 # bare {state_key} and raises on unknown non-optional keys.
 # ---------------------------------------------------------------------------
 DEFAULT_INSTRUCTION = """\
 # Feedback Router
 
-You are the Feedback Router of the Carousel Factory — an automated pipeline
+You are the Feedback Router of the Carousel Factory - an automated pipeline
 that turns AI/product news into Instagram carousels. A human reviewer just
 REJECTED the current carousel (or asked for changes). Your only job is to
 translate their feedback into a precise rework plan: exactly which pipeline
 agents must re-run, and why.
 
 Your reply is parsed as strict JSON matching the ReworkPlan schema with the
-keys "targets", "reasons" and "feedback". Output the JSON object only — no
+keys "targets", "reasons" and "feedback". Output the JSON object only - no
 commentary, no markdown.
 
-## Input — the human verdict
+## Input - the human verdict
 
 The reviewer's verdict (a dict with status, feedback, reviewer, decided_at):
 
 {review_verdict?}
 
 Rework feedback for this round (when non-empty, this exact text is the
-complaint you must route — it is the highest-priority input):
+complaint you must route - it is the highest-priority input):
 
 {rework_feedback?}
 
-## Allowed targets — use these EXACT strings and NOTHING else
+## Allowed targets - use these EXACT strings and NOTHING else
 
-- research — the fact base: wrong/outdated/unverified facts, numbers, dates,
+- research - the fact base: wrong/outdated/unverified facts, numbers, dates,
   prices or claims; missing context the carousel should have covered.
-- planner — the editorial plan: carousel structure, slide count, slide order,
+- planner - the editorial plan: carousel structure, slide count, slide order,
   narrative/story arc, points-vs-prose classification, the hook idea.
-- first_page_visual — the cover: the first visual, cover video/clip, poster
+- first_page_visual - the cover: the first visual, cover video/clip, poster
   frame, source footage choice.
-- phrasing — all wording: slide texts, copy, captions, tone, typos, grammar,
+- phrasing - all wording: slide texts, copy, captions, tone, typos, grammar,
   line length.
-- template_design — the rendered body slides: design, layout, template,
+- template_design - the rendered body slides: design, layout, template,
   fonts, colors, backgrounds.
-- cta — the call-to-action slide: CTA type, its text, its link, the last
+- cta - the call-to-action slide: CTA type, its text, its link, the last
   slide.
 
 These are the only re-runnable agents. Never output any other value.
@@ -389,14 +389,14 @@ These are the only re-runnable agents. Never output any other value.
   points-vs-prose classification / the hook idea map to planner. Note:
   planner re-runs force every dependent agent to re-run too, so pick planner
   only when the plan itself is criticised.
-- Complaints that facts/numbers/dates/prices are wrong, outdated or made up —
-  or that important known information is missing — map to research. Note:
+- Complaints that facts/numbers/dates/prices are wrong, outdated or made up -
+  or that important known information is missing - map to research. Note:
   research re-runs force a full re-plan, so pick it only for factual issues,
   not for wording (phrasing) or structure (planner) complaints.
 
 ## Rules
 
-1. Multiple targets are allowed — include one entry per distinct complaint
+1. Multiple targets are allowed - include one entry per distinct complaint
    when the feedback names several problems.
 2. Keep targets MINIMAL: never include an agent the feedback does not
    criticise. A complaint about only the cover must not re-run phrasing.
@@ -416,7 +416,7 @@ These are the only re-runnable agents. Never output any other value.
 def _ensure_skill_file() -> None:
     """Write the default instruction to skills/agents/feedback_router.md.
 
-    Only when the file is missing — the Learner agent appends "Learned rules"
+    Only when the file is missing - the Learner agent appends "Learned rules"
     to this file, and those must never be overwritten.
     """
     path = settings.skills_dir / "agents" / f"{AGENT_FEEDBACK_ROUTER}.md"

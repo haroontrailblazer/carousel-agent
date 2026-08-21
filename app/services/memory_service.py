@@ -4,24 +4,24 @@
 ``BaseMemoryService`` ABC (see
 ``.venv/Lib/site-packages/google/adk/memory/base_memory_service.py``):
 
-* ``add_session_to_memory(session)`` — stores a compact text digest of the
+* ``add_session_to_memory(session)`` - stores a compact text digest of the
   session's events (one row per text-bearing event) in the ``memory_entries``
   table, replacing any digest previously stored for the same session.
-* ``add_events_to_memory(...)`` — optional delta ingestion (implemented here,
+* ``add_events_to_memory(...)`` - optional delta ingestion (implemented here,
   deduplicated by event id).
-* ``search_memory(app_name=..., user_id=..., query=...)`` — simple ILIKE
+* ``search_memory(app_name=..., user_id=..., query=...)`` - simple ILIKE
   keyword search returning the installed ``SearchMemoryResponse`` /
   ``MemoryEntry`` types. Matching rows from the ``feedback`` table are also
   surfaced so past reviewer feedback is searchable memory (the feedback table
-  is app-global — it carries no app/user scope columns).
+  is app-global - it carries no app/user scope columns).
 
 On top of the ADK surface it exposes the feedback persistence used by the
 Learner agent and the planner's "recent feedback" context:
 
-* ``store_feedback(record: FeedbackRecord)`` — inserts into ``feedback``.
-* ``recent_feedback(limit=20)`` — newest-first ``list[FeedbackRecord]``.
+* ``store_feedback(record: FeedbackRecord)`` - inserts into ``feedback``.
+* ``recent_feedback(limit=20)`` - newest-first ``list[FeedbackRecord]``.
 
-The asyncpg pool is created lazily on first use — importing this module never
+The asyncpg pool is created lazily on first use - importing this module never
 opens a network connection. All pool/statement operations carry explicit
 timeouts.
 """
@@ -164,7 +164,7 @@ async def _init_connection(conn: asyncpg.Connection) -> None:
 class PostgresMemoryService(BaseMemoryService):
     """ADK memory service backed by Postgres (Supabase) via asyncpg.
 
-    Keyword (ILIKE) search over compact per-event text digests — no
+    Keyword (ILIKE) search over compact per-event text digests - no
     embeddings. Also owns the ``feedback`` table used by the Learner agent
     and the planner's recent-feedback context.
 

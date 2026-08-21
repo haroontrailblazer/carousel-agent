@@ -3,7 +3,7 @@
 One rule (see docs/CONTRACTS.md): ids with a provider prefix (``openai/…``)
 are routed through ADK's LiteLLM wrapper; bare ids (``gemini-…``) are passed
 to ``LlmAgent`` as plain strings for the native Google path. Centralised here
-so an all-OpenAI (or mixed) configuration is just an .env change — no agent
+so an all-OpenAI (or mixed) configuration is just an .env change - no agent
 file hardcodes a provider.
 """
 

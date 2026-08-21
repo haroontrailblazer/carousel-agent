@@ -1,1 +1,1 @@
-"""Carousel Factory — Google ADK multi-agent pipeline."""
+"""Carousel Factory - Google ADK multi-agent pipeline."""

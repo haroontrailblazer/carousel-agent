@@ -1,4 +1,4 @@
-# Design Skill — Winning Carousel System
+# Design Skill - Winning Carousel System
 
 This is the production design authority for body and CTA slides. It is
 distilled from the seven reference carousel sets supplied in `C:\1` through
@@ -13,13 +13,13 @@ coherent Baskaran Builds identity across the final carousel.
 
 Use these exact current `baskaranbuilds.com` variables:
 
-- `--bg-dark: #161811` — ink background.
-- `--bg-card: #1F2218` — elevated dark surface.
-- `--surface-light: #F7F7F5` — paper background.
-- `--text-primary-light: #E8E4D6` — primary text on ink.
-- `--text-muted-light: #B9C5AA` — muted text.
-- `--text-dark: #1A1A18` — primary text on paper.
-- `--primary-300: #C8ED79` and `--primary-400: #B8EF43` — the only accent
+- `--bg-dark: #161811` - ink background.
+- `--bg-card: #1F2218` - elevated dark surface.
+- `--surface-light: #F7F7F5` - paper background.
+- `--text-primary-light: #E8E4D6` - primary text on ink.
+- `--text-muted-light: #B9C5AA` - muted text.
+- `--text-dark: #1A1A18` - primary text on paper.
+- `--primary-300: #C8ED79` and `--primary-400: #B8EF43` - the only accent
   gradient or emphasis color.
 
 Do not use the legacy orange palette on new slides. Do not introduce blue,
@@ -133,9 +133,9 @@ available; otherwise use a restrained textured ink field.
 
 Choose one action only:
 
-- **follow** — a concrete value promise and the configured handle;
-- **comment** — one specific question and a direct comment instruction;
-- **redirect** — what the deeper breakdown contains and the configured link.
+- **follow** - a concrete value promise and the configured handle;
+- **comment** - one specific question and a direct comment instruction;
+- **redirect** - what the deeper breakdown contains and the configured link.
 
 The headline is <= 7 words, large and left-aligned or centered according to the
 image balance. Highlight one phrase in lime. Keep supporting copy to 1-2 lines.
@@ -160,8 +160,9 @@ invented links.
 ## Hard quality gates
 
 - Approved copy is rendered verbatim. Never paraphrase, correct, or add words.
+- Never render an em dash in any cover, body, CTA, or caption text.
 - No text may be clipped, warped, illegible, or smaller than the minimum body
-  size. If copy does not fit, simplify the visual—not the copy.
+  size. If copy does not fit, simplify the visual-not the copy.
 - Do not add fake metrics, sources, quotes, handles, labels, or watermarks.
 - No default card grids, nested cards, glossy 3D icons, stock AI brains, robots
   as decoration, or generic circuit-board backgrounds.
@@ -170,4 +171,4 @@ invented links.
 - The full carousel must look authored as one story, not seven unrelated social
   templates.
 
-## Learned rules (appended by the Learner agent — do not delete)
+## Learned rules (appended by the Learner agent - do not delete)

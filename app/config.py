@@ -1,4 +1,4 @@
-"""Central configuration — everything comes from environment variables.
+"""Central configuration - everything comes from environment variables.
 
 Copy .env.example to .env and fill it in; python-dotenv loads it on import.
 No secret may ever be hard-coded anywhere else in the codebase.
@@ -103,7 +103,7 @@ class Settings:
         )
     )
     slide_width: int = 1080
-    slide_height: int = 1350  # 4:5 — first item's aspect ratio governs the carousel
+    slide_height: int = 1350  # 4:5 - first item's aspect ratio governs the carousel
 
 
 settings = Settings()

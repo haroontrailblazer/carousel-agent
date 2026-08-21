@@ -3,8 +3,8 @@
 Exposes plain, type-hinted functions (wrapped in ``FunctionTool`` by the
 Template Design and CTA agents):
 
-- :func:`generate_slide_image` — renders one body slide PNG.
-- :func:`generate_cta_image` — renders the closing CTA slide PNG.
+- :func:`generate_slide_image` - renders one body slide PNG.
+- :func:`generate_cta_image` - renders the closing CTA slide PNG.
 
 Rendering contract (see docs/CONTRACTS.md + skills/design-skill.md):
 
@@ -40,6 +40,7 @@ from PIL import Image
 
 from app import observability
 from app.config import load_skill, settings
+from app.text_rules import require_no_em_dash
 from app.tools.brand_layout import apply_body_brand_rail, apply_cta_brand_rail
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ a repeated card grid. CTA slide: same family, one clear action, no swipe arrow.
 
 _VERBATIM_RULE = (
     "CRITICAL TEXT RULE: every quoted string below must appear in the image "
-    "VERBATIM — matching character for character, including capitalization, "
+    "VERBATIM - matching character for character, including capitalization, "
     "punctuation, digits and spacing. Do NOT paraphrase, translate, correct "
     "spelling, abbreviate, drop words, or add any words, labels or watermarks "
     "that are not listed. Render no other text anywhere in the image."
@@ -243,6 +244,7 @@ def generate_slide_image(
     Returns:
         The absolute/normalized path of the written PNG as a string.
     """
+    require_no_em_dash([headline, *copy_lines], "body slide copy")
     tag = f"{slide_no:02d}"
     allowed = [
         _VERBATIM_RULE,
@@ -266,7 +268,7 @@ def generate_slide_image(
     if template is not None:
         prompt = (
             "The attached image is the slide layout template. Reproduce its "
-            "layout, typography, colors, spacing and composition EXACTLY — "
+            "layout, typography, colors, spacing and composition EXACTLY - "
             "change nothing about the design. Replace ONLY the text content "
             "with the text specified below.\n\n" + text_spec
         )
@@ -295,7 +297,7 @@ def generate_cta_image(
     """Render the closing CTA slide (1080x1350 PNG) with gpt-image-2.
 
     Args:
-        cta_type: One of ``"follow"``, ``"comment"``, ``"redirect"`` — picks
+        cta_type: One of ``"follow"``, ``"comment"``, ``"redirect"`` - picks
             the CTA variant per skills/design-skill.md.
         headline: The big centered CTA headline (rendered verbatim, e.g.
             "FOLLOW FOR MORE").
@@ -311,6 +313,7 @@ def generate_cta_image(
     Returns:
         The absolute/normalized path of the written PNG as a string.
     """
+    require_no_em_dash([headline, *lines, link_text], "CTA image copy")
     variant_hints = {
         "follow": "Follow CTA: make the value promise and action unmistakable.",
         "comment": "Comment CTA: a question line with a bold 'drop a comment' emphasis.",
@@ -344,7 +347,7 @@ def generate_cta_image(
         prompt = (
             "The attached image is the CTA slide layout template. Reproduce "
             "its layout, typography, colors, spacing and composition EXACTLY "
-            "— change nothing about the design. Replace ONLY the text content "
+            "- change nothing about the design. Replace ONLY the text content "
             "with the text specified below.\n\n" + text_spec
         )
     else:

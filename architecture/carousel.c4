@@ -119,7 +119,7 @@ model {
       }
       planner = agent "Editorial Planner Agent" "The main agent: understands the news and plans the carousel" {
         technology "ADK LlmAgent (OpenAI via LiteLLM), structured output"
-        description "Decides points vs prose style, slide count, max lines per carousel image, hook title and a CTA-type hint — grounded in the research brief."
+        description "Decides points vs prose style, slide count, max lines per carousel image, hook title and a CTA-type hint - grounded in the research brief."
       }
       visual = agent "First-Page Visual Agent" "Builds ONLY the cover: sourced 4-8 s clip + bottom black gradient + absolute hook title" {
         technology "ADK LlmAgent + yt-dlp + FFmpeg"

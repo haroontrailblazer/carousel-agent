@@ -3,7 +3,7 @@
 Publishes the reviewed carousel bundle to Instagram via the Content Publishing
 API (Graph API version ``settings.ig_api_version``):
 
-1. Create one child media container per public URL — the FIRST url is the
+1. Create one child media container per public URL - the FIRST url is the
    cover VIDEO (``media_type=VIDEO`` + ``video_url``), the rest are images
    (``image_url``); every child is created with ``is_carousel_item=true``.
 2. Poll each child container's ``status_code`` until ``FINISHED`` (bounded
@@ -14,7 +14,7 @@ API (Graph API version ``settings.ig_api_version``):
 5. ``GET /{media_id}?fields=permalink`` and return both ids.
 
 All credentials come from :mod:`app.config` (``ig_user_id``,
-``ig_access_token``, ``ig_api_version``) — never hard-coded. Every HTTP call
+``ig_access_token``, ``ig_api_version``) - never hard-coded. Every HTTP call
 carries an explicit timeout, and any Graph API error payload is raised as a
 ``RuntimeError`` that includes Instagram's error message.
 """
@@ -205,7 +205,7 @@ def publish_carousel(bundle: dict, public_urls: list[str]) -> dict:
 
     Args:
         bundle: The assembled ``Bundle`` as a plain dict (see
-            :class:`app.schemas.Bundle`); only ``caption`` is read here — the
+            :class:`app.schemas.Bundle`); only ``caption`` is read here - the
             media itself arrives through ``public_urls``.
         public_urls: Publicly reachable HTTPS URLs for every slide in order.
             The FIRST url must be the cover VIDEO (mp4); all remaining urls
@@ -239,7 +239,7 @@ def publish_carousel(bundle: dict, public_urls: list[str]) -> dict:
     caption = str(bundle.get("caption", "") or "")
 
     with httpx.Client(timeout=_TIMEOUT) as client:
-        # (1) Child containers — first is the cover video, rest are images.
+        # (1) Child containers - first is the cover video, rest are images.
         child_ids: list[str] = []
         for index, url in enumerate(public_urls):
             child_ids.append(

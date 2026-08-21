@@ -4,14 +4,14 @@ Three source types are polled and normalized into :class:`app.schemas.NewsItem`
 payloads, deduped by URL hash, and enqueued into the ``news_queue`` table via
 :func:`app.services.db.enqueue_news`:
 
-* **Gmail newsletters** — Gmail API (readonly scope), query
+* **Gmail newsletters** - Gmail API (readonly scope), query
   ``settings.newsletter_query``. Auth mirrors ``app.tools.gmail_tools`` (same
   OAuth client secrets file) but uses its own readonly token cache next to
   ``settings.gmail_token_path`` because Google OAuth tokens are scope-bound.
-* **RSS feeds** — ``settings.rss_feeds`` parsed with ``feedparser`` (bytes are
+* **RSS feeds** - ``settings.rss_feeds`` parsed with ``feedparser`` (bytes are
   downloaded first with ``requests`` so every network call has an explicit
   timeout; ``feedparser.parse(url)`` itself has none).
-* **YouTube channels** — ``settings.youtube_channels`` via the public channel
+* **YouTube channels** - ``settings.youtube_channels`` via the public channel
   feed ``https://www.youtube.com/feeds/videos.xml?channel_id=<id>``; the watch
   URL is put first in ``media_urls`` so the First-Page Visual agent can clip it.
 
@@ -20,7 +20,7 @@ CLI (``python -m fetcher.fetch_news``)::
     --fetch     poll all sources and enqueue new items (duplicates skipped)
     --run-one   pop the next queued item, create the run, and drive one full
                 pipeline invocation via app.agent.build_runner(). The run is
-                EXPECTED to pause at the human-review phase — the review mail
+                EXPECTED to pause at the human-review phase - the review mail
                 is out at that point and the review API resumes the run.
 
 Resume addressing convention (the review API must use the same values):
@@ -63,7 +63,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
-#: Fixed pipeline user id — the review API must resume runs with this exact
+#: Fixed pipeline user id - the review API must resume runs with this exact
 #: user id (sessions are addressed by app_name + user_id + session_id).
 PIPELINE_USER_ID = "pipeline"
 
@@ -183,9 +183,9 @@ def _readonly_token_path() -> Path:
 def _load_readonly_credentials() -> Any:
     """Load (or interactively create) Gmail readonly OAuth credentials.
 
-    Mirrors ``gmail_tools._load_credentials`` — cached token, refresh with an
+    Mirrors ``gmail_tools._load_credentials`` - cached token, refresh with an
     explicit HTTP timeout, bounded interactive InstalledAppFlow only on
-    attended runs — but with the readonly scope and its own token cache file.
+    attended runs - but with the readonly scope and its own token cache file.
 
     Returns:
         Valid ``google.oauth2.credentials.Credentials`` for the readonly scope.
@@ -281,7 +281,7 @@ def _extract_bodies(payload: dict) -> tuple[str, str]:
         payload: ``message["payload"]`` from ``messages.get(format="full")``.
 
     Returns:
-        ``(plain_text, html_markup)`` — either may be empty.
+        ``(plain_text, html_markup)`` - either may be empty.
     """
     plain_parts: list[str] = []
     html_parts: list[str] = []

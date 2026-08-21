@@ -1,4 +1,4 @@
-"""Stitch & Verify agent — assembles the Bundle and runs deterministic QA.
+"""Stitch & Verify agent - assembles the Bundle and runs deterministic QA.
 
 Reads the pieces produced by the generate phase from session state
 (``K_COVER``, ``K_BODY_SLIDES``, ``K_CTA_SLIDE``, ``K_COPY``, plus ``K_PLAN``
@@ -20,7 +20,7 @@ for budgets) and:
 
 Design (verified against installed google-adk 2.7.0): all real work happens in
 the deterministic ``assemble_and_verify`` tool, which writes state through
-``tool_context.state`` — the delta-aware ``google.adk.agents.context.Context``
+``tool_context.state`` - the delta-aware ``google.adk.agents.context.Context``
 state. The LlmAgent merely drives the tool and narrates the QA outcome. The
 instruction is an ``InstructionProvider`` (2.7.0 resolves callables via
 ``LlmAgent.canonical_instruction`` with ``bypass_state_injection=True``), so
@@ -84,7 +84,7 @@ COVER_MIN_DURATION_S = float(settings.cover_clip_min_s)
 COVER_MAX_DURATION_S = float(settings.cover_clip_max_s)
 _DURATION_TOLERANCE_S = 0.1
 
-# Copy-vs-rendered check — docs/CONTRACTS.md mandates it "via LLM vision or
+# Copy-vs-rendered check - docs/CONTRACTS.md mandates it "via LLM vision or
 # size heuristics"; this deterministic tool applies the size heuristics. A
 # body slide that really carries its rendered copy is a full-size PNG whose
 # compressed byte size cannot fall under a sanity floor: a blank, truncated
@@ -119,14 +119,14 @@ a review mail.
    - stores the QAReport, and on CRITICAL failures also stores a ReworkPlan
      targeting the agents responsible, so the orchestrator re-runs only them.
 2. Read the tool result and reply with a short plain-text QA summary
-   (2-4 sentences): whether QA passed, the total slide count, and — if it
-   failed — each critical issue and which agent must redo its piece.
+   (2-4 sentences): whether QA passed, the total slide count, and - if it
+   failed - each critical issue and which agent must redo its piece.
 
 ## Hard rules
 
 - Never call the tool more than once per run.
 - Never invent issues or hide issues: report exactly what the tool returned.
-- You have no other tools. Do not try to fix content yourself — routing the
+- You have no other tools. Do not try to fix content yourself - routing the
   rework to the responsible agent is the fix.
 - If rework feedback from the human reviewer is present in your context, it
   is the highest-priority correction: mention in your summary whether the
@@ -139,7 +139,7 @@ def _ensure_default_instruction_file() -> None:
 
     The file is the editable source of truth for this agent's instruction
     (the Learner agent appends learned rules to it), so it is only created
-    when missing — an existing file is never overwritten.
+    when missing - an existing file is never overwritten.
     """
     path = settings.skills_dir / "agents" / f"{AGENT_STITCH_VERIFY}.md"
     if not path.exists():
@@ -169,7 +169,7 @@ def _instruction_provider(ctx: ReadonlyContext) -> str:
     rework = str(ctx.state.get(K_REWORK_FEEDBACK) or "").strip()
     if rework:
         parts.append(
-            "## HIGHEST PRIORITY — rework feedback for this run\n\n"
+            "## HIGHEST PRIORITY - rework feedback for this run\n\n"
             "The human reviewer (or a previous QA round) demanded corrections."
             " This overrides every default guideline. The re-run agents were"
             " asked to fix exactly this; verify their output with extra care"
@@ -207,7 +207,7 @@ def _validated(
         issues.append(
             QAIssue(
                 severity="critical",
-                message=f"{piece} is missing from session state — {target} must run again.",
+                message=f"{piece} is missing from session state - {target} must run again.",
             )
         )
         return None
@@ -219,7 +219,7 @@ def _validated(
         issues.append(
             QAIssue(
                 severity="critical",
-                message=f"{piece} in session state is malformed ({exc}) — {target} must redo it.",
+                message=f"{piece} in session state is malformed ({exc}) - {target} must redo it.",
             )
         )
         return None
@@ -230,7 +230,7 @@ async def _existing_artifacts(tool_context: ToolContext) -> Optional[set[str]]:
 
     Returns:
         The set of filenames, or ``None`` when no artifact service is
-        configured (local fallback) or listing failed — in which case the
+        configured (local fallback) or listing failed - in which case the
         existence check is skipped with a minor issue, never a crash.
     """
     try:
@@ -238,10 +238,10 @@ async def _existing_artifacts(tool_context: ToolContext) -> Optional[set[str]]:
     except ValueError:
         # Raised by google-adk 2.7.0 Context.list_artifacts when
         # invocation_context.artifact_service is None (local fallback runs).
-        logger.warning("Artifact service unavailable — skipping existence checks.")
+        logger.warning("Artifact service unavailable - skipping existence checks.")
         return None
     except Exception as exc:
-        logger.warning("Artifact listing failed (%s) — skipping existence checks.", exc)
+        logger.warning("Artifact listing failed (%s) - skipping existence checks.", exc)
         return None
 
 
@@ -249,7 +249,7 @@ def _png_dimensions(data: bytes) -> Optional[tuple[int, int]]:
     """Read the pixel dimensions out of a PNG byte blob.
 
     Parses the fixed-position IHDR fields directly (bytes 16-24 hold width
-    and height as big-endian uint32s — IHDR is always the first chunk per the
+    and height as big-endian uint32s - IHDR is always the first chunk per the
     PNG spec), so the contract's size-heuristic check needs no image library.
 
     Args:
@@ -319,7 +319,7 @@ async def _verify_rendered_png(
             severity="critical",
             slide_index=slide.index,
             message=f"Rendered slide {slide.index} artifact '{slide.artifact}' "
-            f"is not a valid PNG — {AGENT_TEMPLATE_DESIGN} must re-render it.",
+            f"is not a valid PNG - {AGENT_TEMPLATE_DESIGN} must re-render it.",
         )
     width, height = dimensions
     if (width, height) != (settings.slide_width, settings.slide_height):
@@ -329,7 +329,7 @@ async def _verify_rendered_png(
             message=(
                 f"Rendered slide {slide.index} measures {width}x{height} px "
                 f"instead of the required {settings.slide_width}x"
-                f"{settings.slide_height} — the render drifted from the "
+                f"{settings.slide_height} - the render drifted from the "
                 f"template, so its text cannot be trusted either; "
                 f"{AGENT_TEMPLATE_DESIGN} must re-render it."
             ),
@@ -340,7 +340,7 @@ async def _verify_rendered_png(
             slide_index=slide.index,
             message=(
                 f"Rendered slide {slide.index} PNG is only {len(data)} bytes "
-                f"(sanity floor {_MIN_SLIDE_PNG_BYTES}) — far too small to "
+                f"(sanity floor {_MIN_SLIDE_PNG_BYTES}) - far too small to "
                 f"carry the approved copy, the text almost certainly failed "
                 f"to render; {AGENT_TEMPLATE_DESIGN} must re-render it."
             ),
@@ -391,7 +391,7 @@ async def _verify_brand_padding(
         message=(
             f"Slide {slide_index} brand rail/padding failed: "
             + "; ".join(errors)
-            + f" — {owner} must re-render it."
+            + f" - {owner} must re-render it."
         ),
     )
 
@@ -447,7 +447,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
         issues.append(
             QAIssue(
                 severity="critical",
-                message="No rendered body slides in session state — "
+                message="No rendered body slides in session state - "
                 f"{AGENT_TEMPLATE_DESIGN} must run again.",
             )
         )
@@ -463,13 +463,13 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                 issues.append(
                     QAIssue(
                         severity="critical",
-                        message=f"A rendered body slide is malformed ({exc}) — "
+                        message=f"A rendered body slide is malformed ({exc}) - "
                         f"{AGENT_TEMPLATE_DESIGN} must redo it.",
                     )
                 )
         body_slides.sort(key=lambda s: s.index)
 
-    # ------------------------------------------------------------------ QA —
+    # ------------------------------------------------------------------ QA -
     # 1. Cover: video present + duration window.
     if cover is not None:
         if not cover.video_artifact:
@@ -477,7 +477,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                 QAIssue(
                     severity="critical",
                     slide_index=1,
-                    message="Cover has no video artifact — "
+                    message="Cover has no video artifact - "
                     f"{AGENT_FIRST_PAGE_VISUAL} must rebuild the cover.",
                 )
             )
@@ -506,7 +506,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                     message=(
                         f"Cover video duration {duration:.2f}s is outside the "
                         f"required {COVER_MIN_DURATION_S:g}-"
-                        f"{COVER_MAX_DURATION_S:g}s window{fallback_note} — "
+                        f"{COVER_MAX_DURATION_S:g}s window{fallback_note} - "
                         f"{AGENT_FIRST_PAGE_VISUAL} must re-trim or re-source "
                         "the clip."
                     ),
@@ -520,7 +520,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                 QAIssue(
                     severity="critical",
                     slide_index=slide.index,
-                    message=f"Body slide {slide.index} has no rendered artifact — "
+                    message=f"Body slide {slide.index} has no rendered artifact - "
                     f"{AGENT_TEMPLATE_DESIGN} must re-render it.",
                 )
             )
@@ -539,7 +539,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
         issues.append(
             QAIssue(
                 severity="critical",
-                message=f"CTA slide has no rendered artifact — {AGENT_CTA} "
+                message=f"CTA slide has no rendered artifact - {AGENT_CTA} "
                 "must re-render it.",
             )
         )
@@ -552,7 +552,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                 severity="critical",
                 message=(
                     f"Total slide count {total_slides} exceeds the Instagram "
-                    f"cap of {settings.max_carousel_slides} — {AGENT_PLANNER} "
+                    f"cap of {settings.max_carousel_slides} - {AGENT_PLANNER} "
                     "must re-plan with fewer slides."
                 ),
             )
@@ -567,7 +567,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                     severity="major",
                     message=(
                         f"Rendered body slide count {len(body_slides)} does not "
-                        f"match the plan ({planned_body} body slides) — "
+                        f"match the plan ({planned_body} body slides) - "
                         f"{AGENT_TEMPLATE_DESIGN} likely dropped or duplicated "
                         "a slide."
                     ),
@@ -586,7 +586,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                         message=(
                             f"Slide {slide_copy.index} copy has "
                             f"{len(slide_copy.lines)} lines, over the budget of "
-                            f"{line_budget} — {AGENT_PHRASING} must tighten it."
+                            f"{line_budget} - {AGENT_PHRASING} must tighten it."
                         ),
                     )
                 )
@@ -596,7 +596,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                     severity="major",
                     message=(
                         f"Copy set has {len(copy_set.slides)} slides but "
-                        f"{len(body_slides)} body slides were rendered — some "
+                        f"{len(body_slides)} body slides were rendered - some "
                         "slides may show the wrong text."
                     ),
                 )
@@ -640,12 +640,12 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                     QAIssue(
                         severity="critical",
                         message=f"Referenced artifact '{name}' does not exist in "
-                        f"the artifact store — {owner} must regenerate it.",
+                        f"the artifact store - {owner} must regenerate it.",
                     )
                 )
 
         # 8. Copy-vs-rendered text check (docs/CONTRACTS.md: "via LLM vision
-        # or size heuristics" — this tool applies the size heuristics): every
+        # or size heuristics" - this tool applies the size heuristics): every
         # rendered body-slide PNG must be a real PNG at exactly the target
         # slide size and above a byte-size sanity floor, otherwise the
         # approved copy cannot be on the slide and template_design must
@@ -765,7 +765,7 @@ def build_stitch_verify_agent() -> LlmAgent:
         ``settings.utility_model``, whose single deterministic tool assembles
         ``K_BUNDLE``, writes ``K_QA_REPORT`` and, on critical QA failure,
         auto-routes rework via ``K_REWORK_PLAN``. Tool-using agent: no
-        ``output_schema`` — state is written inside the tool via
+        ``output_schema`` - state is written inside the tool via
         ``tool_context.state`` (google-adk 2.7.0 pattern).
     """
     _ensure_default_instruction_file()
@@ -774,7 +774,7 @@ def build_stitch_verify_agent() -> LlmAgent:
         model=resolve_model(settings.utility_model),
         description=(
             "Stitch & Verify: assembles the final carousel Bundle (cover video "
-            "first) and runs deterministic QA — slide count, cover duration, "
+            "first) and runs deterministic QA - slide count, cover duration, "
             "line budgets, artifact existence, copy-vs-rendered slide size "
             "checks, and deterministic footer safe-area validation. Critical "
             "failures auto-route a ReworkPlan back to the "

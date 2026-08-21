@@ -1,4 +1,4 @@
-"""CTA agent — picks the call-to-action type and renders the closing slide.
+"""CTA agent - picks the call-to-action type and renders the closing slide.
 
 Builds an :class:`~google.adk.agents.LlmAgent` (utility model) that chooses
 the CTA variant (``follow`` / ``comment`` / ``redirect``) from the planner's
@@ -6,7 +6,7 @@ the CTA variant (``follow`` / ``comment`` / ``redirect``) from the planner's
 and calls the :func:`render_cta_slide` tool. The tool renders the 1080x1350
 PNG via :func:`app.tools.image_gen.generate_cta_image`, resolves the link
 destination from :data:`app.config.settings` (``ig_handle`` /
-``substack_url`` / ``youtube_url`` — never model-invented), saves the PNG as
+``substack_url`` / ``youtube_url`` - never model-invented), saves the PNG as
 an artifact and writes the resulting ``CTASlide`` to ``state[K_CTA_SLIDE]``.
 
 The CTA template reference image is discovered from the "CTA slide" section of
@@ -30,6 +30,7 @@ from app.config import agent_instructions, load_skill, settings
 from app.llm import resolve_model
 from app.schemas import CTASlide
 from app.state import AGENT_CTA, K_CTA_SLIDE, K_RUN_ID, set_model
+from app.text_rules import require_no_em_dash
 from app.tools import image_gen
 
 logger = logging.getLogger(__name__)
@@ -61,12 +62,12 @@ or link from configuration.
 ## Choosing the CTA type
 
 Start from the planner's hint (carousel plan below) but apply judgment:
-- "follow" — the default. Use when the carousel is a news brief whose value is
+- "follow" - the default. Use when the carousel is a news brief whose value is
   the account itself: promise more of the same coverage.
-- "comment" — use when the topic naturally invites opinions, debate or picks
+- "comment" - use when the topic naturally invites opinions, debate or picks
   (hot takes, versus posts, "which would you choose" material). The copy must
   contain ONE concrete question about the topic.
-- "redirect" — use ONLY when there is genuinely deeper material to point to
+- "redirect" - use ONLY when there is genuinely deeper material to point to
   (a full breakdown on Substack or a video on YouTube), typically hinted by
   the plan or the caption. Pick `redirect_destination` = "substack" for
   written deep-dives, "youtube" for video material.
@@ -75,11 +76,12 @@ Start from the planner's hint (carousel plan below) but apply judgment:
 
 - Headline: at most 6 words, punchy, imperative, reads naturally in uppercase
   (for example "FOLLOW FOR DAILY AI NEWS").
-- Supporting lines: at most 3 short lines, one thought per line — a value
+- Supporting lines: at most 3 short lines, one thought per line - a value
   promise, a question (compulsory for "comment"), or what the reader gets at
   the destination (for "redirect").
+- Never use an em dash. Use a period, comma, colon, or parentheses instead.
 - NEVER write a handle, username, URL or link in the headline or supporting
-  lines — the tool appends the correct one from configuration and any you
+  lines - the tool appends the correct one from configuration and any you
   invent would be wrong.
 
 ## How to work
@@ -87,7 +89,7 @@ Start from the planner's hint (carousel plan below) but apply judgment:
 1. Decide the type and compose the copy per the rules above.
 2. Call `render_cta_slide` exactly once with cta_type, headline,
    supporting_lines (and redirect_destination when cta_type is "redirect").
-   The tool renders your text VERBATIM — send final, typo-free copy.
+   The tool renders your text VERBATIM - send final, typo-free copy.
 3. If the tool returns status "error", fix what its message indicates (or
    simply retry once for transient render failures). If it fails twice,
    report the error plainly and stop.
@@ -104,7 +106,7 @@ Approved copy and caption: {copy_set?}
 {rework_feedback?}
 
 If reviewer feedback appears directly above this line, it is your
-HIGHEST-PRIORITY instruction and overrides everything else — including the
+HIGHEST-PRIORITY instruction and overrides everything else - including the
 planner's cta_hint. Examples: "make it a comment CTA" means switch the type;
 "CTA text is weak" means rewrite the copy before re-rendering; "wrong link"
 means re-check the type/destination pair you chose. Then call
@@ -123,7 +125,7 @@ def _ensure_default_instruction_file() -> None:
 
     The file is the editable source of truth for this agent's instruction
     (the Learner agent appends learned rules to it), so it is only created
-    when missing — an existing file is never overwritten. Seeding it here
+    when missing - an existing file is never overwritten. Seeding it here
     guarantees the Learner only ever appends to a file that already carries
     the full default instruction, never to a bare stub that would shadow it.
     """
@@ -256,11 +258,11 @@ async def render_cta_slide(
     Args:
         cta_type: One of "follow", "comment", "redirect".
         headline: The big centered CTA headline (at most 6 words; do NOT
-            include any handle or URL — it is added from configuration).
+            include any handle or URL - it is added from configuration).
         supporting_lines: Up to 3 short supporting lines (no handles/URLs);
             pass an empty list for none.
         redirect_destination: Only used when cta_type is "redirect":
-            "substack" (default) or "youtube" — selects which configured link
+            "substack" (default) or "youtube" - selects which configured link
             the slide points to.
 
     Returns:
@@ -277,6 +279,10 @@ async def render_cta_slide(
 
     head = (headline or "").strip() or _DEFAULT_HEADLINES[kind]
     lines = [line.strip() for line in (supporting_lines or []) if line and line.strip()]
+    try:
+        require_no_em_dash([head, *lines], "CTA copy")
+    except ValueError as exc:
+        return {"status": "error", "message": str(exc)}
     if len(lines) > _MAX_SUPPORTING_LINES:
         return {
             "status": "error",
@@ -291,7 +297,7 @@ async def render_cta_slide(
     out_path = _run_workdir(tool_context.state) / _ARTIFACT_NAME
 
     try:
-        # generate_cta_image blocks on a slow image API call — keep the event
+        # generate_cta_image blocks on a slow image API call - keep the event
         # loop free by running it in a worker thread.
         written = await asyncio.to_thread(
             image_gen.generate_cta_image,
@@ -307,7 +313,7 @@ async def render_cta_slide(
             _ARTIFACT_NAME,
             types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
         )
-    except Exception as exc:  # noqa: BLE001 — surface any failure to the LLM
+    except Exception as exc:  # noqa: BLE001 - surface any failure to the LLM
         logger.exception("CTA slide (%s) failed to render.", kind)
         return {"status": "error", "message": f"Rendering the CTA slide failed: {exc}"}
 

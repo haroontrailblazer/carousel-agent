@@ -1,4 +1,4 @@
-# Carousel Factory — Python 3.11+ (tested on 3.13)
+# Carousel Factory - Python 3.11+ (tested on 3.13)
 # System requirement (not pip): ffmpeg on PATH (https://ffmpeg.org)
 
 google-adk>=2.7,<3   # pinned floor: code uses 2.7-only APIs (Aclosing, unified Context, artifact_util)
