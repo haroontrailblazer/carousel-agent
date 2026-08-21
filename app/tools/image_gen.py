@@ -40,7 +40,7 @@ from PIL import Image
 
 from app import observability
 from app.config import load_skill, settings
-from app.text_rules import require_no_em_dash
+from app.text_rules import require_no_em_dash, require_readable_text
 from app.tools.brand_layout import (
     apply_body_brand_rail,
     apply_cta_brand_rail,
@@ -82,7 +82,11 @@ _VERBATIM_RULE = (
     "VERBATIM - matching character for character, including capitalization, "
     "punctuation, digits and spacing. Do NOT paraphrase, translate, correct "
     "spelling, abbreviate, drop words, or add any words, labels or watermarks "
-    "that are not listed. Render no other text anywhere in the image."
+    "that are not listed. Render no other text anywhere in the image. Use "
+    "clear, correctly formed letters for every word. Do not create fake "
+    "words, garbled letters, pseudo-text, tiny decorative text, or symbols "
+    "that resemble writing. If a decorative visual would normally contain "
+    "labels, use an unlabeled shape instead."
 )
 
 
@@ -249,6 +253,7 @@ def generate_slide_image(
         The absolute/normalized path of the written PNG as a string.
     """
     require_no_em_dash([headline, *copy_lines], "body slide copy")
+    require_readable_text([headline, *copy_lines], "body slide copy")
     tag = f"{slide_no:02d}"
     allowed = [
         _VERBATIM_RULE,
@@ -320,6 +325,7 @@ def generate_cta_image(
         The absolute/normalized path of the written PNG as a string.
     """
     require_no_em_dash([headline, *lines, link_text], "CTA image copy")
+    require_readable_text([headline, *lines, link_text], "CTA image copy")
     variant_hints = {
         "follow": "Follow CTA: make the value promise and action unmistakable.",
         "comment": "Comment CTA: a question line with a bold 'drop a comment' emphasis.",

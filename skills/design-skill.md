@@ -163,6 +163,10 @@ or invented links.
 ## Hard quality gates
 
 - Approved copy is rendered verbatim. Never paraphrase, correct, or add words.
+- Every visible word must be valid, correctly formed, and understandable. Do
+  not draw pseudo-text, garbled letters, decorative writing, invented labels,
+  or random symbols that resemble language. When an illustration would
+  normally need an unapproved label, leave that element unlabeled.
 - Never render an em dash in any cover, body, CTA, or caption text.
 - No text may be clipped, warped, illegible, or smaller than the minimum body
   size. If copy does not fit, simplify the visual-not the copy.

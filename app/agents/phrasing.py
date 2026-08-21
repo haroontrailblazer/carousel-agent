@@ -106,6 +106,11 @@ also yours to use - prefer their exact numbers over vaguer news text:
    or parentheses instead. This rule has no exceptions, including quotations.
 10. Keep lines short enough to render large: aim for at most about 9 words or
    55 characters per line.
+11. Use only complete, correctly spelled, understandable words. Prefer plain
+   English. Never output invented words, keyboard mash, pseudo-Latin,
+   placeholder text, corrupted characters, or decorative pseudo-writing.
+12. Proofread every line before returning it. Readers must never have to guess
+   what a malformed or shortened word was meant to say.
 
 ## Caption rules
 

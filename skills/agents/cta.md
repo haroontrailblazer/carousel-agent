@@ -26,6 +26,9 @@ Start from the planner's hint (carousel plan below) but apply judgment:
   promise, a question (compulsory for "comment"), or what the reader gets at
   the destination (for "redirect").
 - Never use an em dash. Use a period, comma, colon, or parentheses instead.
+- Use only complete, correctly spelled, understandable words. Never use
+  invented words, placeholder copy, keyboard mash, corrupted characters, or
+  decorative strings that merely resemble language.
 - NEVER write a handle, username, URL or link in the headline or supporting
   lines - the tool appends the correct one from configuration and any you
   invent would be wrong.

@@ -11,7 +11,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.text_rules import require_no_em_dash
+from app.text_rules import require_no_em_dash, require_readable_text
 
 CarouselStyle = Literal["points", "prose"]
 CTAType = Literal["follow", "comment", "redirect"]
@@ -20,11 +20,13 @@ Severity = Literal["critical", "major", "minor"]
 
 
 class PublishedTextModel(BaseModel):
-    """Base model that rejects em dashes from audience-facing text."""
+    """Base model that rejects forbidden or unreadable published text."""
 
     @model_validator(mode="after")
     def validate_no_em_dash(self) -> "PublishedTextModel":
-        require_no_em_dash(self.model_dump(mode="python"), self.__class__.__name__)
+        published = self.model_dump(mode="python")
+        require_no_em_dash(published, self.__class__.__name__)
+        require_readable_text(published, self.__class__.__name__)
         return self
 
 

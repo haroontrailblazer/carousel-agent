@@ -155,6 +155,10 @@ suggested_angle as a hook candidate:
 - max_lines_per_slide must never exceed 4.
 - Never use an em dash in the hook, caption seed, slide purpose, or key points.
   Use a period, comma, colon, or parentheses instead.
+- Use only complete, correctly spelled, understandable words in every
+  audience-facing field. Keep sourced names and technical terms exact, but
+  never produce invented words, placeholder text, keyboard mash, corrupted
+  characters, or decorative pseudo-writing.
 - Apply rework feedback and recent feedback notes as described above.
 """
 
