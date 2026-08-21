@@ -31,6 +31,23 @@ class NewsItem(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
+class ResearchFact(BaseModel):
+    """One verified fact gathered by the Research agent."""
+
+    fact: str  # the fact itself, with exact numbers/names/dates
+    source_url: str = ""  # where it was verified (empty only for facts from the news item itself)
+
+
+class ResearchBrief(BaseModel):
+    """Output of the Research agent — the fact base the plan is built on."""
+
+    summary: str  # 3-6 sentence briefing on what happened and why it matters
+    key_facts: list[ResearchFact] = Field(default_factory=list)
+    suggested_angle: str = ""  # one line: the most compelling hook angle found
+    media_candidates: list[str] = Field(default_factory=list)  # official video/image URLs for the cover
+    sources: list[str] = Field(default_factory=list)  # all URLs consulted
+
+
 class SlidePlan(BaseModel):
     """What one body slide should say (decided by the planner)."""
 

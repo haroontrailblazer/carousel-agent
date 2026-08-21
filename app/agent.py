@@ -4,7 +4,7 @@ Exposes:
 
 * ``root_agent`` — the module-level :class:`app.orchestrator.CarouselOrchestrator`
   instance that ``adk web`` / ``adk run`` discover (they import
-  ``app.agent`` and read ``root_agent``), with all ten pipeline agents as
+  ``app.agent`` and read ``root_agent``), with all eleven pipeline agents as
   ``sub_agents`` so the agent graph renders.
 * ``build_root_agent()`` — builds a FRESH agent tree. Agent builders re-read
   their ``skills/agents/<name>.md`` instruction files, so a fresh tree picks
@@ -44,6 +44,7 @@ from app.agents.learner import build_learner_agent
 from app.agents.phrasing import build_phrasing_agent
 from app.agents.planner import build_planner_agent
 from app.agents.publisher import build_publisher_agent
+from app.agents.research import build_research_agent
 from app.agents.review_dispatcher import build_review_dispatcher_agent
 from app.agents.stitch_verify import build_stitch_verify_agent
 from app.agents.template_design import build_template_design_agent
@@ -69,7 +70,7 @@ _ORCHESTRATOR_DESCRIPTION = (
 
 
 def build_sub_agents() -> list[BaseAgent]:
-    """Build fresh instances of all ten pipeline agents.
+    """Build fresh instances of all eleven pipeline agents.
 
     Order matters only for how ``adk web`` draws the graph: generation
     pipeline first, then QA, the review loop, and the terminal agents.
@@ -79,6 +80,7 @@ def build_sub_agents() -> list[BaseAgent]:
         constant), ready to be attached to one orchestrator.
     """
     return [
+        build_research_agent(),
         build_planner_agent(),
         build_first_page_visual_agent(),
         build_phrasing_agent(),

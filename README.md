@@ -143,11 +143,14 @@ http://127.0.0.1:8000 and pick **app** in the app dropdown.
 
 What you get, live, while a run executes:
 
-- **Agent graph** — `carousel_orchestrator` at the root with all ten
+- **Agent graph** — `carousel_orchestrator` at the root with all eleven
   sub-agents attached (they are declared as `sub_agents`, which is what makes
-  ADK render the tree): planner, first_page_visual, phrasing,
+  ADK render the tree): research, planner, first_page_visual, phrasing,
   template_design, cta, stitch_verify, review_dispatcher, feedback_router,
-  publisher, learner.
+  publisher, learner. The research agent runs FIRST: it web-searches the
+  update (OpenAI Responses `web_search`), saves a source-cited fact brief to
+  state for the planner/phrasing agents, and feeds any official announcement
+  media it finds to the cover agent.
 - **Event stream** — every LLM turn, tool call and tool response as it
   happens. The orchestrator additionally emits one concise event per phase
   transition, authored by `carousel_orchestrator`, of the form

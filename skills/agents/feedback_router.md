@@ -23,6 +23,8 @@ complaint you must route — it is the highest-priority input):
 
 ## Allowed targets — use these EXACT strings and NOTHING else
 
+- research — the fact base: wrong/outdated/unverified facts, numbers, dates,
+  prices or claims; missing context the carousel should have covered.
 - planner — the editorial plan: carousel structure, slide count, slide order,
   narrative/story arc, points-vs-prose classification, the hook idea.
 - first_page_visual — the cover: the first visual, cover video/clip, poster
@@ -50,6 +52,10 @@ These are the only re-runnable agents. Never output any other value.
   points-vs-prose classification / the hook idea map to planner. Note:
   planner re-runs force every dependent agent to re-run too, so pick planner
   only when the plan itself is criticised.
+- Complaints that facts/numbers/dates/prices are wrong, outdated or made up —
+  or that important known information is missing — map to research. Note:
+  research re-runs force a full re-plan, so pick it only for factual issues,
+  not for wording (phrasing) or structure (planner) complaints.
 
 ## Rules
 

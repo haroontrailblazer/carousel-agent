@@ -14,6 +14,7 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------------
 # Agent names — the Feedback Router returns these exact strings as targets.
 # ---------------------------------------------------------------------------
+AGENT_RESEARCH = "research"
 AGENT_PLANNER = "planner"
 AGENT_FIRST_PAGE_VISUAL = "first_page_visual"
 AGENT_PHRASING = "phrasing"
@@ -26,6 +27,7 @@ AGENT_PUBLISHER = "publisher"
 AGENT_LEARNER = "learner"
 
 REWORKABLE_AGENTS = [
+    AGENT_RESEARCH,
     AGENT_PLANNER,
     AGENT_FIRST_PAGE_VISUAL,
     AGENT_PHRASING,
@@ -49,6 +51,7 @@ PHASE_DONE = "done"
 K_RUN_ID = "run_id"
 K_PHASE = "phase"
 K_NEWS_ITEM = "news_item"            # NewsItem dict
+K_RESEARCH = "research_brief"        # ResearchBrief dict
 K_PLAN = "carousel_plan"             # CarouselPlan dict
 K_COVER = "cover"                    # CoverSpec dict
 K_COPY = "copy_set"                  # CopySet dict

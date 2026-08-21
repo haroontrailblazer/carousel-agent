@@ -29,7 +29,7 @@ workspace "Carousel Factory" "Google ADK multi-agent pipeline that turns AI/prod
         // ---- External systems ----
         sources = softwareSystem "Followed Channels & News Sources" "RSS feeds, YouTube channels, X posts and vendor blogs announcing model and product updates (Opus 5, Fable 5, Lovable, Supabase, ...). Also where the cover clip/image of an update is sourced from." "External"
         gmail = softwareSystem "Gmail" "Mailbox receiving update newsletters; also the sender of review and confirmation mails." "External"
-        gemini = softwareSystem "Gemini API" "Google LLM endpoints used natively by ADK agents." "External"
+        gemini = softwareSystem "Gemini API" "Google LLM endpoints (optional: used only when a model id is configured to a bare gemini-* id; the default configuration is all-OpenAI)." "External"
         openai = softwareSystem "OpenAI API" "OpenAI endpoints: LLM models used through ADK's LiteLLM wrapper (model per agent is a config switch) and gpt-image-2 for slide image generation." "External"
         instagram = softwareSystem "Instagram Graph API" "Meta endpoint used to auto-publish the approved carousel (video cover + image slides as carousel children). Constraints: max 10 children; cover video as a plain VIDEO child (not a Reel); the first item's aspect ratio governs all slides; requires an Instagram professional account." "External"
         ctaTargets = softwareSystem "Substack / YouTube" "The owner's channels that redirect-type CTA slides deep-link to." "External"
@@ -40,7 +40,8 @@ workspace "Carousel Factory" "Google ADK multi-agent pipeline that turns AI/prod
 
             pipeline = container "ADK Agent Pipeline" "google-adk runtime hosting the agent pipeline, the human-review pause and the targeted rework loop." "Python, google-adk, FastAPI, Cloud Run" {
                 root = component "Root Orchestrator" "Custom agent that runs the happy path in order, pauses the run while waiting for the human verdict, and triggers targeted rework after a rejection." "ADK custom BaseAgent" "Agent"
-                planner = component "Editorial Planner Agent" "The 'main agent'. Reads the news item and decides the carousel plan: points vs prose style, slide count, max lines per slide, hook title and a CTA-type hint." "ADK LlmAgent (Gemini), structured output" "Agent"
+                research = component "Research Agent" "Runs FIRST: web-searches the update — official announcement, exact specs/numbers/prices with source URLs, the sharpest angle, official announcement media — and hands a verified fact brief to the planner, phrasing and cover agents. On 'facts are wrong' rejections only this agent re-runs, forcing a re-plan." "ADK LlmAgent + OpenAI Responses web_search tool" "Agent"
+                planner = component "Editorial Planner Agent" "The 'main agent'. Reads the news item and the research brief and decides the carousel plan: points vs prose style, slide count, max lines per slide, hook title and a CTA-type hint." "ADK LlmAgent (OpenAI via LiteLLM), structured output" "Agent"
                 visual = component "First-Page Visual Agent" "Builds ONLY the cover: finds a 4-8 s clip of the update from the source itself (announcement/event video, trimmed via yt-dlp + FFmpeg) or falls back to the update's own image, then composites the bottom black gradient and the absolute-positioned hook title. Source clips are third-party media (rights check); downloads from cloud IPs are best-effort — the image fallback covers failures." "ADK LlmAgent + yt-dlp + FFmpeg tools" "Agent"
                 phrasing = component "Content Phrasing Agent" "Writes the final wording for every slide following the plan — bullet points or max-4-line prose per slide — and enforces line/character budgets." "ADK LlmAgent (OpenAI via LiteLLM)" "Agent"
                 template = component "Template Design Agent" "Generates all body slides (2..n-1) with gpt-image-2, giving it the designer's template as reference image plus the phrased copy, following the design skill." "ADK LlmAgent + gpt-image-2 (OpenAI Images API)" "Agent"
@@ -74,12 +75,14 @@ workspace "Carousel Factory" "Google ADK multi-agent pipeline that turns AI/prod
         fetcher -> root "Starts a pipeline run for the next queued news item"
 
         // ---- Pipeline orchestration ----
-        root -> planner "1. Asks to classify the news and plan the carousel"
-        root -> visual "2. Asks to build the cover (only page 1)"
-        root -> phrasing "3. Asks to write per-slide copy"
-        root -> template "4. Asks to render the body slides"
-        root -> cta "5. Asks to pick the CTA type and render the CTA slide"
-        root -> stitch "6. Asks to assemble and QA the carousel"
+        root -> research "1. Asks to research the update: verified facts + official media"
+        research -> planner "Hands the verified fact brief over to"
+        root -> planner "2. Asks to classify the news and plan the carousel"
+        root -> visual "3. Asks to build the cover (only page 1)"
+        root -> phrasing "4. Asks to write per-slide copy"
+        root -> template "5. Asks to render the body slides"
+        root -> cta "6. Asks to pick the CTA type and render the CTA slide"
+        root -> stitch "7. Asks to assemble and QA the carousel"
         stitch -> dispatcher "Hands the verified bundle for human review to"
         root -> router "On rejection: hands the feedback for targeted rework to"
         root -> learner "Sends every feedback (optional or compulsory) for storage and learning to"
@@ -90,18 +93,19 @@ workspace "Carousel Factory" "Google ADK multi-agent pipeline that turns AI/prod
         router -> template "Re-runs when the slide design is at fault"
         router -> cta "Re-runs when the CTA is at fault"
         router -> planner "Re-runs when the carousel structure/classification is at fault"
+        router -> research "Re-runs when the facts are at fault (forces a re-plan)"
 
-        // ---- LLM and external calls ----
-        planner -> gemini "LLM inference"
-        visual -> gemini "LLM inference (clip selection, title layout)"
+        // ---- LLM and external calls (all-OpenAI in the default config) ----
+        research -> openai "LLM inference + live web search (Responses API web_search)"
+        planner -> openai "LLM inference via LiteLLM"
+        visual -> openai "LLM inference via LiteLLM (clip selection, title layout)"
         phrasing -> openai "LLM inference via LiteLLM"
         template -> openai "Generates body slide images (gpt-image-2)"
         cta -> openai "Generates the CTA slide image (gpt-image-2)"
-        template -> gemini "LLM inference"
-        cta -> gemini "LLM inference"
-        router -> gemini "LLM inference (feedback classification)"
-        learner -> gemini "LLM inference (feedback distillation)"
+        router -> openai "LLM inference (feedback classification)"
+        learner -> openai "LLM inference (feedback distillation)"
 
+        research -> sources "Searches announcements, docs and coverage for facts + official media from"
         visual -> sources "Downloads the update's own announcement clip/image from"
         dispatcher -> gmail "Sends the review mail (preview + Approve/Reject links) via"
         publisher -> instagram "Uploads media and publishes the approved carousel via"
@@ -111,6 +115,7 @@ workspace "Carousel Factory" "Google ADK multi-agent pipeline that turns AI/prod
         // ---- State, media and skills ----
         services -> db "Persists sessions, state and the run ledger in"
         services -> media "Stores and serves media artifacts in"
+        research -> services "Writes the research brief to session state via"
         planner -> services "Reads/writes session state and recalls past feedback memory via"
         visual -> services "Stores the cover video via"
         phrasing -> services "Reads the plan / writes copy via"
@@ -174,6 +179,7 @@ workspace "Carousel Factory" "Google ADK multi-agent pipeline that turns AI/prod
 
         dynamic pipeline "HappyPath" "News item comes in, carousel is built, review mail goes out." {
             fetcher -> root "Starts run with the queued news item"
+            root -> research "Research first: verified facts, exact numbers, official media"
             root -> planner "Classify: points vs content, lines per slide, hook title"
             root -> visual "Build cover: 4-8 s source clip + gradient + title"
             visual -> sources "Fetch the update's own clip/image"

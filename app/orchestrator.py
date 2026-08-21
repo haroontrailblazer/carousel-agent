@@ -68,6 +68,7 @@ from app.state import (
     K_NEWS_ITEM,
     K_PHASE,
     K_QA_REPORT,
+    AGENT_RESEARCH,
     K_RECENT_FEEDBACK,
     K_REVIEW_ROUND,
     K_REWORK_FEEDBACK,
@@ -94,6 +95,7 @@ ORCHESTRATOR_NAME = "carousel_orchestrator"
 #: Canonical execution order of the generate-phase agents. Rework re-runs use
 #: the same order for whatever subset is targeted.
 GENERATE_ORDER: tuple[str, ...] = (
+    AGENT_RESEARCH,
     AGENT_PLANNER,
     AGENT_FIRST_PAGE_VISUAL,
     AGENT_PHRASING,
@@ -103,9 +105,12 @@ GENERATE_ORDER: tuple[str, ...] = (
 
 #: Data-dependency map for rework targeting: re-running a key agent forces the
 #: listed dependents to re-run too, because their inputs changed.
+#: - research refreshes the fact base -> the planner (and thus everything
+#:   downstream) must re-plan on the corrected facts.
 #: - planner re-plans everything -> full regenerate (per docs/CONTRACTS.md).
 #: - phrasing rewrites the copy -> template_design must re-render the slides.
 _REWORK_DEPENDENTS: dict[str, tuple[str, ...]] = {
+    AGENT_RESEARCH: (AGENT_PLANNER,),
     AGENT_PLANNER: (
         AGENT_FIRST_PAGE_VISUAL,
         AGENT_PHRASING,
@@ -251,7 +256,7 @@ def _safe_model(state: Any, key: str, model_cls: Type[M]) -> Optional[M]:
 class CarouselOrchestrator(BaseAgent):
     """Root agent of the Carousel Factory: a re-entrant phase state machine.
 
-    Construct it with the ten pipeline agents in ``sub_agents`` (see
+    Construct it with the eleven pipeline agents in ``sub_agents`` (see
     ``app.agent.build_root_agent``); children are looked up by their
     ``app.state`` names at runtime, so ordering inside ``sub_agents`` only
     affects how ``adk web`` draws the graph.
@@ -469,7 +474,7 @@ class CarouselOrchestrator(BaseAgent):
     async def _phase_generate(
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]
     ) -> AsyncGenerator[Event, None]:
-        """Generate: run all five content agents in pipeline order, -> qa."""
+        """Generate: run all six content agents in pipeline order, -> qa."""
         for name in GENERATE_ORDER:
             async for event in self._drive(self._child(name), ctx, holder):
                 yield event

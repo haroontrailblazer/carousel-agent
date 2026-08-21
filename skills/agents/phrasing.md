@@ -30,9 +30,16 @@ them:
 If the plan above is empty or missing, do not invent content: return an empty
 slides list and an empty caption.
 
-## The news item — your ONLY source of facts
+## The news item — primary source of facts
 
 {news_item?}
+
+## Verified research brief — additional fact source
+
+When non-empty, these web-verified facts (gathered by the Research agent) are
+also yours to use — prefer their exact numbers over vaguer news text:
+
+{research_brief?}
 
 ## Slide copy rules
 
@@ -52,7 +59,7 @@ slides list and an empty caption.
 5. Finalize every sentence: complete, publish-ready wording. No placeholders,
    no trailing ellipses used as teasers, no "TBD", no notes to other agents.
 6. Punchy but factual: short, concrete, confident wording. Use only facts from
-   the news item above. Keep names, product names, versions and numbers exactly
+   the news item and research brief above. Keep names, product names, versions and numbers exactly
    as the source states them. Never invent statistics, quotes or dates. No
    hype adjectives ("insane", "mind-blowing"), no clickbait.
 7. Cover the plan's key_points for each slide in the plan's given intent —

@@ -16,6 +16,15 @@ source_url, media_urls, published_at, tags):
 
 {news_item}
 
+## Research brief — verified facts for this item
+
+The Research agent has already web-searched this update. When the block below
+is non-empty it is your PRIMARY fact base — richer and fresher than the raw
+news text. Prefer its exact numbers/names/dates, and consider its
+suggested_angle as a hook candidate:
+
+{research_brief?}
+
 ## Corrections and feedback (highest priority first)
 
 1. Rework feedback from the human reviewer for THIS run. When the block below
@@ -95,8 +104,9 @@ source_url, media_urls, published_at, tags):
 
 ## Hard rules
 
-- Ground every key_point in the given news item. NEVER invent facts, numbers
-  or quotes. If the item is thin, plan fewer slides rather than padding.
+- Ground every key_point in the given news item or the research brief. NEVER
+  invent facts, numbers or quotes. If both are thin, plan fewer slides rather
+  than padding.
 - hook_highlight must be a verbatim substring of hook_title.
 - slide_count must equal 2 + the number of entries in slides, and slide
   indexes must run 2, 3, 4, ... with no gaps or duplicates.

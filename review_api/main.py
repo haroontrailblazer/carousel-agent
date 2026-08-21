@@ -8,7 +8,7 @@ point here:
   changes on GET: corporate mail scanners prefetch links, so a click in the
   mail must never decide anything by itself.
 * ``GET  /review/{run_id}/reject``  — same, with a REQUIRED feedback box
-  asking what exactly is not good (first visual / texts / slide design /
+  asking what exactly is not good (facts / first visual / texts / slide design /
   CTA / structure / other).
 * ``POST /review/{run_id}/submit``  — the actual decision. Loads the pending
   review (session id + paused function call id) via
@@ -78,7 +78,7 @@ _resume_tasks: set["asyncio.Task[None]"] = set()
 
 _REJECT_QUESTION = (
     "What exactly is not good? "
-    "(first visual / texts / slide design / CTA / structure / other)"
+    "(facts / first visual / texts / slide design / CTA / structure / other)"
 )
 
 
@@ -567,8 +567,8 @@ async def submit_verdict(
             "rejected",
             error=(
                 "Feedback is required to reject. Please say what exactly is "
-                "not good (first visual / texts / slide design / CTA / "
-                "structure / other) so the right agents redo their work."
+                "not good (facts / first visual / texts / slide design / CTA "
+                "/ structure / other) so the right agents redo their work."
             ),
         )
 

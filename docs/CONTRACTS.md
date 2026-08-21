@@ -62,7 +62,7 @@ agent is therefore a re-entrant state machine over `state[K_PHASE]`:
 | phase      | action                                                                            | next |
 |------------|-----------------------------------------------------------------------------------|------|
 | (missing)  | init run: set K_RUN_ID, K_REWORK_ROUND=0, K_REVIEW_ROUND=0                        | generate |
-| generate   | planner → first_page_visual → phrasing → template_design → cta                     | qa |
+| generate   | research → planner → first_page_visual → phrasing → template_design → cta          | qa |
 | qa         | stitch_verify (assembles Bundle + QAReport)                                        | review |
 | review     | review_dispatcher: sends mail, calls `await_human_review` (LongRunningFunctionTool) — invocation PAUSES here. On resume the tool response carries the verdict; dispatcher writes K_VERDICT. approved → publish; rejected → rework | publish / rework |
 | rework     | learner (store feedback) → feedback_router (writes K_REWORK_PLAN) → re-run ONLY the target agents (subset of REWORKABLE_AGENTS), passing K_REWORK_FEEDBACK; increment K_REWORK_ROUND (cap: settings.max_rework_rounds) | qa |
@@ -72,7 +72,8 @@ agent is therefore a re-entrant state machine over `state[K_PHASE]`:
 Rework targeting: `"the first visual is not good"` → only `first_page_visual`
 re-runs; then qa → review again with the replaced piece. If the router targets
 `planner`, downstream agents whose inputs changed re-run too (planner implies
-full regenerate of dependents) — the router's `reasons` say why.
+full regenerate of dependents; `research` implies planner and therefore a full
+regenerate on the corrected facts) — the router's `reasons` say why.
 
 ## Review resume protocol (review_api/main.py ↔ dispatcher)
 
@@ -101,7 +102,9 @@ full regenerate of dependents) — the router's `reasons` say why.
 | app/services/artifact_service.py | `SupabaseArtifactService(BaseArtifactService)` — implements the full BaseArtifactService interface (match installed ABC exactly) over S3-compatible Supabase Storage (boto3, settings.s3_*). Keys: `{app_name}/{user_id}/{session_id}/{filename}` + versioning per ABC. Plus `public_url(filename)->str` helper (signed URL) used by publisher/mail. |
 | app/services/memory_service.py | `PostgresMemoryService(BaseMemoryService)` (match installed ABC) storing/searching feedback + run summaries in Postgres (asyncpg); simple keyword search is fine. Plus `store_feedback(record: FeedbackRecord)` and `recent_feedback(limit=20) -> list[FeedbackRecord]`. |
 | app/services/db.py | asyncpg pool helpers + `db/schema.sql` (news_queue, runs, feedback, pending_reviews tables); `enqueue_news`, `next_queued_news`, `mark_news_done`, `create_run`, `update_run_phase`, `save_pending_review(run_id, session_id, function_call_id)`, `load_pending_review(run_id)`, `record_verdict`. |
-| app/agents/planner.py | `build_planner_agent()` — LlmAgent, model settings.planner_model, output_schema CarouselPlan, output_key K_PLAN; instruction covers: points vs prose, slide budget (cover+body+CTA <= 10), <=4 lines/slide, hook per skills/cover-style.md, uses recent feedback memory. |
+| app/tools/research_tools.py | `search_web(query) -> dict{status, answer, sources}` — OpenAI Responses API `web_search` tool on the utility model's bare id; `save_research_brief(summary, key_facts, suggested_angle, media_candidates, sources, tool_context) -> dict` — validates ResearchBrief, writes K_RESEARCH, merges media_candidates into news_item.media_urls (cap 8) for the cover agent. |
+| app/agents/research.py | `build_research_agent()` — LlmAgent, model settings.planner_model, tools search_web + save_research_brief; runs FIRST in generate; 2-5 focused searches, verified facts only; planner/phrasing consume the brief via `{research_brief?}` templating. |
+| app/agents/planner.py | `build_planner_agent()` — LlmAgent, model settings.planner_model, output_schema CarouselPlan, output_key K_PLAN; instruction covers: points vs prose, slide budget (cover+body+CTA <= 10), <=4 lines/slide, hook per skills/cover-style.md, uses recent feedback memory + the research brief (`{research_brief?}`). |
 | app/agents/first_page_visual.py | `build_first_page_visual_agent()` — LlmAgent + media tools; picks best media_url (or searches source page), builds CoverSpec via compose_cover, saves artifacts, writes K_COVER. Honors K_REWORK_FEEDBACK. |
 | app/agents/phrasing.py | `build_phrasing_agent()` — LlmAgent LiteLlm(settings.phrasing_model), output_schema CopySet, output_key K_COPY; enforces plan style + line budget. |
 | app/agents/template_design.py | `build_template_design_agent()` — LlmAgent + image_gen tool; one PNG per body slide via gpt-image-2 (design-skill.md), saves artifacts, writes K_BODY_SLIDES. |

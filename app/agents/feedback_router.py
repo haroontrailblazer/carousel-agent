@@ -37,6 +37,7 @@ from app.state import (
     AGENT_FIRST_PAGE_VISUAL,
     AGENT_PHRASING,
     AGENT_PLANNER,
+    AGENT_RESEARCH,
     AGENT_TEMPLATE_DESIGN,
     K_REWORK_FEEDBACK,
     K_REWORK_PLAN,
@@ -87,6 +88,11 @@ _ALIAS_TO_TARGET: dict[str, str] = {
     "call_to_action": AGENT_CTA,
     "cta_slide": AGENT_CTA,
     "last_slide": AGENT_CTA,
+    # research
+    "facts": AGENT_RESEARCH,
+    "fact_check": AGENT_RESEARCH,
+    "accuracy": AGENT_RESEARCH,
+    "research_agent": AGENT_RESEARCH,
     # planner
     "plan": AGENT_PLANNER,
     "planning": AGENT_PLANNER,
@@ -100,6 +106,26 @@ _ALIAS_TO_TARGET: dict[str, str] = {
 #: LLM produced no valid target. Checked in order; every matching target is
 #: collected.
 _KEYWORD_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        AGENT_RESEARCH,
+        (
+            "wrong fact",
+            "facts are wrong",
+            "factually",
+            "factual",
+            "inaccurate",
+            "incorrect",
+            "outdated",
+            "not true",
+            "fact check",
+            "fact-check",
+            "wrong number",
+            "wrong price",
+            "wrong date",
+            "made up",
+            "misleading",
+        ),
+    ),
     (
         AGENT_FIRST_PAGE_VISUAL,
         (
@@ -334,6 +360,8 @@ complaint you must route — it is the highest-priority input):
 
 ## Allowed targets — use these EXACT strings and NOTHING else
 
+- research — the fact base: wrong/outdated/unverified facts, numbers, dates,
+  prices or claims; missing context the carousel should have covered.
 - planner — the editorial plan: carousel structure, slide count, slide order,
   narrative/story arc, points-vs-prose classification, the hook idea.
 - first_page_visual — the cover: the first visual, cover video/clip, poster
@@ -361,6 +389,10 @@ These are the only re-runnable agents. Never output any other value.
   points-vs-prose classification / the hook idea map to planner. Note:
   planner re-runs force every dependent agent to re-run too, so pick planner
   only when the plan itself is criticised.
+- Complaints that facts/numbers/dates/prices are wrong, outdated or made up —
+  or that important known information is missing — map to research. Note:
+  research re-runs force a full re-plan, so pick it only for factual issues,
+  not for wording (phrasing) or structure (planner) complaints.
 
 ## Rules
 

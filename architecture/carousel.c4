@@ -92,7 +92,7 @@ model {
     description "Announces updates such as Opus 5 / Fable 5 releases, Lovable and Supabase features. Also where the cover clip/image of an update is sourced from."
   }
   gmail = extSystem "Gmail" "Receives update newsletters; sends review and confirmation mails"
-  gemini = extSystem "Gemini API" "Google LLM endpoints used natively by ADK agents"
+  gemini = extSystem "Gemini API" "Google LLM endpoints (optional: used only when a *_MODEL is configured to a bare gemini-* id; the default configuration is all-OpenAI)"
   openai = extSystem "OpenAI API" "OpenAI endpoints: LLM models through the ADK LiteLLM wrapper (model per agent is a config switch) and gpt-image-2 for slide image generation"
   instagram = extSystem "Instagram Graph API" "Meta endpoint that auto-publishes the approved carousel" {
     description "Video cover + image slides as carousel children. Constraints: max 10 children; cover video as a plain VIDEO child (not a Reel); the first item aspect ratio governs all slides; requires an Instagram professional account."
@@ -113,9 +113,13 @@ model {
       root = agent "Root Orchestrator" "Runs the happy path in order; pauses for the human verdict; triggers targeted rework on rejection" {
         technology "ADK custom BaseAgent"
       }
+      research = agent "Research Agent" "Runs FIRST: web-searches the update and hands a verified fact brief to the planner, phrasing and cover agents" {
+        technology "ADK LlmAgent + OpenAI Responses web_search tool"
+        description "Finds the official announcement, exact specs/numbers/prices with source URLs, the sharpest angle, and official announcement media (fed to the cover agent). On 'facts are wrong' rejections only this agent re-runs, forcing a re-plan on corrected facts."
+      }
       planner = agent "Editorial Planner Agent" "The main agent: understands the news and plans the carousel" {
-        technology "ADK LlmAgent (Gemini), structured output"
-        description "Decides points vs prose style, slide count, max lines per carousel image, hook title and a CTA-type hint."
+        technology "ADK LlmAgent (OpenAI via LiteLLM), structured output"
+        description "Decides points vs prose style, slide count, max lines per carousel image, hook title and a CTA-type hint — grounded in the research brief."
       }
       visual = agent "First-Page Visual Agent" "Builds ONLY the cover: sourced 4-8 s clip + bottom black gradient + absolute hook title" {
         technology "ADK LlmAgent + yt-dlp + FFmpeg"
@@ -158,12 +162,14 @@ model {
       }
 
       // orchestration (happy path order)
-      root -> planner "1. Classify the news and plan the carousel"
-      root -> visual "2. Build the cover (only page 1)"
-      root -> phrasing "3. Write per-slide copy"
-      root -> template "4. Render the body slides"
-      root -> cta "5. Pick CTA type and render the CTA slide"
-      root -> stitch "6. Assemble and QA the carousel"
+      root -> research "1. Research the update: verified facts + official media"
+      research -> planner "Hands the verified fact brief over"
+      root -> planner "2. Classify the news and plan the carousel"
+      root -> visual "3. Build the cover (only page 1)"
+      root -> phrasing "4. Write per-slide copy"
+      root -> template "5. Render the body slides"
+      root -> cta "6. Pick CTA type and render the CTA slide"
+      root -> stitch "7. Assemble and QA the carousel"
       stitch -> dispatcher "Hands the verified bundle for review"
       root -> router "On rejection: routes feedback for targeted rework"
       root -> learner "Sends every feedback for storage and learning"
@@ -175,19 +181,20 @@ model {
       router -> template "Re-runs when the slide design is at fault"
       router -> cta "Re-runs when the CTA is at fault"
       router -> planner "Re-runs when the structure/classification is at fault"
+      router -> research "Re-runs when the facts are at fault (forces a re-plan)"
 
-      // LLM calls
-      planner -> gemini "LLM inference"
-      visual -> gemini "LLM inference (clip selection, title layout)"
+      // LLM calls (all through OpenAI via LiteLLM in the default config)
+      research -> openai "LLM inference + live web search (Responses API web_search)"
+      planner -> openai "LLM inference via LiteLLM"
+      visual -> openai "LLM inference via LiteLLM (clip selection, title layout)"
       phrasing -> openai "LLM inference via LiteLLM"
       template -> openai "Generates body slide images (gpt-image-2)"
       cta -> openai "Generates the CTA slide image (gpt-image-2)"
-      template -> gemini "LLM inference"
-      cta -> gemini "LLM inference"
-      router -> gemini "Classifies feedback"
-      learner -> gemini "Distills feedback"
+      router -> openai "Classifies feedback"
+      learner -> openai "Distills feedback"
 
       // external calls
+      research -> sources "Searches announcements, docs and coverage for facts + official media"
       visual -> sources "Downloads the update's own announcement clip/image"
       dispatcher -> gmail "Sends the review mail (preview + Approve/Reject links)"
       publisher -> instagram "Uploads media and publishes the carousel"
@@ -195,6 +202,7 @@ model {
       cta -> ctaTargets "Generates redirect deep-links to"
 
       // shared services
+      research -> services "Writes the research brief to session state"
       planner -> services "Reads/writes session state; recalls past feedback memory"
       visual -> services "Stores the cover video"
       phrasing -> services "Reads the plan / writes copy"
@@ -301,6 +309,8 @@ views {
   dynamic view happyPath {
     title "Happy path: news item to review mail"
     carousel.fetcher -> carousel.pipeline.root "Starts run with the queued news item"
+    carousel.pipeline.root -> carousel.pipeline.research "Research first: verified facts, exact numbers, official media"
+    carousel.pipeline.research -> sources "Web-search the announcement, docs and coverage"
     carousel.pipeline.root -> carousel.pipeline.planner "Classify: points vs content, lines per slide, hook title"
     carousel.pipeline.root -> carousel.pipeline.visual "Build cover: 4-8 s source clip + gradient + title"
     carousel.pipeline.visual -> sources "Fetch the update's own clip/image"
