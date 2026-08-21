@@ -12,6 +12,9 @@ from __future__ import annotations
 from typing import Any
 
 
+OPENAI_REASONING_EFFORT = "high"
+
+
 def resolve_model(model_id: str) -> Any:
     """Resolve a configured model id into what ``LlmAgent(model=...)`` expects.
 
@@ -37,8 +40,15 @@ def resolve_model(model_id: str) -> Any:
         # and stays there).
         if model_id.startswith("openai/gpt-5.6"):
             model_id = "openai/responses/" + model_id.split("/", 1)[1]
-        return LiteLlm(model=model_id)
+        kwargs: dict[str, Any] = {}
+        if model_id.startswith("openai/") and "/gpt-5" in model_id:
+            # LiteLlm forwards this to Chat Completions or translates it for
+            # the Responses bridge. Keep the quality setting centralized so
+            # every GPT-5 agent (including structured-output agents) reasons
+            # at the same requested level.
+            kwargs["reasoning_effort"] = OPENAI_REASONING_EFFORT
+        return LiteLlm(model=model_id, **kwargs)
     return model_id
 
 
-__all__ = ["resolve_model"]
+__all__ = ["OPENAI_REASONING_EFFORT", "resolve_model"]

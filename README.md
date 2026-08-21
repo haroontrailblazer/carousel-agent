@@ -88,6 +88,11 @@ Fill in every section of `.env` — LLM keys, Supabase, Gmail, Instagram, CTA
 links, fetch sources. All secrets flow through `app/config.py`; nothing is
 hard-coded. Never commit `.env`.
 
+`CTA_PROFILE_IMAGE` points to the local portrait used for the final-slide
+avatar. The default is the checked-in, user-supplied
+`skills/references/instagram-profile-source.png`; `IG_HANDLE` defaults to
+`@baskaranbuilds`.
+
 ### 4. Database (Supabase Postgres)
 
 Apply the schema once (idempotent — safe to re-run). Use the direct Postgres
@@ -289,10 +294,13 @@ permalink.
 `skills/` is the system's personality, and it is meant to be edited:
 
 - `skills/cover-style.md` — the cover composition contract (media zone, black
-  grain dissolve, orange-highlight title rules).
-- `skills/design-skill.md` — body/CTA slide design system. **The designer
-  owns this file**; the current content is a placeholder until the real
-  templates land.
+  grain dissolve, lime-highlight title rules).
+- `skills/design-skill.md` — the Baskaran Builds body/CTA slide system,
+  including layout archetypes, lime/ink/paper variables, exact safe areas,
+  the official website footer favicon, and the supplied CTA portrait rule.
+- `skills/references/` — visual proofs and canonical brand assets. Footer
+  furniture is composited deterministically after image generation so the
+  logo, handle, portrait, arrow, and padding remain exact on every slide.
 - `skills/agents/<name>.md` — one instruction file per agent, loaded fresh
   from disk at agent-build time.
 
@@ -334,4 +342,6 @@ the system.
   code changes, or use `--reload_agents` for agent files).
 - **Model ids are config switches**, not gospel: `PLANNER_MODEL`,
   `PHRASING_MODEL` (keep the `openai/` prefix for LiteLLM), `IMAGE_MODEL`
-  can all be swapped in `.env` when providers move.
+  can all be swapped in `.env` when providers move. GPT-5 text agents are
+  constructed with `reasoning_effort="high"`; the default phrasing model is
+  `openai/gpt-5.5` for final slide and caption writing.

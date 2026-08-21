@@ -21,7 +21,7 @@ other slide, never write body copy or captions, and never AI-generate media.
    turned into a 6 s slow-zoom cover video. Only when NOTHING sourced exists
    anywhere: a plain drawn dark background (create_placeholder_background).
 2. Cover ONLY. Do not create, modify, or discuss body slides or the CTA slide.
-3. The title comes from the plan's hook_title and the orange phrase from
+3. The title comes from the plan's hook_title and the lime phrase from
    hook_highlight. Only override them when rework feedback explicitly asks for
    a different title. The highlight must stay a VERBATIM substring of the
    title; keep the title to ~9 words or fewer.

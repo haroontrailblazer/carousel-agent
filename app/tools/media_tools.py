@@ -12,7 +12,7 @@ Three jobs (see docs/CONTRACTS.md file map):
    default 4-15 s), silent H.264 mp4.
 3. ``compose_cover(...)``       — scale/center-crop the media to 1080x1350,
    composite the STRANGE-COVER overlay template plus a Pillow-rendered title
-   block (white, condensed extra-bold uppercase, orange-gradient highlight
+   block (warm-white, condensed extra-bold uppercase, lime-gradient highlight
    phrase) and produce the final cover mp4 + first-frame poster PNG.
 
 The cover is NEVER AI-generated (skills/cover-style.md): a sourced clip, or —
@@ -74,10 +74,10 @@ _FFMPEG_TIMEOUT_S = 300
 _FFPROBE_TIMEOUT_S = 60
 _MAX_PROBES = 4  # cap yt-dlp probes per find_source_clip call
 
-# Title styling (skills/cover-style.md).
-_WHITE = (255, 255, 255, 255)
-_ORANGE_START = (247, 148, 29)  # #F7941D
-_ORANGE_END = (251, 176, 64)  # #FBB040
+# Title styling (current baskaranbuilds.com tokens; skills/cover-style.md).
+_TEXT_PRIMARY = (232, 228, 214, 255)  # #E8E4D6
+_PRIMARY_START = (200, 237, 121)  # #C8ED79
+_PRIMARY_END = (184, 239, 67)  # #B8EF43
 _TITLE_MAX_LINES = 2
 _TITLE_MAX_WIDTH_FRAC = 0.63  # inner span between the template's arrow glyphs
 _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
@@ -764,11 +764,11 @@ def _wrap_title(title: str, font: ImageFont.FreeTypeFont, max_w: float) -> list[
 
 
 def _gradient_color(t: float) -> tuple[int, int, int, int]:
-    """Interpolate the highlight orange gradient at ``t`` in [0, 1]."""
+    """Interpolate the current lime highlight gradient at ``t`` in [0, 1]."""
     t = min(max(t, 0.0), 1.0)
-    r = round(_ORANGE_START[0] + (_ORANGE_END[0] - _ORANGE_START[0]) * t)
-    g = round(_ORANGE_START[1] + (_ORANGE_END[1] - _ORANGE_START[1]) * t)
-    b = round(_ORANGE_START[2] + (_ORANGE_END[2] - _ORANGE_START[2]) * t)
+    r = round(_PRIMARY_START[0] + (_PRIMARY_END[0] - _PRIMARY_START[0]) * t)
+    g = round(_PRIMARY_START[1] + (_PRIMARY_END[1] - _PRIMARY_START[1]) * t)
+    b = round(_PRIMARY_START[2] + (_PRIMARY_END[2] - _PRIMARY_START[2]) * t)
     return (r, g, b, 255)
 
 
@@ -777,7 +777,7 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
 
     Centered in the lower third, max two lines, condensed extra-bold
     uppercase, white, with the highlight phrase in a per-character horizontal
-    orange gradient (#F7941D -> #FBB040).
+    lime gradient (#C8ED79 -> #B8EF43).
     """
     width, height = settings.slide_width, settings.slide_height
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -817,7 +817,7 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
                 t = (global_idx - hl_start) / max(span_len - 1, 1)
                 color = _gradient_color(t)
             else:
-                color = _WHITE
+                color = _TEXT_PRIMARY
             draw.text((x, y), ch, font=font, fill=color)
             x += font.getlength(ch)
             global_idx += 1
@@ -887,6 +887,23 @@ def _scrub_template_text(tpl: Image.Image) -> Image.Image:
     return tpl
 
 
+def _recolor_legacy_accents(tpl: Image.Image) -> Image.Image:
+    """Convert the overlay's baked legacy-orange arrows to current lime."""
+    px = tpl.load()
+    for y in range(tpl.height):
+        for x in range(tpl.width):
+            r, g, b, a = px[x, y]
+            if a and r > 120 and g > 55 and b < 120 and r > g * 1.15:
+                strength = max(r, g, b) / 255
+                px[x, y] = (
+                    round(_PRIMARY_END[0] * strength),
+                    round(_PRIMARY_END[1] * strength),
+                    round(_PRIMARY_END[2] * strength),
+                    a,
+                )
+    return tpl
+
+
 def _load_scrubbed_template() -> Optional[Image.Image]:
     """Load the overlay template with its example text scrubbed (cached)."""
     path = settings.cover_overlay_template
@@ -896,7 +913,9 @@ def _load_scrubbed_template() -> Optional[Image.Image]:
     cached = _SCRUBBED_TEMPLATE_CACHE.get(key)
     if cached is None:
         with Image.open(path) as tpl:
-            cached = _scrub_template_text(tpl.convert("RGBA"))
+            cached = _recolor_legacy_accents(
+                _scrub_template_text(tpl.convert("RGBA"))
+            )
         _SCRUBBED_TEMPLATE_CACHE.clear()
         _SCRUBBED_TEMPLATE_CACHE[key] = cached
     return cached
@@ -964,7 +983,7 @@ def compose_cover(
     Args:
         media_path: Local path of the trimmed clip or downloaded image.
         title: Cover hook title (rendered uppercase, max two lines).
-        highlight: Verbatim phrase inside ``title`` rendered in orange gradient.
+        highlight: Verbatim phrase inside ``title`` rendered in lime gradient.
         is_video: True when ``media_path`` is a video clip.
         workdir: Run-specific working folder.
 

@@ -1,41 +1,64 @@
 # Cover Style — First Page of Every Carousel
 
-Distilled from the three reference images in the project root:
-`CONFIG-INSTA-1.png` (finished cover), `STRANGE-COVER (1).png` (the overlay
-template on its own), `WhatsApp Image 2026-08-11 at 4.25.57 PM.jpeg` (legacy style).
+The cover is the strongest frame of the winning-carousel system. It uses the
+existing sourced-media pipeline and overlay mechanics while adopting the
+current Baskaran Builds site palette.
 
 ## Format
 
-- 1080 x 1350 px (4:5). The cover is a 4-8 second VIDEO on Instagram; its
-  aspect ratio governs every following slide.
-- The video is NEVER AI-generated. It is sourced from the update itself:
-  the announcement/event clip (trimmed), or — fallback — the update's own
-  image (paper screenshot, product UI, blog hero) as a static/gently-zoomed cover.
+- 1080 x 1350 px (4:5). This aspect ratio governs every following slide.
+- The cover remains a 4-15 second sourced video under the current runtime
+  contract; a sourced still with a restrained push-in is the fallback.
+- The media is never AI-generated. Use the announcement/event clip, product UI,
+  paper figure, launch image, or another source-grounded visual.
 
-## Composition (current template = STRANGE-COVER (1).png)
+## Brand tokens
 
-1. **Media zone (top ~60%).** The sourced clip/image, subject kept visible
-   above the dissolve line. Slight darkening is fine; no other filters.
-2. **Black dissolve zone (bottom ~40%).** Pure black rising from the bottom,
-   meeting the media with a GRAIN/NOISE dissolve edge (stippled dither, not a
-   smooth gradient). The overlay template PNG already contains this — composite
-   it over the media at full size.
-3. **Perspective grid floor.** Faint white wireframe grid at the very bottom
-   edge (part of the template).
-4. **Title block (centered, lower third).** Two lines max, condensed
-   extra-bold uppercase, white (#FFFFFF). Exactly ONE key phrase is rendered
-   in the orange gradient (#F7941D → #FBB040). Small orange arrow glyphs sit
-   left and right of the title block (swipe cue — part of the template).
+- Ink: `#161811`.
+- Primary text: `#E8E4D6`.
+- Accent gradient: `#C8ED79` to `#B8EF43`.
+- Muted: `#B9C5AA`.
+
+Legacy orange is not used for new cover text or accent furniture.
+
+## Composition
+
+1. **Media zone (top ~62%).** Keep the subject/product recognizable and away
+   from the title. Crop for one clear focal point; slight darkening is allowed.
+2. **Grain dissolve (bottom ~38%).** Ink rises from the bottom through a
+   stippled/noise edge, never a generic smooth gradient.
+3. **Title block (lower third).** Maximum two lines when the words permit,
+   condensed bold, warm-white, with exactly one verbatim phrase in lime.
+4. **Continuity furniture.** Preserve the faint perspective floor/grid and
+   compact side-arrow cues from the current overlay, recolored to lime.
+5. **Brand rail.** Keep the lower edge quiet. Do not add a second headline,
+   badges, stats, or source labels.
 
 ## Title rules
 
-- Max ~9 words total, punchy hook, no punctuation except a comma or period.
-- `hook_highlight` (from the plan) is the phrase colored orange; it must be a
-  verbatim substring of `hook_title`.
-- Example from reference: "STOP PROMPTING YOUR AI, GIVE IT A LOOP" with
-  "GIVE IT A LOOP" highlighted.
+- Maximum 9 words total; 5-7 words is preferred.
+- Lead with tension, consequence, or a surprising mechanism—not a generic
+  announcement such as "X IS HERE".
+- `hook_highlight` must be a verbatim substring of `hook_title` and contain the
+  consequence or turn in the idea.
+- Use punctuation only when it improves spoken rhythm; no emoji or hashtags.
+- The title must remain readable at feed-thumbnail size.
 
-## Legacy style (WhatsApp reference)
+Example shape: `YOUR AGENT LOOKS SMART UNTIL REALITY HITS`, highlighting
+`REALITY HITS`.
 
-Left-aligned giant title over a smooth bottom gradient, no arrows/grid.
-Do NOT use for new covers unless explicitly asked; the centered template wins.
+## Image treatment
+
+- Prefer real source imagery with useful negative space over generic cinematic
+  AI imagery.
+- Do not tint the whole media frame lime. Lime belongs only to the highlight
+  phrase and small directional furniture.
+- Avoid glows, lens flares, floating logos, and decorative circuit patterns.
+- If the source is a paper or UI screenshot, keep one identifiable proof region
+  visible rather than blurring the entire image behind the title.
+
+## Legacy template note
+
+`STRANGE-COVER (1).png` remains the geometry source for the grain dissolve,
+grid, and arrows. Runtime compositing scrubs its example title and recolors its
+legacy orange accents to the current lime token before rendering new copy.

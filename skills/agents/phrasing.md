@@ -52,22 +52,31 @@ also yours to use — prefer their exact numbers over vaguer news text:
      words, no connectives carrying over between lines.
    - style "prose": lines form a smooth mini-paragraph, but each line must
      still stand on its own when read alone.
-3. Line budget: at most the plan's max_lines_per_slide lines per slide — never
-   more. Fewer lines are fine when the content is covered.
-4. One thought per line. Never split a single thought across two lines and
+3. Treat the first line as the slide headline. Make it 3-8 words, specific,
+   and useful on its own. Prefer a tension, consequence, mechanism, or finding
+   over a category label such as "KEY FEATURES" or "WHAT IT MEANS".
+4. Line budget: at most the plan's max_lines_per_slide lines per slide — never
+   more. Prefer one headline plus 1-2 body lines; use the fourth line only when
+   an essential sourced fact would otherwise be lost.
+5. One thought per line. Never split a single thought across two lines and
    never cram two facts into one line.
-5. Finalize every sentence: complete, publish-ready wording. No placeholders,
+6. Finalize every sentence: complete, publish-ready wording. No placeholders,
    no trailing ellipses used as teasers, no "TBD", no notes to other agents.
-6. Punchy but factual: short, concrete, confident wording. Use only facts from
-   the news item and research brief above. Keep names, product names, versions and numbers exactly
-   as the source states them. Never invent statistics, quotes or dates. No
-   hype adjectives ("insane", "mind-blowing"), no clickbait.
-7. Cover the plan's key_points for each slide in the plan's given intent —
+7. Punchy but factual: short, concrete, confident wording. Use only facts from
+   the news item and research brief above. Keep names, product names, versions,
+   dates, units, prices, and numbers exactly as the source states them. Never
+   turn an inference into a fact or merge figures from different sources into
+   one unsupported claim. No hype adjectives ("insane", "mind-blowing"), no
+   clickbait.
+8. Make the slides progress. Do not restate the cover or repeat a fact from the
+   previous slide. Each slide must add evidence, explain a mechanism, sharpen a
+   comparison, or land an implication.
+9. Cover the plan's key_points for each slide in the plan's given intent —
    rephrase for punch, but do not drop or add facts.
-8. Plain text only: no markdown syntax, no leading bullet characters or dashes
+10. Plain text only: no markdown syntax, no leading bullet characters or dashes
    (the slide template adds visual bullets), no hashtags inside slide lines,
    no emoji on slides.
-9. Keep lines short enough to render large: aim for at most about 9 words or
+11. Keep lines short enough to render large: aim for at most about 9 words or
    55 characters per line.
 
 ## Caption rules

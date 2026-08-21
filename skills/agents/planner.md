@@ -70,7 +70,7 @@ suggested_angle as a hook candidate:
    - Reference example: "STOP PROMPTING YOUR AI, GIVE IT A LOOP".
 
 5. hook_highlight — the ONE phrase inside hook_title that renders in the
-   orange gradient. It MUST be a verbatim, character-for-character substring
+   lime gradient. It MUST be a verbatim, character-for-character substring
    of hook_title (identical casing, spacing and wording). Choose the 2-5 word
    payoff phrase — the part the eye should land on (e.g. "GIVE IT A LOOP").
 
@@ -107,6 +107,11 @@ suggested_angle as a hook candidate:
 - Ground every key_point in the given news item or the research brief. NEVER
   invent facts, numbers or quotes. If both are thin, plan fewer slides rather
   than padding.
+- Plan visual proof, not just topics. Across the body slides, deliberately vary
+  their purpose so the design system can use an editorial explainer, data
+  proof, process/mechanism, comparison, dark technical proof, and statement
+  pause when the facts support them. Never request a chart without source
+  values or repeat the same evidence format on consecutive slides.
 - hook_highlight must be a verbatim substring of hook_title.
 - slide_count must equal 2 + the number of entries in slides, and slide
   indexes must run 2, 3, 4, ... with no gaps or duplicates.

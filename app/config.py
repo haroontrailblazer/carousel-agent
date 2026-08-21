@@ -34,7 +34,8 @@ class Settings:
     # .env, not here. All-OpenAI by default per the user's subscription.
     planner_model: str = os.getenv("PLANNER_MODEL", "openai/gpt-5.6-sol")
     utility_model: str = os.getenv("UTILITY_MODEL", "openai/gpt-5.4-mini")
-    phrasing_model: str = os.getenv("PHRASING_MODEL", "openai/gpt-5.6-sol")
+    # GPT-5.5 is the writing specialist for final slide/caption phrasing.
+    phrasing_model: str = os.getenv("PHRASING_MODEL", "openai/gpt-5.5")
     image_model: str = os.getenv("IMAGE_MODEL", "gpt-image-2")
 
     # --- storage / db (Supabase) ---
@@ -66,7 +67,7 @@ class Settings:
     # --- CTA destinations ---
     substack_url: str = os.getenv("SUBSTACK_URL", "")
     youtube_url: str = os.getenv("YOUTUBE_URL", "")
-    ig_handle: str = os.getenv("IG_HANDLE", "")
+    ig_handle: str = os.getenv("IG_HANDLE", "@baskaranbuilds")
 
     # --- fetcher sources ---
     rss_feeds: list[str] = field(default_factory=lambda: _csv("RSS_FEEDS"))
@@ -94,6 +95,12 @@ class Settings:
         str(PROJECT_ROOT / "CONFIG-INSTA-1.png"),
         str(PROJECT_ROOT / "STRANGE-COVER (1).png"),
         str(PROJECT_ROOT / "WhatsApp Image 2026-08-11 at 4.25.57 PM.jpeg"),
+    )
+    cta_profile_image: Path = Path(
+        os.getenv(
+            "CTA_PROFILE_IMAGE",
+            str(PROJECT_ROOT / "skills" / "references" / "instagram-profile-source.png"),
+        )
     )
     slide_width: int = 1080
     slide_height: int = 1350  # 4:5 — first item's aspect ratio governs the carousel

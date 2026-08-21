@@ -52,8 +52,8 @@ _DEFAULT_INSTRUCTION = """\
 
 You render the BODY slides of an Instagram carousel — every slide between the
 cover and the final CTA — as 1080x1350 (4:5) PNG images that follow the design
-system in skills/design-skill.md (black ground, white text, one orange-accent
-element per slide, slide-number tag, swipe-cue arrow).
+system in skills/design-skill.md (ink/paper rhythm, one lime-accent element,
+content-aware layout archetype, slide-number tag, and swipe-cue arrow).
 
 ## How to work
 
@@ -183,6 +183,26 @@ def _slide_texts(slide: SlideCopy) -> tuple[str, list[str]]:
     return lines[0], lines[1:]
 
 
+def _layout_hint(slide: SlideCopy) -> str:
+    """Choose a content-aware visual archetype without changing copy/state."""
+    text = " ".join(slide.lines).lower()
+    if re.search(r"\b(vs\.?|versus|compare|comparison|before|after|old|new)\b", text):
+        return "comparison"
+    if re.search(r"(?:\d[\d,.]*\s*%|[$€£₹]\s*\d|\b\d{2,}\b)", text):
+        return "data evidence"
+    if re.search(
+        r"\b(step|process|workflow|first|then|next|finally|loop|sequence)\b|(?:->|→)",
+        text,
+    ):
+        return "process line"
+    if re.search(
+        r"\b(code|api|function|command|error|exception|prompt|query|tool|model)\b",
+        text,
+    ):
+        return "dark proof"
+    return "editorial explainer" if slide.index % 2 == 0 else "statement pause"
+
+
 def _run_workdir(state: Any) -> Path:
     """Return (and create) the slide output directory for the current run."""
     run_id = str(state.get(K_RUN_ID) or "run")
@@ -270,6 +290,7 @@ async def render_body_slides(
         try:
             # generate_slide_image blocks on a slow image API call — keep the
             # event loop free by running it in a worker thread.
+            layout_hint = _layout_hint(slide)
             written = await asyncio.to_thread(
                 image_gen.generate_slide_image,
                 template_ref,
@@ -277,6 +298,7 @@ async def render_body_slides(
                 headline,
                 slide.index,
                 str(out_path),
+                layout_hint,
             )
             png_bytes = Path(written).read_bytes()
             await tool_context.save_artifact(

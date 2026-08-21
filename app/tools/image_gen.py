@@ -40,6 +40,7 @@ from PIL import Image
 
 from app import observability
 from app.config import load_skill, settings
+from app.tools.brand_layout import apply_body_brand_rail, apply_cta_brand_rail
 
 logger = logging.getLogger(__name__)
 
@@ -60,15 +61,14 @@ _client_singleton: Optional[OpenAI] = None
 
 # Inline fallback used only when skills/design-skill.md is missing on disk.
 _FALLBACK_STYLE = """
-Design system: 1080x1350 (4:5) social slide. Black (#0A0A0A) background,
-white (#FFFFFF) text, orange gradient accent (#F7941D to #FBB040) for exactly
-ONE emphasized element per slide. Condensed extra-bold uppercase headlines;
-clean regular-weight body lines; generous margins (at least 90 px safe area on
-all sides). Faint white perspective-grid floor motif at the bottom edge.
-Body slides: small orange slide-number tag at the top, headline of at most six
-words in uppercase condensed white with one orange word or phrase, body lines
-left-aligned one thought per line, small orange arrow swipe cue bottom-right.
-CTA slide: same family, big centered call-to-action, no swipe arrow.
+Design system: 1080x1350 (4:5) editorial social slide. Alternate ink (#161811)
+and paper (#F7F7F5) backgrounds. Use warm white (#E8E4D6) or ink (#1A1A18)
+text and lime (#C8ED79 to #B8EF43) for exactly ONE emphasized element.
+Bricolage-style bold grotesk headlines, clean Instrument-style body text,
+generous safe margins, one dominant explanatory visual, and a compact bottom
+brand rail. Choose an editorial explainer, data proof, process line, comparison,
+dark technical proof, or statement-pause layout based on the content. Never use
+a repeated card grid. CTA slide: same family, one clear action, no swipe arrow.
 """.strip()
 
 _VERBATIM_RULE = (
@@ -222,6 +222,7 @@ def generate_slide_image(
     headline: str,
     slide_no: int,
     out_path: str,
+    layout_hint: str = "editorial explainer",
 ) -> str:
     """Render one body slide (1080x1350 PNG) with gpt-image-2.
 
@@ -235,23 +236,32 @@ def generate_slide_image(
         headline: The slide headline (rendered verbatim, uppercase condensed
             per the design system).
         slide_no: 1-based slide number in the carousel (slide 1 is the cover),
-            shown as the small orange number tag, e.g. "02".
+            shown as a small quiet number tag, e.g. "02".
         out_path: Destination PNG path; parent directories are created.
+        layout_hint: Content-aware archetype chosen by the template agent.
 
     Returns:
         The absolute/normalized path of the written PNG as a string.
     """
     tag = f"{slide_no:02d}"
-    text_spec = "\n".join(
-        [
-            _VERBATIM_RULE,
-            "",
-            f'Slide number tag (small, orange, top of slide): "{tag}"',
-            _quoted_block("Headline (uppercase condensed, white with ONE orange word or phrase)", [headline]),
-            _quoted_block("Body lines (left-aligned, in this exact order, one per line)", copy_lines),
-            "Include the small orange swipe-cue arrow at the bottom-right.",
-        ]
-    )
+    allowed = [
+        _VERBATIM_RULE,
+        "",
+        f'Use the "{layout_hint}" layout archetype from the design system.',
+        f'Slide number tag (small, quiet, top of slide): "{tag}"',
+        _quoted_block("Headline (bold, with ONE lime word or phrase)", [headline]),
+        _quoted_block(
+            "Body lines (left-aligned, in this exact order, one per line)",
+            copy_lines,
+        ),
+        (
+            "Keep all editorial text and visuals inside x=88..992 and "
+            "y=76..1110. Leave y=1136..1350 completely blank for the "
+            "deterministic brand rail; do not draw a logo, handle, divider, "
+            "arrow, footer text, or footer decoration."
+        ),
+    ]
+    text_spec = "\n".join(allowed)
     template = _template_file(template_ref)
     if template is not None:
         prompt = (
@@ -267,6 +277,9 @@ def generate_slide_image(
         )
     png = _call_images_api(prompt, template)
     result = _finalize(png, out_path)
+    with Image.open(result) as rendered:
+        branded = apply_body_brand_rail(rendered, settings.ig_handle)
+    branded.save(result, format="PNG")
     logger.info("Rendered body slide %s -> %s", tag, result)
     return result
 
@@ -288,8 +301,9 @@ def generate_cta_image(
             "FOLLOW FOR MORE").
         lines: Supporting lines (question, emphasis line, etc.), rendered
             verbatim in order.
-        link_text: The handle or short link line (e.g. "@closefuture" or
-            "closefuture.substack.com"); empty string to omit.
+        link_text: A redirect destination or configured handle. The handle is
+            composited deterministically in the final brand rail; a distinct
+            redirect URL remains part of the generated CTA content.
         template_ref: Path to the CTA template reference image; falls back to
             the style prompt when empty/missing.
         out_path: Destination PNG path; parent directories are created.
@@ -298,7 +312,7 @@ def generate_cta_image(
         The absolute/normalized path of the written PNG as a string.
     """
     variant_hints = {
-        "follow": "Follow CTA: the headline and handle are big and centered.",
+        "follow": "Follow CTA: make the value promise and action unmistakable.",
         "comment": "Comment CTA: a question line with a bold 'drop a comment' emphasis.",
         "redirect": "Redirect CTA: point to the full breakdown, with a short link line.",
     }
@@ -311,9 +325,18 @@ def generate_cta_image(
         _quoted_block("CTA headline (big, centered)", [headline]),
         _quoted_block("Supporting lines (in this exact order)", all_lines),
     ]
-    if link_text and link_text.strip():
-        text_parts.append(f'Handle / link line (prominent, orange accent): "{link_text.strip()}"')
-    text_parts.append("This is the final slide: do NOT include a swipe-cue arrow.")
+    normalized_handle = settings.ig_handle.strip().lstrip("@").lower()
+    normalized_link = link_text.strip().lstrip("@").lower()
+    if link_text and normalized_link != normalized_handle:
+        text_parts.append(
+            f'Destination link (inside the CTA content area): "{link_text.strip()}"'
+        )
+    text_parts.append(
+        "Keep all CTA text and visuals inside x=88..992 and y=76..1110. "
+        "Leave y=1136..1350 completely blank for a deterministic portrait "
+        "and handle rail. Do not draw a handle, avatar, logo, divider, footer, "
+        "or swipe arrow."
+    )
     text_spec = "\n".join(text_parts)
 
     template = _template_file(template_ref)
@@ -332,5 +355,12 @@ def generate_cta_image(
         )
     png = _call_images_api(prompt, template)
     result = _finalize(png, out_path)
+    with Image.open(result) as rendered:
+        branded = apply_cta_brand_rail(
+            rendered,
+            settings.ig_handle,
+            settings.cta_profile_image,
+        )
+    branded.save(result, format="PNG")
     logger.info("Rendered CTA slide (%s) -> %s", cta_type, result)
     return result

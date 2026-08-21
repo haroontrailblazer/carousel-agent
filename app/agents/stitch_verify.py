@@ -11,7 +11,8 @@ for budgets) and:
    4-15 s), per-slide line budget from the
    plan, existence of every referenced artifact, and the copy-vs-rendered
    check on every body-slide PNG (the contract's size-heuristic variant:
-   real PNG, exact target slide size, byte-size sanity floor).
+   real PNG, exact target slide size, byte-size sanity floor), plus exact
+   brand-rail and footer safe-area validation on every body and CTA slide.
 3. Writes ``K_BUNDLE`` + ``K_QA_REPORT``. On CRITICAL failures it also writes
    a :class:`app.schemas.ReworkPlan` to ``K_REWORK_PLAN`` (and the distilled
    correction text to ``K_REWORK_FEEDBACK``) targeting the responsible agents,
@@ -32,7 +33,7 @@ from __future__ import annotations
 
 import logging
 import struct
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
@@ -71,6 +72,7 @@ from app.state import (
     REWORKABLE_AGENTS,
     set_model,
 )
+from app.tools.brand_layout import validate_footer_padding
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +112,9 @@ a review mail.
    - runs every QA check (slide count within the Instagram cap, cover video
      duration within the configured window, per-slide line budget from the
      plan, that every
-     referenced artifact actually exists, and a copy-vs-rendered size check
-     that every body-slide PNG is a real, full-size render actually able to
+     referenced artifact actually exists, a copy-vs-rendered size check, and
+     deterministic footer safe-area validation on every body/CTA slide so
+     every body-slide PNG is a real, full-size render actually able to
      carry its approved text);
    - stores the QAReport, and on CRITICAL failures also stores a ReworkPlan
      targeting the agents responsible, so the orchestrator re-runs only them.
@@ -343,6 +346,54 @@ async def _verify_rendered_png(
             ),
         )
     return None
+
+
+async def _verify_brand_padding(
+    tool_context: ToolContext,
+    *,
+    artifact: str,
+    slide_index: int,
+    kind: Literal["body", "cta"],
+) -> Optional[QAIssue]:
+    """Validate deterministic footer furniture and its safe-area padding."""
+    try:
+        part = await tool_context.load_artifact(artifact)
+    except Exception as exc:
+        return QAIssue(
+            severity="minor",
+            slide_index=slide_index,
+            message=(
+                f"Brand-rail padding check skipped for slide {slide_index}: "
+                f"artifact '{artifact}' could not be loaded ({exc})."
+            ),
+        )
+    data = (
+        part.inline_data.data
+        if part is not None and part.inline_data is not None
+        else None
+    )
+    if not data:
+        return QAIssue(
+            severity="minor",
+            slide_index=slide_index,
+            message=(
+                f"Brand-rail padding check skipped for slide {slide_index}: "
+                f"artifact '{artifact}' returned no inline bytes."
+            ),
+        )
+    errors = validate_footer_padding(data, kind)
+    if not errors:
+        return None
+    owner = AGENT_CTA if kind == "cta" else AGENT_TEMPLATE_DESIGN
+    return QAIssue(
+        severity="critical",
+        slide_index=slide_index,
+        message=(
+            f"Slide {slide_index} brand rail/padding failed: "
+            + "; ".join(errors)
+            + f" — {owner} must re-render it."
+        ),
+    )
 
 
 async def assemble_and_verify(tool_context: ToolContext) -> dict:
@@ -605,6 +656,25 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
             render_issue = await _verify_rendered_png(tool_context, slide)
             if render_issue is not None:
                 issues.append(render_issue)
+                continue
+            padding_issue = await _verify_brand_padding(
+                tool_context,
+                artifact=slide.artifact,
+                slide_index=slide.index,
+                kind="body",
+            )
+            if padding_issue is not None:
+                issues.append(padding_issue)
+
+        if cta is not None and cta.artifact and cta.artifact in existing:
+            padding_issue = await _verify_brand_padding(
+                tool_context,
+                artifact=cta.artifact,
+                slide_index=1 + len(body_slides) + 1,
+                kind="cta",
+            )
+            if padding_issue is not None:
+                issues.append(padding_issue)
 
     # ------------------------------------------------------- report + route
     critical = [i for i in issues if i.severity == "critical"]
@@ -706,7 +776,8 @@ def build_stitch_verify_agent() -> LlmAgent:
             "Stitch & Verify: assembles the final carousel Bundle (cover video "
             "first) and runs deterministic QA — slide count, cover duration, "
             "line budgets, artifact existence, copy-vs-rendered slide size "
-            "checks. Critical failures auto-route a ReworkPlan back to the "
+            "checks, and deterministic footer safe-area validation. Critical "
+            "failures auto-route a ReworkPlan back to the "
             "responsible agents instead of mailing."
         ),
         instruction=_instruction_provider,

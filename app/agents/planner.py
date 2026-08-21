@@ -112,7 +112,7 @@ suggested_angle as a hook candidate:
    - Reference example: "STOP PROMPTING YOUR AI, GIVE IT A LOOP".
 
 5. hook_highlight — the ONE phrase inside hook_title that renders in the
-   orange gradient. It MUST be a verbatim, character-for-character substring
+   lime gradient. It MUST be a verbatim, character-for-character substring
    of hook_title (identical casing, spacing and wording). Choose the 2-5 word
    payoff phrase — the part the eye should land on (e.g. "GIVE IT A LOOP").
 

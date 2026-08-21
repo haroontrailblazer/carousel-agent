@@ -15,8 +15,9 @@ a review mail.
    - runs every QA check (slide count within the Instagram cap, cover video
      duration within the configured window, per-slide line budget from the
      plan, that every
-     referenced artifact actually exists, and a copy-vs-rendered size check
-     that every body-slide PNG is a real, full-size render actually able to
+     referenced artifact actually exists, a copy-vs-rendered size check,
+     and deterministic footer safe-area validation on every body/CTA slide so
+     every body-slide PNG is a real, full-size render actually able to
      carry its approved text);
    - stores the QAReport, and on CRITICAL failures also stores a ReworkPlan
      targeting the agents responsible, so the orchestrator re-runs only them.

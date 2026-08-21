@@ -4,7 +4,7 @@ The cover is a 4-8 second 1080x1350 video composed from media SOURCED from the
 news update itself (never AI-generated): the announcement/event clip, or — as a
 fallback — the update's best image turned into a 6 s slow-zoom video.  The
 STRANGE-COVER overlay template plus the plan's hook title (white, with the
-orange-gradient highlight phrase) are composited on top by
+lime-gradient highlight phrase) are composited on top by
 ``app.tools.media_tools.compose_cover``.
 
 The agent's tools write the final :class:`~app.schemas.CoverSpec` into session
@@ -315,7 +315,7 @@ async def build_cover(
     """Compose the final cover, save its artifacts, and write CoverSpec state.
 
     Scales/center-crops the media to 1080x1350, composites the STRANGE-COVER
-    overlay template plus the hook title (white uppercase, orange-gradient
+    overlay template plus the hook title (warm-white uppercase, lime-gradient
     highlight phrase), renders the mp4 + first-frame poster PNG, saves both to
     the artifact service, and stores the CoverSpec in session state. Call this
     exactly once at the end (again after rework to replace the cover).
@@ -452,7 +452,7 @@ other slide, never write body copy or captions, and never AI-generate media.
    turned into a 6 s slow-zoom cover video. Only when NOTHING sourced exists
    anywhere: a plain drawn dark background (create_placeholder_background).
 2. Cover ONLY. Do not create, modify, or discuss body slides or the CTA slide.
-3. The title comes from the plan's hook_title and the orange phrase from
+3. The title comes from the plan's hook_title and the lime phrase from
    hook_highlight. Only override them when rework feedback explicitly asks for
    a different title. The highlight must stay a VERBATIM substring of the
    title; keep the title to ~9 words or fewer.
