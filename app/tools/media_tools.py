@@ -3,9 +3,13 @@
 Three jobs (see docs/CONTRACTS.md file map):
 
 1. ``find_source_clip(news)``   — pick the best sourced video (preferred) or
-   image URL from a news item's ``media_urls`` plus its source page.
+   image URL from a news item's ``media_urls``, its source page, every page
+   linked in its body text, and — when nothing sourced plays — a bounded web
+   search for an event clip. ``placeholder_background`` guarantees a cover can
+   ALWAYS be built even with zero media found.
 2. ``download_and_trim(url)``   — fetch the clip via the yt-dlp Python API and
-   trim it to a 4-8 second, silent H.264 mp4.
+   trim it into the configured cover window (settings.cover_clip_min_s..max_s,
+   default 4-15 s), silent H.264 mp4.
 3. ``compose_cover(...)``       — scale/center-crop the media to 1080x1350,
    composite the STRANGE-COVER overlay template plus a Pillow-rendered title
    block (white, condensed extra-bold uppercase, orange-gradient highlight
@@ -310,23 +314,72 @@ def _scrape_page_media(page_url: str) -> list[tuple[str, str, int]]:
     return found
 
 
-def find_source_clip(news: dict) -> dict:
+_URL_IN_TEXT_RE = re.compile(r"https?://[^\s<>\"')\]]+", re.I)
+_BODY_URL_SCRAPE_LIMIT = 4  # pages linked in the body text scraped per call
+
+
+def _search_video_online(query: str) -> Optional[dict[str, Any]]:
+    """Web-search (YouTube via yt-dlp ``ytsearch``) for a playable event clip.
+
+    Args:
+        query: Free-text search, e.g. "Niu Lai movie official trailer".
+
+    Returns:
+        ``{"url", "duration", "title"}`` for the first playable result, or
+        ``None`` when the search fails or returns nothing.
+    """
+    query = re.sub(r"\s+", " ", (query or "")).strip()
+    if not query:
+        return None
+    opts: dict[str, Any] = {
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "socket_timeout": 20,
+        "retries": 1,
+        "skip_download": True,
+        "http_headers": dict(_HTTP_HEADERS),
+    }
+    try:
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"ytsearch3:{query}", download=False)
+    except Exception:  # noqa: BLE001 - extractor errors vary widely
+        return None
+    for entry in (info or {}).get("entries") or []:
+        if not entry:
+            continue
+        url = str(entry.get("webpage_url") or entry.get("url") or "").strip()
+        if url:
+            return {
+                "url": url,
+                "duration": float(entry.get("duration") or 0.0),
+                "title": str(entry.get("title") or ""),
+            }
+    return None
+
+
+def find_source_clip(news: dict, search_query: str = "") -> dict:
     """Pick the best sourced video (preferred) or image URL for the cover.
 
     Candidates come from the news item's ``media_urls`` list, the
-    ``source_url`` itself (it may be a YouTube/Vimeo watch page), and media
-    scraped off the source page (og:video / og:image / <video> / iframes).
-    Promising video candidates are probed with the yt-dlp Python API to
-    confirm they are playable and to learn their duration.
+    ``source_url`` itself (it may be a YouTube/Vimeo watch page), media
+    scraped off the source page (og:video / og:image / <video> / iframes),
+    AND every page linked inside the item's body/summary text (each scraped
+    the same way — newsletter blurbs usually carry the links inline). When no
+    sourced video is playable, a bounded web search (``ytsearch``) hunts for
+    an event/announcement clip before falling back to the best image.
 
     Args:
         news: A ``NewsItem``-shaped dict (keys: ``media_urls``, ``source_url``,
-            ``title``, ...).
+            ``title``, ``body``, ...).
+        search_query: Optional web-search override for the video hunt; empty
+            uses the news title.
 
     Returns:
         Dict with keys: ``found`` (bool), ``url`` (str), ``is_video`` (bool),
         ``duration_s`` (float, 0.0 when unknown), ``origin``
-        ('media_urls' | 'source_url' | 'source_page' | ''), and ``note`` (str).
+        ('media_urls' | 'source_url' | 'source_page' | 'body_url' |
+        'body_page' | 'web_search' | ''), and ``note`` (str).
     """
     candidates: list[tuple[str, str, int, str]] = []  # (url, kind, score, origin)
     seen: set[str] = set()
@@ -352,7 +405,50 @@ def find_source_clip(news: dict) -> dict:
         for url, kind, score in _scrape_page_media(source_url):
             add(url, kind, score, "source_page")
 
+    # Pages linked inside the body/summary text (ad-hoc runs put the links
+    # there): direct media URLs become candidates, other pages are scraped
+    # for og:image / og:video just like the source page.
+    body_text = " ".join(
+        str(news.get(k) or "") for k in ("title", "summary", "body")
+    )
+    scraped_pages = 0
+    for raw in _URL_IN_TEXT_RE.findall(body_text):
+        url = raw.rstrip(".,;:!?")
+        if url.split("#", 1)[0] in seen or url == source_url:
+            continue
+        kind = _classify_url(url)
+        if kind == "video":
+            add(url, "video", 92, "body_url")
+        elif kind == "image":
+            add(url, "image", 48, "body_url")
+        elif scraped_pages < _BODY_URL_SCRAPE_LIMIT:
+            scraped_pages += 1
+            for media_url, media_kind, score in _scrape_page_media(url):
+                add(media_url, media_kind, max(score - 2, 1), "body_page")
+
     candidates.sort(key=lambda c: c[2], reverse=True)
+
+    # Best image candidate — reported alongside every result so the caller
+    # can drop to the image path the moment video downloads fail, without
+    # re-searching.
+    image_url, image_origin = "", ""
+    for url, kind, _score, origin in candidates:
+        if kind == "image":
+            image_url, image_origin = url, origin
+            break
+
+    def result(found: bool, url: str, is_video: bool, duration: float,
+               origin: str, note: str) -> dict:
+        return {
+            "found": found,
+            "url": url,
+            "is_video": is_video,
+            "duration_s": duration,
+            "origin": origin,
+            "image_url": image_url,
+            "image_origin": image_origin,
+            "note": note,
+        }
 
     # Confirm video candidates (bounded number of network probes).
     probes = 0
@@ -364,45 +460,40 @@ def find_source_clip(news: dict) -> dict:
         probes += 1
         info = _probe_with_ytdlp(url)
         if info is not None:
-            return {
-                "found": True,
-                "url": url,
-                "is_video": True,
-                "duration_s": round(info["duration"], 2),
-                "origin": origin,
-                "note": info["title"] or "probed with yt-dlp",
-            }
+            return result(
+                True, url, True, round(info["duration"], 2), origin,
+                info["title"] or "probed with yt-dlp",
+            )
         if _url_ext(url) in VIDEO_EXTS:
             # Direct video file that yt-dlp could not probe (e.g. signed CDN
             # URL) — trust the extension and let download_and_trim try.
-            return {
-                "found": True,
-                "url": url,
-                "is_video": True,
-                "duration_s": 0.0,
-                "origin": origin,
-                "note": "direct video file (probe skipped/failed)",
-            }
+            return result(
+                True, url, True, 0.0, origin,
+                "direct video file (probe skipped/failed)",
+            )
 
-    for url, kind, _score, origin in candidates:
-        if kind == "image":
-            return {
-                "found": True,
-                "url": url,
-                "is_video": False,
-                "duration_s": 0.0,
-                "origin": origin,
-                "note": "no playable video found; image fallback",
-            }
+    # No sourced video played — hunt the web for an event/announcement clip
+    # (the original spec: "a small video piece on that event from web").
+    query = search_query.strip() or str(news.get("title") or "").strip()
+    searched = _search_video_online(query)
+    if searched is not None:
+        return result(
+            True, searched["url"], True, round(searched["duration"], 2),
+            "web_search", f"web search hit: {searched['title'] or query}",
+        )
 
-    return {
-        "found": False,
-        "url": "",
-        "is_video": False,
-        "duration_s": 0.0,
-        "origin": "",
-        "note": "no video or image candidates found",
-    }
+    if image_url:
+        return result(
+            True, image_url, False, 0.0, image_origin,
+            "no playable video found; image fallback",
+        )
+
+    return result(
+        False, "", False, 0.0, "",
+        "no video or image candidates found (media_urls, source page, "
+        "body links and web search all came up empty) — use "
+        "placeholder_background for a text-only cover",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +501,10 @@ def find_source_clip(news: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def download_and_trim(url: str, max_s: int = 8, min_s: int = 4, workdir: str = "") -> str:
-    """Download a video via the yt-dlp Python API and trim it to 4-8 seconds.
+def download_and_trim(
+    url: str, max_s: Optional[int] = None, min_s: Optional[int] = None, workdir: str = ""
+) -> str:
+    """Download a video via the yt-dlp Python API and trim it to the cover window.
 
     Long videos are section-downloaded (first ~4x``max_s`` seconds) to avoid
     pulling whole streams. The trim re-encodes to silent H.264 mp4 with
@@ -419,8 +512,10 @@ def download_and_trim(url: str, max_s: int = 8, min_s: int = 4, workdir: str = "
 
     Args:
         url: Video URL (direct file or any yt-dlp-supported page).
-        max_s: Maximum clip length in seconds (default 8).
-        min_s: Minimum clip length in seconds (default 4).
+        max_s: Maximum clip length in seconds (default:
+            ``settings.cover_clip_max_s``).
+        min_s: Minimum clip length in seconds (default:
+            ``settings.cover_clip_min_s``).
         workdir: Run-specific working folder (see ``_ensure_workdir``).
 
     Returns:
@@ -429,6 +524,8 @@ def download_and_trim(url: str, max_s: int = 8, min_s: int = 4, workdir: str = "
     Raises:
         RuntimeError: When the download or the ffmpeg trim fails.
     """
+    max_s = int(max_s if max_s else settings.cover_clip_max_s)
+    min_s = int(min_s if min_s else settings.cover_clip_min_s)
     wd = _ensure_workdir(workdir, "clips")
     stem = uuid.uuid4().hex[:12]
 
@@ -527,6 +624,33 @@ def download_and_trim(url: str, max_s: int = 8, min_s: int = 4, workdir: str = "
         str(out_path),
     ]
     _run_ffmpeg(cmd)
+    return str(out_path)
+
+
+def placeholder_background(workdir: str = "") -> str:
+    """Build the deterministic dark 1080x1350 fallback background still.
+
+    Used when NO sourced media exists at all: a subtle top-to-bottom dark
+    gradient the STRANGE-COVER overlay + title composite onto, so a cover is
+    ALWAYS produced. Pure Pillow — this is a drawn background, not AI-generated
+    imagery, so it does not violate the sourced-cover rule.
+
+    Args:
+        workdir: Run-specific folder (empty falls back to workdir/adhoc).
+
+    Returns:
+        Path of the written PNG as a string.
+    """
+    out_dir = _ensure_workdir(workdir, "cover")
+    out_path = out_dir / "placeholder-bg.png"
+    width, height = 1080, 1350
+    top, bottom = 30, 6  # near-black gradient, slightly lighter at the top
+    img = Image.new("RGB", (width, height))
+    draw = ImageDraw.Draw(img)
+    for y in range(height):
+        shade = int(top + (bottom - top) * (y / max(height - 1, 1)))
+        draw.line([(0, y), (width, y)], fill=(shade, shade, shade))
+    img.save(out_path, format="PNG")
     return str(out_path)
 
 
@@ -877,8 +1001,9 @@ def compose_cover(
     ]
 
     if is_video:
+        cap = float(settings.cover_clip_max_s)
         in_duration = _media_duration(media)
-        clip_t = f"{min(in_duration, 8.0):.3f}" if in_duration > 0 else "8"
+        clip_t = f"{min(in_duration, cap):.3f}" if in_duration > 0 else f"{cap:g}"
         filter_complex = (
             f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
             f"crop={width}:{height},setsar=1,fps={_COVER_FPS}[base];"

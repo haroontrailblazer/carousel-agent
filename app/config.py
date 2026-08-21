@@ -82,6 +82,9 @@ class Settings:
 
     # --- media / design assets ---
     ffmpeg_bin: str = os.getenv("FFMPEG_BIN", "ffmpeg")
+    # Cover clip duration window in seconds (sourced video trimmed into it).
+    cover_clip_min_s: float = float(os.getenv("COVER_CLIP_MIN_S", "4"))
+    cover_clip_max_s: float = float(os.getenv("COVER_CLIP_MAX_S", "15"))
     skills_dir: Path = PROJECT_ROOT / "skills"
     workdir: Path = Path(os.getenv("WORKDIR", str(PROJECT_ROOT / ".work")))
     cover_overlay_template: Path = Path(

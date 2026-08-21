@@ -47,8 +47,8 @@ COVER_VIDEO_ARTIFACT = "cover.mp4"
 COVER_POSTER_ARTIFACT = "cover-poster.png"
 
 _RETRIM_FFMPEG_TIMEOUT_S = 300
-_MIN_COVER_S = 4.0
-_MAX_COVER_S = 8.0
+_MIN_COVER_S = float(settings.cover_clip_min_s)
+_MAX_COVER_S = float(settings.cover_clip_max_s)
 
 
 # ---------------------------------------------------------------------------
@@ -84,18 +84,32 @@ def _news_dict(tool_context: ToolContext) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 
-async def find_source_clip(*, tool_context: ToolContext) -> dict:
+async def find_source_clip(
+    search_query: str = "", *, tool_context: ToolContext
+) -> dict:
     """Find the best SOURCED video (preferred) or image URL for the cover.
 
     Reads the news item from session state and scans its media_urls, its
-    source_url (it may itself be a YouTube/Vimeo watch page) and media scraped
-    off the source page. Video candidates are probed to confirm they play.
+    source_url (it may itself be a YouTube/Vimeo watch page), media scraped
+    off the source page AND off every page linked inside the item's body
+    text (og:image / og:video / <video> / iframes). When no sourced video
+    plays, it web-searches for an event/announcement clip before falling back
+    to the best image. Video candidates are probed to confirm they play.
+
+    Args:
+        search_query: Optional web-search phrase for the clip hunt (e.g.
+            "<product> launch keynote official"); empty uses the news title.
+            Pass a sharper query when re-calling after a miss or on rework.
 
     Returns:
         Dict with keys: found (bool), url (str), is_video (bool),
         duration_s (float, 0.0 when unknown), origin
-        ('media_urls' | 'source_url' | 'source_page' | ''), note (str).
-        When no news item is queued, found is false and note explains why.
+        ('media_urls' | 'source_url' | 'source_page' | 'body_url' |
+        'body_page' | 'web_search' | ''), image_url + image_origin (the best
+        STILL-image candidate, always reported — download_image it when video
+        downloads fail, BEFORE considering the placeholder), note (str).
+        When nothing at all is found, found is false — build the cover from
+        create_placeholder_background instead of giving up.
     """
     news = _news_dict(tool_context)
     if news is None:
@@ -107,13 +121,15 @@ async def find_source_clip(*, tool_context: ToolContext) -> dict:
             "origin": "",
             "note": "no news item in session state (K_NEWS_ITEM missing)",
         }
-    return await asyncio.to_thread(media_tools.find_source_clip, news)
+    return await asyncio.to_thread(
+        media_tools.find_source_clip, news, search_query
+    )
 
 
 async def download_and_trim(
-    url: str, max_s: int = 8, min_s: int = 4, *, tool_context: ToolContext
+    url: str, max_s: int = 0, min_s: int = 0, *, tool_context: ToolContext
 ) -> dict:
-    """Download a video URL and trim it to a silent 4-8 second H.264 mp4.
+    """Download a video URL and trim it to a short silent H.264 cover clip.
 
     Works with direct video files and any yt-dlp-supported page (YouTube,
     Vimeo, X, ...). Long videos are section-downloaded, so this is safe on
@@ -122,9 +138,10 @@ async def download_and_trim(
     Args:
         url: The video URL picked from find_source_clip (or the news item's
             media_urls directly).
-        max_s: Maximum clip length in seconds (default 8, the Instagram-cover
-            budget's upper bound).
-        min_s: Minimum clip length in seconds (default 4).
+        max_s: Maximum clip length in seconds; 0 (the default) uses the
+            configured cover window maximum.
+        min_s: Minimum clip length in seconds; 0 (the default) uses the
+            configured cover window minimum.
 
     Returns:
         On success: ok (true), clip_path (local trimmed mp4),
@@ -135,7 +152,11 @@ async def download_and_trim(
     workdir = _run_workdir(tool_context)
     try:
         clip_path = await asyncio.to_thread(
-            media_tools.download_and_trim, url, max_s, min_s, workdir
+            media_tools.download_and_trim,
+            url,
+            max_s or None,
+            min_s or None,
+            workdir,
         )
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "clip_path": "", "source_path": "", "error": str(exc)}
@@ -179,6 +200,26 @@ async def download_image(url: str, *, tool_context: ToolContext) -> dict:
     return {"ok": True, "path": str(path), "error": ""}
 
 
+async def create_placeholder_background(*, tool_context: ToolContext) -> dict:
+    """Build the deterministic dark fallback background (LAST resort only).
+
+    Use when find_source_clip found nothing at all and every download failed:
+    a drawn (non-AI) dark gradient still the cover template + title composite
+    onto, so the cover is ALWAYS created. Feed the returned path to
+    build_cover with is_video=false and note the fallback in your summary.
+
+    Returns:
+        On success: ok (true) and path (local PNG).
+        On failure: ok (false) and error (str).
+    """
+    workdir = _run_workdir(tool_context)
+    try:
+        path = await asyncio.to_thread(media_tools.placeholder_background, workdir)
+    except (RuntimeError, OSError) as exc:
+        return {"ok": False, "path": "", "error": str(exc)}
+    return {"ok": True, "path": str(path), "error": ""}
+
+
 async def retrim_clip(
     media_path: str,
     start_s: float,
@@ -186,7 +227,7 @@ async def retrim_clip(
     *,
     tool_context: ToolContext,
 ) -> dict:
-    """Cut a DIFFERENT 4-8 second moment out of an already-downloaded video.
+    """Cut a DIFFERENT short moment out of an already-downloaded video.
 
     Use during rework when the reviewer wants another part of the clip: pass
     the source_path returned by download_and_trim (preferred — it holds the
@@ -197,7 +238,8 @@ async def retrim_clip(
         media_path: Local path of the downloaded source video.
         start_s: Where the new clip should start, in seconds from the file's
             beginning (clamped into the valid range).
-        length_s: Wanted clip length in seconds (clamped to 4-8).
+        length_s: Wanted clip length in seconds (clamped into the configured
+            cover window).
 
     Returns:
         On success: ok (true), clip_path (new trimmed mp4), start_s and
@@ -335,7 +377,10 @@ async def build_cover(
     poster_path = Path(result["poster_path"])
     duration_s = float(result.get("duration_s") or 0.0)
     if duration_s and not (_MIN_COVER_S - 0.5 <= duration_s <= _MAX_COVER_S + 0.5):
-        warnings.append(f"cover duration {duration_s:.2f}s is outside the 4-8 s budget")
+        warnings.append(
+            f"cover duration {duration_s:.2f}s is outside the "
+            f"{_MIN_COVER_S:g}-{_MAX_COVER_S:g} s budget"
+        )
 
     try:
         video_bytes = await asyncio.to_thread(video_path.read_bytes)
@@ -386,7 +431,7 @@ async def build_cover(
 DEFAULT_INSTRUCTION = """\
 # First-Page Visual Agent
 
-You build the COVER (slide 1) of an Instagram carousel: a 4-8 second,
+You build the COVER (slide 1) of an Instagram carousel: a short (4-15 second),
 1080x1350 (4:5) video SOURCED from the news update itself. You never touch any
 other slide, never write body copy or captions, and never AI-generate media.
 
@@ -402,9 +447,10 @@ other slide, never write body copy or captions, and never AI-generate media.
 ## Hard rules
 
 1. The cover is NEVER AI-generated. It is sourced from the update: the
-   announcement/event clip (trimmed to 4-8 s), or — fallback — the update's
-   own image (paper screenshot, product UI, blog hero) turned into a 6 s
-   slow-zoom cover video.
+   announcement/event clip (trimmed into the cover window), or — fallback —
+   the update's own image (poster, paper screenshot, product UI, blog hero)
+   turned into a 6 s slow-zoom cover video. Only when NOTHING sourced exists
+   anywhere: a plain drawn dark background (create_placeholder_background).
 2. Cover ONLY. Do not create, modify, or discuss body slides or the CTA slide.
 3. The title comes from the plan's hook_title and the orange phrase from
    hook_highlight. Only override them when rework feedback explicitly asks for
@@ -413,28 +459,41 @@ other slide, never write body copy or captions, and never AI-generate media.
 4. You MUST finish by calling build_cover successfully — that is what saves
    the cover artifacts and records the CoverSpec for the rest of the pipeline.
 
-## Workflow
+## Workflow — the sourcing ladder (NEVER stop before rung 5)
 
 1. Call find_source_clip to pick the best sourced media (video preferred).
+   It scans the news media_urls, the source page, every page LINKED in the
+   news body text (og:image/og:video scraping), and web-searches for an
+   event/announcement clip when nothing sourced plays. You may pass
+   search_query to sharpen the video hunt (e.g. "<product> launch keynote").
 2. If it returned a video: call download_and_trim with that URL to get a
-   local 4-8 s clip. If the download fails, try the next plausible video URL
-   from the news item's media_urls; if every video fails, use the image path.
-3. If only an image was found (or all videos failed): call download_image with
-   the best image URL.
-4. Call build_cover with the local media path, is_video set accordingly, and
-   source_media_url set to the original URL for provenance. Leave title and
-   highlight empty so the plan's hook is used.
-5. Finish with a one-paragraph summary: which media you used (URL and origin),
-   sourced clip vs image fallback, final duration, and the artifact filenames.
+   local short clip. If the download fails (403s are common on video hosts),
+   try at most ONE more video: another plausible URL from media_urls or one
+   re-call of find_source_clip with a sharper search_query.
+3. When video downloads keep failing — or only an image was found — use the
+   image: the find_source_clip result ALWAYS carries image_url (e.g. the
+   article's og:image / poster). Call download_image with it. A real sourced
+   image beats a placeholder every time.
+4. Only if there is NO image_url anywhere and downloads all failed: call
+   create_placeholder_background and use its path as the image.
+5. ALWAYS call build_cover with the local media path, is_video set
+   accordingly, and source_media_url set to the original URL for provenance
+   (empty for the placeholder). Leave title and highlight empty so the plan's
+   hook is used. The cover MUST be created on every run — a text-only cover
+   on the placeholder background is the worst acceptable outcome, no cover at
+   all is never acceptable.
+6. Finish with a one-paragraph summary: which media you used (URL and origin
+   — media_urls / source_page / body_page / web_search / placeholder),
+   sourced clip vs image vs placeholder, final duration, and the artifact
+   filenames. If you used the placeholder, say so explicitly so the reviewer
+   knows no sourced media existed.
 
 ## Failure handling
 
 - Tools report failures as ok=false with an error message instead of crashing.
   Read the error, then try the next-best candidate (another video URL, then
-  the best image).
-- If there is truly no usable media at all, do NOT call build_cover with fake
-  media. Say clearly that no sourced media could be found and why, so the
-  human review can handle it.
+  the best image, then the placeholder background).
+- NEVER finish without a successful build_cover call.
 
 ## Rework
 
@@ -475,15 +534,18 @@ def build_first_page_visual_agent() -> LlmAgent:
         name=AGENT_FIRST_PAGE_VISUAL,
         model=resolve_model(settings.utility_model),
         description=(
-            "Builds the carousel's cover (slide 1): a 4-8 s 1080x1350 video "
-            "sourced from the news update (never AI-generated), composited "
-            "with the STRANGE-COVER template and the plan's hook title."
+            "Builds the carousel's cover (slide 1): a short 1080x1350 video "
+            "sourced from the news update (never AI-generated) — announcement "
+            "clip, page-scraped or web-searched media, image fallback, or a "
+            "drawn placeholder as last resort — composited with the "
+            "STRANGE-COVER template and the plan's hook title."
         ),
         instruction=instruction,
         tools=[
             FunctionTool(find_source_clip),
             FunctionTool(download_and_trim),
             FunctionTool(download_image),
+            FunctionTool(create_placeholder_background),
             FunctionTool(retrim_clip),
             FunctionTool(build_cover),
         ],

@@ -13,7 +13,8 @@ a review mail.
    - assembles the Bundle (ordered_artifacts: cover video FIRST, then body
      slides in index order, then the CTA slide) and stores it in state;
    - runs every QA check (slide count within the Instagram cap, cover video
-     duration 4-8 seconds, per-slide line budget from the plan, that every
+     duration within the configured window, per-slide line budget from the
+     plan, that every
      referenced artifact actually exists, and a copy-vs-rendered size check
      that every body-slide PNG is a real, full-size render actually able to
      carry its approved text);

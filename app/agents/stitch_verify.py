@@ -7,7 +7,8 @@ for budgets) and:
 1. Assembles :class:`app.schemas.Bundle` with ``ordered_artifacts`` listing the
    cover VIDEO first, then the body slides in index order, then the CTA slide.
 2. Runs the QA checks pinned in docs/CONTRACTS.md: total slide count within
-   the Instagram cap, cover duration 4-8 s, per-slide line budget from the
+   the Instagram cap, cover duration within the configured window (default
+   4-15 s), per-slide line budget from the
    plan, existence of every referenced artifact, and the copy-vs-rendered
    check on every body-slide PNG (the contract's size-heuristic variant:
    real PNG, exact target slide size, byte-size sanity floor).
@@ -73,11 +74,12 @@ from app.state import (
 
 logger = logging.getLogger(__name__)
 
-# Cover video duration window (seconds) pinned by docs/CONTRACTS.md
-# ("durations 4-8 s"). A small tolerance absorbs ffmpeg trim jitter so a
-# 3.98 s clip does not trigger a pointless rework loop.
-COVER_MIN_DURATION_S = 4.0
-COVER_MAX_DURATION_S = 8.0
+# Cover video duration window (seconds) from configuration
+# (COVER_CLIP_MIN_S / COVER_CLIP_MAX_S, default 4-15). A small tolerance
+# absorbs ffmpeg trim jitter so a 3.98 s clip does not trigger a pointless
+# rework loop.
+COVER_MIN_DURATION_S = float(settings.cover_clip_min_s)
+COVER_MAX_DURATION_S = float(settings.cover_clip_max_s)
 _DURATION_TOLERANCE_S = 0.1
 
 # Copy-vs-rendered check — docs/CONTRACTS.md mandates it "via LLM vision or
@@ -106,7 +108,8 @@ a review mail.
    - assembles the Bundle (ordered_artifacts: cover video FIRST, then body
      slides in index order, then the CTA slide) and stores it in state;
    - runs every QA check (slide count within the Instagram cap, cover video
-     duration 4-8 seconds, per-slide line budget from the plan, that every
+     duration within the configured window, per-slide line budget from the
+     plan, that every
      referenced artifact actually exists, and a copy-vs-rendered size check
      that every body-slide PNG is a real, full-size render actually able to
      carry its approved text);
