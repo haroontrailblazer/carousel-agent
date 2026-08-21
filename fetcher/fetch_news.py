@@ -48,6 +48,7 @@ import requests
 from pydantic import ValidationError
 
 from app.config import settings
+from app.observability import init_observability, shutdown_observability
 from app.schemas import NewsItem
 from app.services import db
 from app.state import K_NEWS_ITEM, K_PHASE, K_RUN_ID, PHASE_DONE, PHASE_REVIEW
@@ -839,7 +840,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    return asyncio.run(_amain(args))
+    init_observability()
+    try:
+        return asyncio.run(_amain(args))
+    finally:
+        shutdown_observability()  # flush buffered Langfuse spans before exit
 
 
 if __name__ == "__main__":

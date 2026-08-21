@@ -38,6 +38,7 @@ from openai import (
 )
 from PIL import Image
 
+from app import observability
 from app.config import load_skill, settings
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,12 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
                     output_format="png",
                     timeout=_REQUEST_TIMEOUT_S,
                 )
+            observability.record_image_usage(
+                model=settings.image_model,
+                endpoint="images.edit" if template is not None else "images.generate",
+                usage=getattr(response, "usage", None),
+                prompt=prompt,
+            )
             if not response.data:
                 raise RuntimeError("OpenAI Images API returned an empty data list.")
             item = response.data[0]

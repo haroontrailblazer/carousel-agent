@@ -217,6 +217,29 @@ URL).
 
 ---
 
+## Token & cost traceability
+
+Two layers, both on by default:
+
+- **Run totals (always on, no setup).** The orchestrator sums every model
+  call's `usage_metadata` (Gemini natively; OpenAI via the LiteLLM wrapper,
+  which maps usage the same way) plus gpt-image-2 token usage from the
+  Images API into session state under `token_usage` —
+  `prompt_tokens / output_tokens / total_tokens / llm_calls` and
+  `image_*` counters. The `[done]` event prints the full line, e.g.
+  `tokens in 41,203 / out 9,882 / total 51,085 over 14 LLM call(s) +
+  31,440 image tokens over 8 image call(s)`, and every image call is also
+  logged individually as `[tokens] gpt-image-2 images.edit: ...`.
+- **Langfuse (per-call traces + cost).** Create a free project at
+  https://cloud.langfuse.com, put `LANGFUSE_PUBLIC_KEY` /
+  `LANGFUSE_SECRET_KEY` in `.env`, restart — nothing else. Every run
+  becomes a trace: one span per agent, one generation per LLM call with
+  input/output/total tokens and cost (computed by Langfuse from the model
+  id), plus a generation per gpt-image-2 call. Instrumentation lives in
+  `app/observability.py` (OpenInference Google-ADK instrumentor) and is
+  initialized by `app/agent.py`, the fetcher CLI, and the review API; with
+  the keys unset it is a logged no-op.
+
 ## The review flow
 
 1. After QA passes, the Review Dispatcher mails the preview (cover poster +

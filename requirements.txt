@@ -19,3 +19,8 @@ uvicorn>=0.29
 httpx>=0.27
 python-dotenv>=1.0
 pydantic>=2.7
+langfuse>=3.0,<4   # token/cost tracing (no-op without LANGFUSE_* keys)
+openinference-instrumentation-google-adk>=0.1   # exports ADK agent/LLM spans to Langfuse
+opentelemetry-api>=1.39,<=1.43    # cap required by google-adk 2.7 (langfuse would pull 1.44+)
+opentelemetry-sdk>=1.39,<=1.43
+opentelemetry-exporter-otlp>=1.39,<=1.43

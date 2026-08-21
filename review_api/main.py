@@ -47,6 +47,7 @@ from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.config import settings
+from app.observability import init_observability, shutdown_observability
 from app.services import db
 
 logger = logging.getLogger(__name__)
@@ -446,7 +447,8 @@ def _spawn_resume(
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
-    """App lifespan: nothing at startup; drain resumes + close DB on shutdown."""
+    """App lifespan: tracing at startup; drain resumes + close DB on shutdown."""
+    init_observability()
     yield
     if _resume_tasks:
         logger.info(
@@ -460,6 +462,7 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
         await db.close_pool()
     except Exception as exc:  # pool may never have been opened
         logger.warning("DB pool close failed: %s", exc)
+    shutdown_observability()
 
 
 app = FastAPI(

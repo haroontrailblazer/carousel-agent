@@ -49,6 +49,7 @@ from google.genai import types
 from pydantic import BaseModel
 from typing_extensions import override
 
+from app import observability
 from app.agents.publisher import K_PUBLISH_RESULT
 from app.config import settings
 from app.schemas import NewsItem, QAReport, ReworkPlan, Verdict
@@ -73,6 +74,7 @@ from app.state import (
     K_REWORK_PLAN,
     K_REWORK_ROUND,
     K_RUN_ID,
+    K_TOKEN_USAGE,
     K_VERDICT,
     PHASE_DONE,
     PHASE_GENERATE,
@@ -185,6 +187,51 @@ def _format_recent_feedback(records: Sequence[Any]) -> str:
     return "\n".join(lines)
 
 
+def _merge_token_usage(state: Any, holder: dict[str, Any]) -> dict[str, Any]:
+    """Fold pending LLM + image token counts into the ``K_TOKEN_USAGE`` total.
+
+    Zeroes the pending counters so every count is committed exactly once.
+    The image counts come from a process-level accumulator
+    (``observability.pop_image_usage``) — with a single pipeline run per
+    process (the local + Cloud Run setup) attribution is exact.
+
+    Returns:
+        A state delta — ``{K_TOKEN_USAGE: totals}`` — or ``{}`` when nothing
+        new was counted since the last merge.
+    """
+    tokens: dict[str, int] = holder.get("tokens") or {}
+    pending = dict(tokens)
+    for key in tokens:
+        tokens[key] = 0
+    for key, value in observability.pop_image_usage().items():
+        pending[key] = pending.get(key, 0) + value
+    if not any(pending.values()):
+        return {}
+    totals = dict(state.get(K_TOKEN_USAGE) or {})
+    for key, value in pending.items():
+        if value:
+            totals[key] = int(totals.get(key) or 0) + int(value)
+    return {K_TOKEN_USAGE: totals}
+
+
+def _format_token_totals(totals: dict[str, Any]) -> str:
+    """Render the run's cumulative token counts as one summary clause."""
+    if not totals:
+        return "no token usage recorded"
+    text = (
+        f"tokens in {int(totals.get('prompt_tokens') or 0):,} / "
+        f"out {int(totals.get('output_tokens') or 0):,} / "
+        f"total {int(totals.get('total_tokens') or 0):,} "
+        f"over {int(totals.get('llm_calls') or 0)} LLM call(s)"
+    )
+    if totals.get("image_calls"):
+        text += (
+            f" + {int(totals.get('image_total_tokens') or 0):,} image tokens "
+            f"over {int(totals.get('image_calls') or 0)} image call(s)"
+        )
+    return text
+
+
 def _user_text(content: Optional[types.Content]) -> str:
     """Extract the plain text of the invocation's user content (or ``""``)."""
     if content is None or not content.parts:
@@ -254,6 +301,7 @@ class CarouselOrchestrator(BaseAgent):
         ctx: InvocationContext,
         text: str,
         state_delta: Optional[dict[str, Any]] = None,
+        holder: Optional[dict[str, Any]] = None,
     ) -> Event:
         """Build a concise orchestrator progress event.
 
@@ -262,16 +310,21 @@ class CarouselOrchestrator(BaseAgent):
             text: Short human-readable progress line (e.g. ``[phase] qa ->
                 review``).
             state_delta: Optional state changes committed with the event.
+            holder: When given, pending token counts are folded into the
+                delta under ``K_TOKEN_USAGE`` (see ``_merge_token_usage``).
 
         Returns:
             The event to yield (the Runner appends it, applying the delta).
         """
+        delta = dict(state_delta or {})
+        if holder is not None:
+            delta.update(_merge_token_usage(ctx.session.state, holder))
         return Event(
             invocation_id=ctx.invocation_id,
             author=self.name,
             branch=ctx.branch,
             content=types.Content(role="model", parts=[types.Part(text=text)]),
-            actions=EventActions(state_delta=dict(state_delta or {})),
+            actions=EventActions(state_delta=delta),
         )
 
     def _transition(
@@ -281,6 +334,7 @@ class CarouselOrchestrator(BaseAgent):
         new: str,
         extra_delta: Optional[dict[str, Any]] = None,
         note: str = "",
+        holder: Optional[dict[str, Any]] = None,
     ) -> Event:
         """Build the phase-transition event (sets ``K_PHASE`` = *new*)."""
         delta: dict[str, Any] = {K_PHASE: new}
@@ -289,7 +343,7 @@ class CarouselOrchestrator(BaseAgent):
         text = f"[phase] {old} -> {new}"
         if note:
             text += f" ({note})"
-        return self._progress(ctx, text, delta)
+        return self._progress(ctx, text, delta, holder=holder)
 
     async def _record_phase_quietly(self, state: Any, phase: str) -> None:
         """Best-effort mirror of the phase into the ``runs`` table."""
@@ -345,6 +399,15 @@ class CarouselOrchestrator(BaseAgent):
         logger.info("[%s] running child agent '%s'", self.name, child.name)
         async with Aclosing(child.run_async(ctx)) as agen:
             async for event in agen:
+                usage = getattr(event, "usage_metadata", None)
+                if usage is not None:
+                    tokens = holder["tokens"]
+                    tokens["prompt_tokens"] += int(usage.prompt_token_count or 0)
+                    tokens["output_tokens"] += int(
+                        usage.candidates_token_count or 0
+                    )
+                    tokens["total_tokens"] += int(usage.total_token_count or 0)
+                    tokens["llm_calls"] += 1
                 if ctx.should_pause_invocation(event):
                     holder["paused"] = True
                 yield event
@@ -412,7 +475,7 @@ class CarouselOrchestrator(BaseAgent):
                 yield event
             if holder["paused"]:
                 return
-        yield self._transition(ctx, PHASE_GENERATE, PHASE_QA)
+        yield self._transition(ctx, PHASE_GENERATE, PHASE_QA, holder=holder)
         await self._record_phase_quietly(state, PHASE_QA)
 
     async def _phase_qa(
@@ -444,6 +507,7 @@ class CarouselOrchestrator(BaseAgent):
                 PHASE_REVIEW,
                 extra_delta={K_VERDICT: None},  # each review round starts clean
                 note=f"QA passed, {issue_count} non-critical note(s)",
+                holder=holder,
             )
             await self._record_phase_quietly(state, PHASE_REVIEW)
             return
@@ -456,6 +520,7 @@ class CarouselOrchestrator(BaseAgent):
             PHASE_REWORK,
             note="QA failed — auto rework, no review mail; targets: "
             + (", ".join(targets) or "(router default)"),
+            holder=holder,
         )
         await self._record_phase_quietly(state, PHASE_REWORK)
 
@@ -502,6 +567,7 @@ class CarouselOrchestrator(BaseAgent):
                 PHASE_REVIEW,
                 PHASE_PUBLISH,
                 note="approved by human reviewer",
+                holder=holder,
             )
             await self._record_phase_quietly(state, PHASE_PUBLISH)
         else:
@@ -513,6 +579,7 @@ class CarouselOrchestrator(BaseAgent):
                 PHASE_REVIEW,
                 PHASE_REWORK,
                 note=f"rejected: {summary}" if summary else "rejected",
+                holder=holder,
             )
             await self._record_phase_quietly(state, PHASE_REWORK)
 
@@ -532,6 +599,7 @@ class CarouselOrchestrator(BaseAgent):
                     f"{settings.max_rework_rounds} reached without approval — "
                     "manual intervention required"
                 ),
+                holder=holder,
             )
             await self._record_phase_quietly(state, PHASE_DONE)
             return
@@ -574,6 +642,7 @@ class CarouselOrchestrator(BaseAgent):
             f"[rework] round {next_round}/{settings.max_rework_rounds}: "
             f"re-running {', '.join(targets)}",
             {K_REWORK_FEEDBACK: feedback, K_REWORK_ROUND: next_round},
+            holder=holder,
         )
 
         for name in targets:
@@ -590,6 +659,7 @@ class CarouselOrchestrator(BaseAgent):
             PHASE_QA,
             extra_delta={K_REWORK_PLAN: None, K_VERDICT: None},
             note=f"round {next_round} pieces regenerated — re-verifying",
+            holder=holder,
         )
         await self._record_phase_quietly(state, PHASE_QA)
 
@@ -615,6 +685,7 @@ class CarouselOrchestrator(BaseAgent):
                 PHASE_DONE,
                 extra_delta={K_VERDICT: None, K_REWORK_FEEDBACK: ""},
                 note=f"published: {permalink or result.get('media_id')}",
+                holder=holder,
             )
             await self._record_phase_quietly(state, PHASE_DONE)
             return
@@ -645,10 +716,15 @@ class CarouselOrchestrator(BaseAgent):
             outcome = f"published ({result.get('permalink') or result.get('media_id')})"
         else:
             outcome = "not published"
+        tokens_delta = _merge_token_usage(state, holder)
+        totals = tokens_delta.get(K_TOKEN_USAGE) or dict(
+            state.get(K_TOKEN_USAGE) or {}
+        )
         yield self._progress(
             ctx,
             f"[done] run {run_id}: {outcome}; review mails: {review_rounds}; "
-            f"rework rounds: {rework_rounds}.",
+            f"rework rounds: {rework_rounds}; {_format_token_totals(totals)}.",
+            tokens_delta,
         )
 
     # ------------------------------------------------------------------
@@ -674,10 +750,18 @@ class CarouselOrchestrator(BaseAgent):
             PHASE_PUBLISH: self._phase_publish,
             PHASE_DONE: self._phase_done,
         }
-        holder: dict[str, bool] = {
+        holder: dict[str, Any] = {
             "paused": False,
             "halted": False,
             "stopped": False,
+            # Pending (not yet state-committed) token counts for this
+            # invocation; _drive accumulates, _merge_token_usage commits.
+            "tokens": {
+                "prompt_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "llm_calls": 0,
+            },
         }
 
         for _ in range(_MAX_PHASE_STEPS):
@@ -697,6 +781,19 @@ class CarouselOrchestrator(BaseAgent):
             async for event in handler(ctx, state, holder):
                 yield event
             if holder["paused"] or holder["halted"] or holder["stopped"]:
+                # Commit token counts gathered since the last transition (e.g.
+                # the Review Dispatcher's call before the review pause) so the
+                # run total survives the invocation boundary. Content-free
+                # state-delta events are ordinary in ADK and do not disturb
+                # the paused long-running call.
+                tokens_delta = _merge_token_usage(state, holder)
+                if tokens_delta:
+                    yield Event(
+                        invocation_id=ctx.invocation_id,
+                        author=self.name,
+                        branch=ctx.branch,
+                        actions=EventActions(state_delta=tokens_delta),
+                    )
                 return
 
         yield self._progress(

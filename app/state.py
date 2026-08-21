@@ -62,6 +62,7 @@ K_REWORK_FEEDBACK = "rework_feedback"  # str — injected into re-run agents' co
 K_REWORK_ROUND = "rework_round"      # int
 K_REVIEW_ROUND = "review_round"      # int — how many review mails sent
 K_RECENT_FEEDBACK = "recent_feedback_notes"  # str — distilled past feedback, injected for planner/phrasing
+K_TOKEN_USAGE = "token_usage"        # dict — cumulative run token counts (prompt/output/total LLM tokens + image tokens)
 
 M = TypeVar("M", bound=BaseModel)
 

@@ -48,11 +48,16 @@ from app.agents.review_dispatcher import build_review_dispatcher_agent
 from app.agents.stitch_verify import build_stitch_verify_agent
 from app.agents.template_design import build_template_design_agent
 from app.config import settings
+from app.observability import init_observability
 from app.orchestrator import ORCHESTRATOR_NAME, CarouselOrchestrator
 from app.services.artifact_service import SupabaseArtifactService
 from app.services.memory_service import PostgresMemoryService
 
 logger = logging.getLogger(__name__)
+
+# Instrument BEFORE any model call so every process importing this module
+# (`adk web`, the fetcher, the review API) traces from the first request.
+init_observability()
 
 _ORCHESTRATOR_DESCRIPTION = (
     "Carousel Factory orchestrator: turns one queued AI/product news item "
