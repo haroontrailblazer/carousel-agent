@@ -28,6 +28,15 @@ def resolve_model(model_id: str) -> Any:
         # LiteLLM-routed model is actually configured.
         from google.adk.models.lite_llm import LiteLlm
 
+        # gpt-5.6 reasoning models reject function tools on
+        # /v1/chat/completions ("Function tools with reasoning_effort are not
+        # supported ... use /v1/responses or set reasoning_effort to 'none'").
+        # LiteLLM's Responses-API bridge keeps BOTH tools and reasoning
+        # working, and structured output + token usage were verified through
+        # it on 2026-08-21 (gpt-5.4-mini works fine on plain chat completions
+        # and stays there).
+        if model_id.startswith("openai/gpt-5.6"):
+            model_id = "openai/responses/" + model_id.split("/", 1)[1]
         return LiteLlm(model=model_id)
     return model_id
 
