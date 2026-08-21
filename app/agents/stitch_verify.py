@@ -38,6 +38,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools import FunctionTool, ToolContext
 
 from app.config import agent_instructions, settings
+from app.llm import resolve_model
 from app.schemas import (
     Bundle,
     CTASlide,
@@ -697,7 +698,7 @@ def build_stitch_verify_agent() -> LlmAgent:
     _ensure_default_instruction_file()
     return LlmAgent(
         name=AGENT_STITCH_VERIFY,
-        model=settings.utility_model,
+        model=resolve_model(settings.utility_model),
         description=(
             "Stitch & Verify: assembles the final carousel Bundle (cover video "
             "first) and runs deterministic QA — slide count, cover duration, "

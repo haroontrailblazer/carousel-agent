@@ -39,6 +39,7 @@ from google.adk.tools import FunctionTool, ToolContext
 
 from app.agents.feedback_router import derive_targets_from_feedback
 from app.config import agent_instructions, settings
+from app.llm import resolve_model
 from app.schemas import FeedbackRecord, ReworkPlan, Verdict
 from app.services.memory_service import PostgresMemoryService
 from app.state import (
@@ -465,7 +466,7 @@ def build_learner_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_LEARNER) or DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_LEARNER,
-        model=settings.utility_model,
+        model=resolve_model(settings.utility_model),
         description=(
             "Stores human review feedback and distills repeated themes into "
             "permanent skill-file rules."

@@ -20,7 +20,7 @@ as the highest-priority instruction.
 from __future__ import annotations
 
 from google.adk.agents import LlmAgent
-from google.adk.models.lite_llm import LiteLlm
+from app.llm import resolve_model
 
 from app.config import agent_instructions, settings
 from app.schemas import CopySet
@@ -139,7 +139,7 @@ def build_phrasing_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_PHRASING) or DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_PHRASING,
-        model=LiteLlm(model=settings.phrasing_model),
+        model=resolve_model(settings.phrasing_model),
         description=(
             "Writes the final verbatim copy for every body slide (style and "
             "line budget from the carousel plan) and the Instagram caption "

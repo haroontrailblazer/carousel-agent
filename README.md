@@ -56,7 +56,9 @@ Supabase Storage. The architecture is modeled in `architecture/carousel.c4`
 ## Setup
 
 Prerequisites: Python 3.11+ (developed on 3.13), FFmpeg, a Supabase project,
-a Google Cloud project with the Gmail API enabled, OpenAI + Gemini API keys,
+a Google Cloud project with the Gmail API enabled, an OpenAI API key (all
+models run on it by default; a Gemini key is only needed if you point a
+`*_MODEL` at a bare `gemini-*` id),
 and an Instagram **professional** account connected to a Facebook app with the
 Graph API content-publishing permissions.
 

@@ -25,6 +25,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from app.config import agent_instructions, load_skill, settings
+from app.llm import resolve_model
 from app.schemas import CarouselPlan
 from app.state import (
     AGENT_PLANNER,
@@ -201,7 +202,7 @@ def build_planner_agent() -> LlmAgent:
     """
     return LlmAgent(
         name=AGENT_PLANNER,
-        model=settings.planner_model,
+        model=resolve_model(settings.planner_model),
         description=(
             "Editorial Planner: reads the queued news item and decides the "
             "carousel structure — points vs prose, slide count, cover hook "

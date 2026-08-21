@@ -31,6 +31,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool, ToolContext
 
 from app.config import agent_instructions, settings
+from app.llm import resolve_model
 from app.schemas import Bundle
 from app.services import db
 from app.services.artifact_service import SupabaseArtifactService
@@ -271,7 +272,7 @@ def build_publisher_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_PUBLISHER) or DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_PUBLISHER,
-        model=settings.utility_model,
+        model=resolve_model(settings.utility_model),
         description=(
             "Publishes the approved carousel to Instagram and sends the "
             "confirmation mail."

@@ -56,6 +56,7 @@ from google.adk.tools import FunctionTool, LongRunningFunctionTool, ToolContext
 from google.genai import types
 
 from app.config import agent_instructions, settings
+from app.llm import resolve_model
 from app.schemas import Bundle, Verdict
 from app.services import db
 from app.state import (
@@ -589,7 +590,7 @@ def build_review_dispatcher_agent() -> LlmAgent:
     _ensure_default_instruction_file()
     return LlmAgent(
         name=AGENT_REVIEW_DISPATCHER,
-        model=settings.utility_model,
+        model=resolve_model(settings.utility_model),
         description=(
             "Review Dispatcher: mails the reviewers the assembled carousel "
             "with Approve/Reject links, pauses the pipeline on a long-running "

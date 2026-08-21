@@ -29,11 +29,12 @@ class Settings:
     max_carousel_slides: int = int(os.getenv("MAX_CAROUSEL_SLIDES", "10"))  # IG limit
 
     # --- models (LLM) ---
-    # Gemini ids are used natively by ADK; OpenAI ids go through LiteLLM and
-    # must keep the "openai/" prefix. Change these in .env, not here.
-    planner_model: str = os.getenv("PLANNER_MODEL", "gemini-2.5-pro")
-    utility_model: str = os.getenv("UTILITY_MODEL", "gemini-2.5-flash")
-    phrasing_model: str = os.getenv("PHRASING_MODEL", "openai/gpt-5")
+    # "openai/" ids go through LiteLLM (see app/llm.py); bare ids (gemini-*)
+    # use ADK's native Google path and need GOOGLE_API_KEY. Change these in
+    # .env, not here. All-OpenAI by default per the user's subscription.
+    planner_model: str = os.getenv("PLANNER_MODEL", "openai/gpt-5.6-sol")
+    utility_model: str = os.getenv("UTILITY_MODEL", "openai/gpt-5.4-mini")
+    phrasing_model: str = os.getenv("PHRASING_MODEL", "openai/gpt-5.6-sol")
     image_model: str = os.getenv("IMAGE_MODEL", "gpt-image-2")
 
     # --- storage / db (Supabase) ---

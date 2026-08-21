@@ -27,6 +27,7 @@ from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
 
 from app.config import agent_instructions, load_skill, settings
+from app.llm import resolve_model
 from app.schemas import CarouselPlan, CopySet, RenderedSlide, SlideCopy
 from app.state import (
     AGENT_TEMPLATE_DESIGN,
@@ -332,7 +333,7 @@ def build_template_design_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_TEMPLATE_DESIGN) or _DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_TEMPLATE_DESIGN,
-        model=settings.utility_model,
+        model=resolve_model(settings.utility_model),
         description=(
             "Renders the carousel body slides as 1080x1350 PNG artifacts from "
             "the approved copy, using the design-system template."

@@ -28,6 +28,7 @@ from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
 
 from app.config import agent_instructions, settings
+from app.llm import resolve_model
 from app.schemas import CarouselPlan, CoverSpec, NewsItem
 from app.state import (
     AGENT_FIRST_PAGE_VISUAL,
@@ -68,27 +69,6 @@ def _run_workdir(tool_context: ToolContext) -> str:
     wd = settings.workdir / run_id
     wd.mkdir(parents=True, exist_ok=True)
     return str(wd)
-
-
-def _resolve_model(model_id: str) -> Any:
-    """Resolve a model id string into what ``LlmAgent(model=...)`` expects.
-
-    Gemini ids are used natively as plain strings; ids with a provider prefix
-    (e.g. ``openai/gpt-5``) are routed through LiteLLM per app/config.py.
-
-    Args:
-        model_id: The configured model identifier.
-
-    Returns:
-        The plain string for native models, or a ``LiteLlm`` instance.
-    """
-    if "/" in model_id:
-        # Imported lazily: pulling in litellm is slow and only needed when a
-        # LiteLLM-routed model is actually configured.
-        from google.adk.models.lite_llm import LiteLlm
-
-        return LiteLlm(model=model_id)
-    return model_id
 
 
 def _news_dict(tool_context: ToolContext) -> Optional[dict]:
@@ -493,7 +473,7 @@ def build_first_page_visual_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_FIRST_PAGE_VISUAL) or DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_FIRST_PAGE_VISUAL,
-        model=_resolve_model(settings.utility_model),
+        model=resolve_model(settings.utility_model),
         description=(
             "Builds the carousel's cover (slide 1): a 4-8 s 1080x1350 video "
             "sourced from the news update (never AI-generated), composited "

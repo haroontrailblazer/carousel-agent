@@ -27,6 +27,7 @@ from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
 
 from app.config import agent_instructions, load_skill, settings
+from app.llm import resolve_model
 from app.schemas import CTASlide
 from app.state import AGENT_CTA, K_CTA_SLIDE, K_RUN_ID, set_model
 from app.tools import image_gen
@@ -334,7 +335,7 @@ def build_cta_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_CTA) or _DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_CTA,
-        model=settings.utility_model,
+        model=resolve_model(settings.utility_model),
         description=(
             "Picks the call-to-action type (follow/comment/redirect), writes "
             "its copy, and renders the closing CTA slide as a PNG artifact "

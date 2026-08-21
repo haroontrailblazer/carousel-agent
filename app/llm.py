@@ -1,0 +1,35 @@
+"""Model-id resolution shared by every agent builder.
+
+One rule (see docs/CONTRACTS.md): ids with a provider prefix (``openai/…``)
+are routed through ADK's LiteLLM wrapper; bare ids (``gemini-…``) are passed
+to ``LlmAgent`` as plain strings for the native Google path. Centralised here
+so an all-OpenAI (or mixed) configuration is just an .env change — no agent
+file hardcodes a provider.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def resolve_model(model_id: str) -> Any:
+    """Resolve a configured model id into what ``LlmAgent(model=...)`` expects.
+
+    Args:
+        model_id: The configured model identifier (e.g. ``gemini-3.7-flash``
+            or ``openai/gpt-5.6-sol``).
+
+    Returns:
+        The plain string for native models, or a ``LiteLlm`` instance for
+        provider-prefixed ids.
+    """
+    if "/" in model_id:
+        # Imported lazily: pulling in litellm is slow and only needed when a
+        # LiteLLM-routed model is actually configured.
+        from google.adk.models.lite_llm import LiteLlm
+
+        return LiteLlm(model=model_id)
+    return model_id
+
+
+__all__ = ["resolve_model"]
