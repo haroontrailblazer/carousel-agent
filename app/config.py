@@ -20,6 +20,12 @@ def _csv(name: str, default: str = "") -> list[str]:
     return [x.strip() for x in os.getenv(name, default).split(",") if x.strip()]
 
 
+def _project_path(name: str, default: Path) -> Path:
+    """Resolve relative path settings against the repository root."""
+    configured = Path(os.getenv(name, str(default))).expanduser()
+    return configured if configured.is_absolute() else PROJECT_ROOT / configured
+
+
 @dataclass(frozen=True)
 class Settings:
     # --- app ---
@@ -95,12 +101,6 @@ class Settings:
         str(PROJECT_ROOT / "CONFIG-INSTA-1.png"),
         str(PROJECT_ROOT / "STRANGE-COVER (1).png"),
         str(PROJECT_ROOT / "WhatsApp Image 2026-08-11 at 4.25.57 PM.jpeg"),
-    )
-    cta_profile_image: Path = Path(
-        os.getenv(
-            "CTA_PROFILE_IMAGE",
-            str(PROJECT_ROOT / "skills" / "references" / "instagram-profile-source.png"),
-        )
     )
     slide_width: int = 1080
     slide_height: int = 1350  # 4:5 - first item's aspect ratio governs the carousel

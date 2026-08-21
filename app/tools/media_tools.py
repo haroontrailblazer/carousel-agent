@@ -12,7 +12,7 @@ Three jobs (see docs/CONTRACTS.md file map):
    default 4-15 s), silent H.264 mp4.
 3. ``compose_cover(...)``       - scale/center-crop the media to 1080x1350,
    composite the STRANGE-COVER overlay template plus a Pillow-rendered title
-   block (warm-white, condensed extra-bold uppercase, lime-gradient highlight
+   block (warm-white, condensed extra-bold uppercase, solid green highlight
    phrase) and produce the final cover mp4 + first-frame poster PNG.
 
 The cover is NEVER AI-generated (skills/cover-style.md): a sourced clip, or -
@@ -43,6 +43,7 @@ from yt_dlp.utils import DownloadError, download_range_func
 
 from app.config import settings
 from app.text_rules import require_no_em_dash
+from app.tools.brand_layout import ACCENT_GREEN, WARM_WHITE, draw_slide_number
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -77,8 +78,7 @@ _MAX_PROBES = 4  # cap yt-dlp probes per find_source_clip call
 
 # Title styling (current baskaranbuilds.com tokens; skills/cover-style.md).
 _TEXT_PRIMARY = (232, 228, 214, 255)  # #E8E4D6
-_PRIMARY_START = (200, 237, 121)  # #C8ED79
-_PRIMARY_END = (184, 239, 67)  # #B8EF43
+_ACCENT_GREEN = (*ACCENT_GREEN, 255)  # #B8EF43
 _TITLE_MAX_LINES = 2
 _TITLE_MAX_WIDTH_FRAC = 0.63  # inner span between the template's arrow glyphs
 _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
@@ -764,13 +764,9 @@ def _wrap_title(title: str, font: ImageFont.FreeTypeFont, max_w: float) -> list[
     return best[1]
 
 
-def _gradient_color(t: float) -> tuple[int, int, int, int]:
-    """Interpolate the current lime highlight gradient at ``t`` in [0, 1]."""
-    t = min(max(t, 0.0), 1.0)
-    r = round(_PRIMARY_START[0] + (_PRIMARY_END[0] - _PRIMARY_START[0]) * t)
-    g = round(_PRIMARY_START[1] + (_PRIMARY_END[1] - _PRIMARY_START[1]) * t)
-    b = round(_PRIMARY_START[2] + (_PRIMARY_END[2] - _PRIMARY_START[2]) * t)
-    return (r, g, b, 255)
+def _highlight_color() -> tuple[int, int, int, int]:
+    """Return the one fixed brand green for every highlight character."""
+    return _ACCENT_GREEN
 
 
 def _render_title_block(title: str, highlight: str) -> Image.Image:
@@ -778,7 +774,7 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
 
     Centered in the lower third, max two lines, condensed extra-bold
     uppercase, white, with the highlight phrase in a per-character horizontal
-    lime gradient (#C8ED79 -> #B8EF43).
+    single brand green (#B8EF43), with no gradient or shade variation.
     """
     width, height = settings.slide_width, settings.slide_height
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -809,14 +805,12 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
     top = min(top, height - int(height * 0.06) - total_h)  # keep off the grid floor
 
     global_idx = 0  # char index into `text` (lines re-join with single spaces)
-    span_len = max(hl_end - hl_start, 1)
     for line_no, line in enumerate(lines):
         y = top + line_no * (line_h + gap)
         x = (width - _line_width(font, line)) / 2
         for ch in line:
             if hl_start <= global_idx < hl_end:
-                t = (global_idx - hl_start) / max(span_len - 1, 1)
-                color = _gradient_color(t)
+                color = _highlight_color()
             else:
                 color = _TEXT_PRIMARY
             draw.text((x, y), ch, font=font, fill=color)
@@ -895,13 +889,7 @@ def _recolor_legacy_accents(tpl: Image.Image) -> Image.Image:
         for x in range(tpl.width):
             r, g, b, a = px[x, y]
             if a and r > 120 and g > 55 and b < 120 and r > g * 1.15:
-                strength = max(r, g, b) / 255
-                px[x, y] = (
-                    round(_PRIMARY_END[0] * strength),
-                    round(_PRIMARY_END[1] * strength),
-                    round(_PRIMARY_END[2] * strength),
-                    a,
-                )
+                px[x, y] = _ACCENT_GREEN[:3] + (a,)
     return tpl
 
 
@@ -949,6 +937,7 @@ def _build_overlay_png(title: str, highlight: str, wd: Path) -> Path:
             for x in range(width):
                 px[x, y] = (0, 0, 0, alpha)
     canvas.alpha_composite(_render_title_block(title, highlight))
+    draw_slide_number(canvas, 1, fill=WARM_WHITE)
     out = wd / "overlay-composite.png"
     canvas.save(out)
     return out
@@ -984,7 +973,7 @@ def compose_cover(
     Args:
         media_path: Local path of the trimmed clip or downloaded image.
         title: Cover hook title (rendered uppercase, max two lines).
-        highlight: Verbatim phrase inside ``title`` rendered in lime gradient.
+        highlight: Verbatim phrase inside ``title`` rendered in solid #B8EF43.
         is_video: True when ``media_path`` is a video clip.
         workdir: Run-specific working folder.
 

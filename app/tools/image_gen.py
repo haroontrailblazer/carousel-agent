@@ -41,7 +41,11 @@ from PIL import Image
 from app import observability
 from app.config import load_skill, settings
 from app.text_rules import require_no_em_dash
-from app.tools.brand_layout import apply_body_brand_rail, apply_cta_brand_rail
+from app.tools.brand_layout import (
+    apply_body_brand_rail,
+    apply_cta_brand_rail,
+    normalize_accent_green,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +68,8 @@ _client_singleton: Optional[OpenAI] = None
 _FALLBACK_STYLE = """
 Design system: 1080x1350 (4:5) editorial social slide. Alternate ink (#161811)
 and paper (#F7F7F5) backgrounds. Use warm white (#E8E4D6) or ink (#1A1A18)
-text and lime (#C8ED79 to #B8EF43) for exactly ONE emphasized element.
+text and exactly #B8EF43 green for exactly ONE emphasized element. Never use
+another green shade, tint, gradient, glow, or color variation for highlights.
 Bricolage-style bold grotesk headlines, clean Instrument-style body text,
 generous safe margins, one dominant explanatory visual, and a compact bottom
 brand rail. Choose an editorial explainer, data proof, process line, comparison,
@@ -154,7 +159,6 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
                     size=_GEN_SIZE,
                     n=1,
                     quality="high",
-                    input_fidelity="high",
                     output_format="png",
                     timeout=_REQUEST_TIMEOUT_S,
                 )
@@ -250,7 +254,6 @@ def generate_slide_image(
         _VERBATIM_RULE,
         "",
         f'Use the "{layout_hint}" layout archetype from the design system.',
-        f'Slide number tag (small, quiet, top of slide): "{tag}"',
         _quoted_block("Headline (bold, with ONE lime word or phrase)", [headline]),
         _quoted_block(
             "Body lines (left-aligned, in this exact order, one per line)",
@@ -258,9 +261,10 @@ def generate_slide_image(
         ),
         (
             "Keep all editorial text and visuals inside x=88..992 and "
-            "y=76..1110. Leave y=1136..1350 completely blank for the "
+            "y=140..1110. Leave x=88..200 and y=76..130 blank for the "
+            "deterministic slide number. Leave y=1136..1350 completely blank for the "
             "deterministic brand rail; do not draw a logo, handle, divider, "
-            "arrow, footer text, or footer decoration."
+            "arrow, slide number, footer text, or footer decoration."
         ),
     ]
     text_spec = "\n".join(allowed)
@@ -280,7 +284,8 @@ def generate_slide_image(
     png = _call_images_api(prompt, template)
     result = _finalize(png, out_path)
     with Image.open(result) as rendered:
-        branded = apply_body_brand_rail(rendered, settings.ig_handle)
+        normalized = normalize_accent_green(rendered)
+        branded = apply_body_brand_rail(normalized, settings.ig_handle, slide_no)
     branded.save(result, format="PNG")
     logger.info("Rendered body slide %s -> %s", tag, result)
     return result
@@ -293,6 +298,7 @@ def generate_cta_image(
     link_text: str,
     template_ref: str,
     out_path: str,
+    slide_no: int | None = None,
 ) -> str:
     """Render the closing CTA slide (1080x1350 PNG) with gpt-image-2.
 
@@ -335,10 +341,11 @@ def generate_cta_image(
             f'Destination link (inside the CTA content area): "{link_text.strip()}"'
         )
     text_parts.append(
-        "Keep all CTA text and visuals inside x=88..992 and y=76..1110. "
-        "Leave y=1136..1350 completely blank for a deterministic portrait "
-        "and handle rail. Do not draw a handle, avatar, logo, divider, footer, "
-        "or swipe arrow."
+        "Keep all CTA text and visuals inside x=88..992 and y=140..1110. "
+        "Leave x=88..200 and y=76..130 blank for the deterministic slide number. "
+        "Leave y=1136..1350 completely blank for the deterministic favicon "
+        "and handle rail. Do not draw a handle, footer portrait, logo, divider, "
+        "footer decoration, slide number, or swipe arrow in that reserved area."
     )
     text_spec = "\n".join(text_parts)
 
@@ -359,10 +366,11 @@ def generate_cta_image(
     png = _call_images_api(prompt, template)
     result = _finalize(png, out_path)
     with Image.open(result) as rendered:
+        normalized = normalize_accent_green(rendered)
         branded = apply_cta_brand_rail(
-            rendered,
+            normalized,
             settings.ig_handle,
-            settings.cta_profile_image,
+            slide_no,
         )
     branded.save(result, format="PNG")
     logger.info("Rendered CTA slide (%s) -> %s", cta_type, result)

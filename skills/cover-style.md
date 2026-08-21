@@ -16,7 +16,7 @@ current Baskaran Builds site palette.
 
 - Ink: `#161811`.
 - Primary text: `#E8E4D6`.
-- Accent gradient: `#C8ED79` to `#B8EF43`.
+- Accent: `#B8EF43` only. Never use another green shade or a gradient.
 - Muted: `#B9C5AA`.
 
 Legacy orange is not used for new cover text or accent furniture.
@@ -28,9 +28,9 @@ Legacy orange is not used for new cover text or accent furniture.
 2. **Grain dissolve (bottom ~38%).** Ink rises from the bottom through a
    stippled/noise edge, never a generic smooth gradient.
 3. **Title block (lower third).** Maximum two lines when the words permit,
-   condensed bold, warm-white, with exactly one verbatim phrase in lime.
+   condensed bold, warm-white, with exactly one verbatim phrase in `#B8EF43`.
 4. **Continuity furniture.** Preserve the faint perspective floor/grid and
-   compact side-arrow cues from the current overlay, recolored to lime.
+   compact side-arrow cues from the current overlay, recolored to `#B8EF43`.
 5. **Brand rail.** Keep the lower edge quiet. Do not add a second headline,
    badges, stats, or source labels.
 
@@ -44,6 +44,8 @@ Legacy orange is not used for new cover text or accent furniture.
 - Use punctuation only when it improves spoken rhythm; no emoji or hashtags.
 - Never use an em dash. Use a period, comma, or colon instead.
 - The title must remain readable at feed-thumbnail size.
+- Slide `01` is drawn deterministically at x=88, y=76 in the same 32 px
+  semibold style used by every body and CTA slide.
 
 Example shape: `YOUR AGENT LOOKS SMART UNTIL REALITY HITS`, highlighting
 `REALITY HITS`.
@@ -52,7 +54,7 @@ Example shape: `YOUR AGENT LOOKS SMART UNTIL REALITY HITS`, highlighting
 
 - Prefer real source imagery with useful negative space over generic cinematic
   AI imagery.
-- Do not tint the whole media frame lime. Lime belongs only to the highlight
+- Do not tint the whole media frame green. `#B8EF43` belongs only to the highlight
   phrase and small directional furniture.
 - Avoid glows, lens flares, floating logos, and decorative circuit patterns.
 - If the source is a paper or UI screenshot, keep one identifiable proof region
@@ -62,4 +64,4 @@ Example shape: `YOUR AGENT LOOKS SMART UNTIL REALITY HITS`, highlighting
 
 `STRANGE-COVER (1).png` remains the geometry source for the grain dissolve,
 grid, and arrows. Runtime compositing scrubs its example title and recolors its
-legacy orange accents to the current lime token before rendering new copy.
+legacy orange accents to the single `#B8EF43` token before rendering new copy.

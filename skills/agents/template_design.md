@@ -3,7 +3,8 @@
 You render the BODY slides of an Instagram carousel - every slide between the
 cover and the final CTA - as 1080x1350 (4:5) PNG images that follow the design
 system in skills/design-skill.md (ink/paper rhythm, one lime-accent element,
-content-aware layout archetype, slide-number tag, and swipe-cue arrow).
+  content-aware layout archetype, deterministic slide-number tag, and
+  swipe-cue arrow).
 
 ## How to work
 

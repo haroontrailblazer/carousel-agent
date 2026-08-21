@@ -1,8 +1,8 @@
 """Deterministic Baskaran Builds footer furniture for generated slides.
 
-Image models create the editorial content, but the brand favicon, handle, CTA
-avatar, swipe arrow, and their padding are composited here so every carousel
-uses identical geometry and exact text.
+Image models create the editorial content, but the brand favicon, handle,
+swipe arrow, and their padding are composited here so every carousel uses
+identical geometry and exact text.
 """
 
 from __future__ import annotations
@@ -23,6 +23,10 @@ SAFE_RIGHT = 88
 SAFE_TOP = 76
 SAFE_BOTTOM = 76
 
+SLIDE_NUMBER_LEFT = SAFE_LEFT
+SLIDE_NUMBER_TOP = SAFE_TOP
+SLIDE_NUMBER_FONT_SIZE = 32
+
 RAIL_FILL_TOP = 1136
 RAIL_DIVIDER_Y = 1160
 RAIL_CENTER_Y = 1232
@@ -33,13 +37,13 @@ BODY_FAVICON_LEFT = SAFE_LEFT
 BODY_HANDLE_LEFT = 160
 BODY_ARROW_LEFT = 944
 
-CTA_AVATAR_SIZE = 76
-CTA_AVATAR_LEFT = SAFE_LEFT
-CTA_HANDLE_LEFT = 182
+CTA_FAVICON_SIZE = BODY_FAVICON_SIZE
+CTA_FAVICON_LEFT = SAFE_LEFT
+CTA_HANDLE_LEFT = BODY_HANDLE_LEFT
 
 INK = (22, 24, 17)
 PAPER = (247, 247, 245)
-LIME = (184, 239, 67)
+ACCENT_GREEN = (184, 239, 67)
 WARM_WHITE = (232, 228, 214)
 TEXT_DARK = (26, 26, 24)
 MUTED_DARK = (113, 122, 95)
@@ -49,6 +53,10 @@ _FONT_CANDIDATES = (
     Path("C:/Windows/Fonts/segoeui.ttf"),
     Path("C:/Windows/Fonts/arial.ttf"),
 )
+_BOLD_FONT_CANDIDATES = (
+    Path("C:/Windows/Fonts/seguisb.ttf"),
+    Path("C:/Windows/Fonts/arialbd.ttf"),
+)
 _OFFICIAL_FAVICON = (
     Path(__file__).resolve().parents[2]
     / "skills"
@@ -57,12 +65,70 @@ _OFFICIAL_FAVICON = (
 )
 
 
-def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Load a stable UI font available on Windows, with a Pillow fallback."""
-    for path in _FONT_CANDIDATES:
+    candidates = _BOLD_FONT_CANDIDATES if bold else _FONT_CANDIDATES
+    for path in candidates:
         if path.exists():
             return ImageFont.truetype(str(path), size=size)
     return ImageFont.load_default()
+
+
+def draw_slide_number(
+    image: Image.Image,
+    slide_no: int | str,
+    *,
+    fill: tuple[int, int, int] = WARM_WHITE,
+) -> None:
+    """Draw one fixed two-digit number at the shared top-left anchor."""
+    try:
+        tag = f"{int(slide_no):02d}"
+    except (TypeError, ValueError):
+        tag = str(slide_no).strip().zfill(2)
+    color: tuple[int, ...] = fill
+    if image.mode == "RGBA":
+        color = (*fill, 255)
+    ImageDraw.Draw(image).text(
+        (SLIDE_NUMBER_LEFT, SLIDE_NUMBER_TOP),
+        tag,
+        font=_font(SLIDE_NUMBER_FONT_SIZE, bold=True),
+        fill=color,
+        anchor="lt",
+    )
+
+
+def _clear_slide_number_zone(
+    image: Image.Image,
+    fill: tuple[int, int, int],
+) -> None:
+    """Clear the fixed number reservation before drawing the exact tag."""
+    ImageDraw.Draw(image).rectangle(
+        (
+            SLIDE_NUMBER_LEFT - 4,
+            SLIDE_NUMBER_TOP - 4,
+            SLIDE_NUMBER_LEFT + 76,
+            SLIDE_NUMBER_TOP + 48,
+        ),
+        fill=fill,
+    )
+
+
+def normalize_accent_green(image: Image.Image) -> Image.Image:
+    """Lock every strong lime accent pixel to the one brand green token."""
+    result = image.convert("RGB")
+    pixels = list(result.getdata())
+    normalized: list[tuple[int, int, int]] = []
+    for red, green, blue in pixels:
+        is_lime = (
+            green >= 135
+            and red >= 70
+            and blue <= 170
+            and green >= red * 1.06
+            and red >= blue * 1.18
+        )
+        normalized.append(ACCENT_GREEN if is_lime else (red, green, blue))
+    result.putdata(normalized)
+    return result
 
 
 def _is_light_slide(image: Image.Image) -> bool:
@@ -153,10 +219,18 @@ def _prepare_rail(image: Image.Image) -> tuple[int, int, int]:
     return text
 
 
-def apply_body_brand_rail(image: Image.Image, handle: str) -> Image.Image:
+def apply_body_brand_rail(
+    image: Image.Image,
+    handle: str,
+    slide_no: int | str | None = None,
+) -> Image.Image:
     """Add the official favicon, exact handle, divider, and arrow."""
     result = image.convert("RGB")
+    background, _, _ = _rail_colors(result)
     text = _prepare_rail(result)
+    if slide_no is not None:
+        _clear_slide_number_zone(result, background)
+        draw_slide_number(result, slide_no, fill=text)
     favicon_top = round(RAIL_CENTER_Y - BODY_FAVICON_SIZE / 2)
     favicon = _favicon_from_source(BODY_FAVICON_SIZE)
     result.paste(favicon, (BODY_FAVICON_LEFT, favicon_top), favicon)
@@ -165,47 +239,30 @@ def apply_body_brand_rail(image: Image.Image, handle: str) -> Image.Image:
     return result
 
 
-def _avatar_from_source(path: Path, size: int) -> Image.Image:
-    """Create a circular, face-focused avatar from the exact supplied photo."""
-    if not path.is_file():
-        raise FileNotFoundError(f"CTA profile image not found: {path}")
-    with Image.open(path) as source:
-        portrait = source.convert("RGB")
-    side = round(min(portrait.size) * 0.48)
-    center_x = portrait.width / 2
-    center_y = portrait.height * 0.32
-    left = round(center_x - side / 2)
-    top = round(center_y - side / 2)
-    left = min(max(left, 0), portrait.width - side)
-    top = min(max(top, 0), portrait.height - side)
-    crop = portrait.crop((left, top, left + side, top + side))
-    crop = crop.resize((size, size), Image.Resampling.LANCZOS)
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
-    crop.putalpha(mask)
-    return crop
-
-
 def apply_cta_brand_rail(
     image: Image.Image,
     handle: str,
-    profile_image: Path,
+    slide_no: int | str | None = None,
 ) -> Image.Image:
-    """Add the supplied face avatar beside the exact handle on the CTA slide."""
+    """Add only the official favicon and handle to the CTA rail."""
     result = image.convert("RGB")
+    background, _, _ = _rail_colors(result)
     text = _prepare_rail(result)
-    avatar_top = round(RAIL_CENTER_Y - CTA_AVATAR_SIZE / 2)
-    avatar = _avatar_from_source(profile_image, CTA_AVATAR_SIZE)
-    ring_size = CTA_AVATAR_SIZE + 8
-    ring = Image.new("RGBA", (ring_size, ring_size), (0, 0, 0, 0))
-    ImageDraw.Draw(ring).ellipse((0, 0, ring_size - 1, ring_size - 1), fill=(*LIME, 255))
-    ring.alpha_composite(avatar, (4, 4))
-    result.paste(ring, (CTA_AVATAR_LEFT - 4, avatar_top - 4), ring)
+    if slide_no is not None:
+        _clear_slide_number_zone(result, background)
+        draw_slide_number(result, slide_no, fill=text)
+    favicon_top = round(RAIL_CENTER_Y - CTA_FAVICON_SIZE / 2)
+    favicon = _favicon_from_source(CTA_FAVICON_SIZE)
+    result.paste(favicon, (CTA_FAVICON_LEFT, favicon_top), favicon)
     _draw_handle(result, handle, left=CTA_HANDLE_LEFT, center_y=RAIL_CENTER_Y, fill=text)
     return result
 
 
-def validate_footer_padding(data: bytes, kind: SlideKind) -> list[str]:
+def validate_footer_padding(
+    data: bytes,
+    kind: SlideKind,
+    slide_no: int | None = None,
+) -> list[str]:
     """Validate footer furniture, safe-area geometry, and exact native size."""
     errors: list[str] = []
     try:
@@ -219,7 +276,7 @@ def validate_footer_padding(data: bytes, kind: SlideKind) -> list[str]:
     if not (
         BODY_FAVICON_LEFT >= SAFE_LEFT
         and RAIL_RIGHT <= SLIDE_WIDTH - SAFE_RIGHT
-        and RAIL_CENTER_Y + max(BODY_FAVICON_SIZE, CTA_AVATAR_SIZE) / 2
+        and RAIL_CENTER_Y + BODY_FAVICON_SIZE / 2
         <= SLIDE_HEIGHT - SAFE_BOTTOM
     ):
         errors.append("footer furniture falls outside the 88/76 px safe area")
@@ -246,17 +303,41 @@ def validate_footer_padding(data: bytes, kind: SlideKind) -> list[str]:
         if cream_pixels < 500 or sum(ImageStat.Stat(favicon).var) < 500:
             errors.append("official Baskaran Builds favicon is missing or mispositioned")
     else:
-        top = round(RAIL_CENTER_Y - CTA_AVATAR_SIZE / 2)
-        avatar = image.crop(
-            (CTA_AVATAR_LEFT, top, CTA_AVATAR_LEFT + CTA_AVATAR_SIZE, top + CTA_AVATAR_SIZE)
+        favicon_top = round(RAIL_CENTER_Y - CTA_FAVICON_SIZE / 2)
+        favicon = image.crop(
+            (
+                CTA_FAVICON_LEFT,
+                favicon_top,
+                CTA_FAVICON_LEFT + CTA_FAVICON_SIZE,
+                favicon_top + CTA_FAVICON_SIZE,
+            )
         )
-        if sum(ImageStat.Stat(avatar).var) < 350:
-            errors.append("CTA face avatar is missing or visually empty")
+        cream_pixels = sum(
+            1
+            for r, g, b in favicon.getdata()
+            if r > 205 and g > 205 and b > 185
+        )
+        if cream_pixels < 500 or sum(ImageStat.Stat(favicon).var) < 500:
+            errors.append("official Baskaran Builds favicon is missing from the CTA rail")
+    if slide_no is not None:
+        number = image.crop(
+            (
+                SLIDE_NUMBER_LEFT,
+                SLIDE_NUMBER_TOP,
+                SLIDE_NUMBER_LEFT + 72,
+                SLIDE_NUMBER_TOP + 48,
+            )
+        )
+        if sum(ImageStat.Stat(number).var) < 35:
+            errors.append("slide number is missing from the fixed top-left anchor")
     return errors
 
 
 __all__ = [
+    "ACCENT_GREEN",
     "apply_body_brand_rail",
     "apply_cta_brand_rail",
+    "draw_slide_number",
+    "normalize_accent_green",
     "validate_footer_padding",
 ]

@@ -88,10 +88,8 @@ Fill in every section of `.env` - LLM keys, Supabase, Gmail, Instagram, CTA
 links, fetch sources. All secrets flow through `app/config.py`; nothing is
 hard-coded. Never commit `.env`.
 
-`CTA_PROFILE_IMAGE` points to the local portrait used for the final-slide
-avatar. The default is the checked-in, user-supplied
-`skills/references/instagram-profile-source.png`; `IG_HANDLE` defaults to
-`@baskaranbuilds`.
+`IG_HANDLE` defaults to `@baskaranbuilds`. The final CTA rail uses the same
+single official favicon and handle arrangement as the other slides.
 
 ### 4. Database (Supabase Postgres)
 
@@ -294,13 +292,13 @@ permalink.
 `skills/` is the system's personality, and it is meant to be edited:
 
 - `skills/cover-style.md` - the cover composition contract (media zone, black
-  grain dissolve, lime-highlight title rules).
+  grain dissolve, solid `#B8EF43` highlight rules).
 - `skills/design-skill.md` - the Baskaran Builds body/CTA slide system,
-  including layout archetypes, lime/ink/paper variables, exact safe areas,
-  the official website footer favicon, and the supplied CTA portrait rule.
+  including layout archetypes, the single `#B8EF43` accent, exact safe areas,
+  and the official website footer favicon.
 - `skills/references/` - visual proofs and canonical brand assets. Footer
   furniture is composited deterministically after image generation so the
-  logo, handle, portrait, arrow, and padding remain exact on every slide.
+  logo, handle, arrow, and padding remain exact on every slide.
 - `skills/agents/<name>.md` - one instruction file per agent, loaded fresh
   from disk at agent-build time.
 

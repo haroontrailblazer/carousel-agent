@@ -12,7 +12,8 @@ for budgets) and:
    plan, existence of every referenced artifact, and the copy-vs-rendered
    check on every body-slide PNG (the contract's size-heuristic variant:
    real PNG, exact target slide size, byte-size sanity floor), plus exact
-   brand-rail and footer safe-area validation on every body and CTA slide.
+   fixed slide-number, brand-rail, and safe-area validation on every body and
+   CTA slide.
 3. Writes ``K_BUNDLE`` + ``K_QA_REPORT``. On CRITICAL failures it also writes
    a :class:`app.schemas.ReworkPlan` to ``K_REWORK_PLAN`` (and the distilled
    correction text to ``K_REWORK_FEEDBACK``) targeting the responsible agents,
@@ -113,7 +114,8 @@ a review mail.
      duration within the configured window, per-slide line budget from the
      plan, that every
      referenced artifact actually exists, a copy-vs-rendered size check, and
-     deterministic footer safe-area validation on every body/CTA slide so
+     deterministic slide-number and footer safe-area validation on every
+     body/CTA slide so
      every body-slide PNG is a real, full-size render actually able to
      carry its approved text);
    - stores the QAReport, and on CRITICAL failures also stores a ReworkPlan
@@ -355,7 +357,7 @@ async def _verify_brand_padding(
     slide_index: int,
     kind: Literal["body", "cta"],
 ) -> Optional[QAIssue]:
-    """Validate deterministic footer furniture and its safe-area padding."""
+    """Validate the fixed number, footer furniture, and safe-area padding."""
     try:
         part = await tool_context.load_artifact(artifact)
     except Exception as exc:
@@ -381,7 +383,7 @@ async def _verify_brand_padding(
                 f"artifact '{artifact}' returned no inline bytes."
             ),
         )
-    errors = validate_footer_padding(data, kind)
+    errors = validate_footer_padding(data, kind, slide_index)
     if not errors:
         return None
     owner = AGENT_CTA if kind == "cta" else AGENT_TEMPLATE_DESIGN
@@ -776,7 +778,7 @@ def build_stitch_verify_agent() -> LlmAgent:
             "Stitch & Verify: assembles the final carousel Bundle (cover video "
             "first) and runs deterministic QA - slide count, cover duration, "
             "line budgets, artifact existence, copy-vs-rendered slide size "
-            "checks, and deterministic footer safe-area validation. Critical "
+            "checks, and deterministic number/footer safe-area validation. Critical "
             "failures auto-route a ReworkPlan back to the "
             "responsible agents instead of mailing."
         ),

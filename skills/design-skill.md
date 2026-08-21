@@ -19,8 +19,9 @@ Use these exact current `baskaranbuilds.com` variables:
 - `--text-primary-light: #E8E4D6` - primary text on ink.
 - `--text-muted-light: #B9C5AA` - muted text.
 - `--text-dark: #1A1A18` - primary text on paper.
-- `--primary-300: #C8ED79` and `--primary-400: #B8EF43` - the only accent
-  gradient or emphasis color.
+- `--accent-green: #B8EF43` - the only accent green. Every emphasized phrase,
+  number, node, and data mark uses this exact solid color with no shade change,
+  tint, gradient, glow, or alternate green.
 
 Do not use the legacy orange palette on new slides. Do not introduce blue,
 purple, neon glow, or unrelated gradients. A slide may be either ink or paper;
@@ -101,7 +102,9 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
 
 ## Persistent furniture
 
-- Small two-digit slide number near the top edge, quiet rather than dominant.
+- Every slide uses the same deterministic two-digit number: x=88, y=76,
+  32 px semibold, with fixed weight and line height. The image model must leave
+  this zone blank and must never draw its own number.
 - Body-slide bottom rail uses the official Baskaran Builds favicon from
   `skills/references/baskaranbuilds-favicon.png`, followed by the exact
   configured Instagram handle and an icon-only right arrow. Never redraw,
@@ -110,7 +113,7 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
   area from y=1136 through the bottom edge empty; never draw replacement footer
   furniture inside the generated artwork.
 - One thin divider may anchor the rail. Do not add a thick footer block.
-- Exactly one lime emphasis moment per slide: a phrase, value, path, or node.
+- Exactly one `#B8EF43` emphasis moment per slide: a phrase, value, path, or node.
 - The rail is consistent across light and dark slides; invert text colors for
   contrast while preserving geometry.
 
@@ -139,23 +142,23 @@ Choose one action only:
 
 The headline is <= 7 words, large and left-aligned or centered according to the
 image balance. Highlight one phrase in lime. Keep supporting copy to 1-2 lines.
-The CTA bottom rail uses a circular crop from
-`skills/references/instagram-profile-source.png` beside `@baskaranbuilds` in
-place of the body-slide favicon. The supplied face must remain photographic and
-identity-accurate. The CTA has no swipe arrow. A small save cue is allowed only
-when saving is the action. Do not show multiple buttons, multiple actions, or
-invented links.
+The CTA bottom rail starts with one official Baskaran Builds favicon followed
+by `@baskaranbuilds`. Do not add a small profile portrait or a second identity
+icon in the footer. The CTA has no swipe arrow. A small save cue is allowed
+only when saving is the action. Do not show multiple buttons, multiple actions,
+or invented links.
 
 ## Padding contract
 
-- Editorial content: x=88..992 and y=76..1110.
+- Editorial content: x=88..992 and y=140..1110. The number alone occupies the
+  reserved x=88..200, y=76..130 zone.
 - Footer reservation: y=1136..1350; generated content never enters it.
 - Divider: x=88..992 at y=1160.
 - Footer centerline: y=1232.
-- Body favicon begins at x=88; CTA avatar begins at x=88.
+- Body favicon and CTA favicon begin at x=88; both handles begin at x=160.
 - All footer furniture ends above y=1274, preserving the 76 px bottom safe area.
-- The runtime validator rejects missing/mispositioned favicons, CTA avatars,
-  dividers, incorrect dimensions, or footer geometry outside this safe area.
+- The runtime validator rejects missing or mispositioned favicons, dividers,
+  incorrect dimensions, or footer geometry outside this safe area.
 
 ## Hard quality gates
 
