@@ -42,6 +42,8 @@ from app import observability
 from app.config import load_skill, settings
 from app.text_rules import require_no_em_dash, require_readable_text
 from app.tools.brand_layout import (
+    HEADLINE_FONT_SIZE,
+    HEADLINE_STYLE,
     apply_body_brand_rail,
     apply_cta_brand_rail,
     normalize_accent_green,
@@ -74,7 +76,9 @@ Bricolage-style bold grotesk headlines, clean Instrument-style body text,
 generous safe margins, one dominant explanatory visual, and a compact bottom
 brand rail. Choose an editorial explainer, data proof, process line, comparison,
 dark technical proof, or statement-pause layout based on the content. Never use
-a repeated card grid. CTA slide: same family, one clear action, no swipe arrow.
+a repeated card grid. A large lower-half visual must meet the footer divider;
+only a compact centered visual may float above it with a tight gap. CTA slide:
+same family, one clear action, no swipe arrow.
 """.strip()
 
 _VERBATIM_RULE = (
@@ -259,17 +263,28 @@ def generate_slide_image(
         _VERBATIM_RULE,
         "",
         f'Use the "{layout_hint}" layout archetype from the design system.',
+        (
+            "Match slide 1 headline typography: use a "
+            f"{HEADLINE_FONT_SIZE}px-equivalent {HEADLINE_STYLE} headline at "
+            "1080px canvas width, with tight editorial line-height and no "
+            "shadow, outline, glow, or alternate display font."
+        ),
         _quoted_block("Headline (bold, with ONE lime word or phrase)", [headline]),
         _quoted_block(
             "Body lines (left-aligned, in this exact order, one per line)",
             copy_lines,
         ),
         (
-            "Keep all editorial text and visuals inside x=88..992 and "
-            "y=140..1110. Leave x=88..200 and y=76..130 blank for the "
-            "deterministic slide number. Leave y=1136..1350 completely blank for the "
-            "deterministic brand rail; do not draw a logo, handle, divider, "
-            "arrow, slide number, footer text, or footer decoration."
+            "Keep all editorial text inside x=88..992 and y=140..1110. Leave "
+            "x=88..200 and y=76..130 blank for the deterministic slide number. "
+            "For a dominant image or illustration that occupies most of the lower "
+            "content area, extend its lowest visible edge to y=1160 so it touches "
+            "the footer divider with no empty band. Do not stop a large visual above "
+            "the line. A compact, clearly centered visual that does not fill most of "
+            "the width or lower area may float above the divider with a tight gap. "
+            "Never cross below y=1160. Leave y=1161..1350 completely blank for the "
+            "deterministic brand rail; do not draw a logo, handle, divider, arrow, "
+            "slide number, footer text, or footer decoration."
         ),
     ]
     text_spec = "\n".join(allowed)
@@ -349,7 +364,7 @@ def generate_cta_image(
     text_parts.append(
         "Keep all CTA text and visuals inside x=88..992 and y=140..1110. "
         "Leave x=88..200 and y=76..130 blank for the deterministic slide number. "
-        "Leave y=1136..1350 completely blank for the deterministic favicon "
+        "Leave y=1161..1350 completely blank for the deterministic favicon "
         "and handle rail. Do not draw a handle, footer portrait, logo, divider, "
         "footer decoration, slide number, or swipe arrow in that reserved area."
     )

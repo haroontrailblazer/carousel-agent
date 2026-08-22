@@ -106,9 +106,11 @@ async def find_source_clip(
         Dict with keys: found (bool), url (str), is_video (bool),
         duration_s (float, 0.0 when unknown), origin
         ('media_urls' | 'source_url' | 'source_page' | 'body_url' |
-        'body_page' | 'web_search' | ''), image_url + image_origin (the best
-        STILL-image candidate, always reported - download_image it when video
-        downloads fail, BEFORE considering the placeholder), note (str).
+        'body_page' | 'trend_search' | 'web_search' | ''), image_url +
+        image_origin (the highest-ranked STILL-image candidate),
+        image_candidates (up to five ranked alternatives), trend_search
+        (live-search status), and note (str). Try ranked images in order when
+        video downloads fail, BEFORE considering the placeholder.
         When nothing at all is found, found is false - build the cover from
         create_placeholder_background instead of giving up.
     """
@@ -468,17 +470,23 @@ other slide, never write body copy or captions, and never AI-generate media.
 
 1. Call find_source_clip to pick the best sourced media (video preferred).
    It scans the news media_urls, the source page, every page LINKED in the
-   news body text (og:image/og:video scraping), and web-searches for an
-   event/announcement clip when nothing sourced plays. You may pass
-   search_query to sharpen the video hunt (e.g. "<product> launch keynote").
+   news body text, AND runs a live trend-aware visual search for the topic.
+   It ranks current prominent imagery by topic relevance, official/source
+   affinity, useful visual signals and generic-asset penalties. Inspect
+   trend_search and image_candidates in the result; never choose an image
+   merely because it was the first available URL. You may pass search_query
+   to sharpen the hunt (e.g. "<product> launch keynote demo").
 2. If it returned a video: call download_and_trim with that URL to get a
    local short clip. If the download fails (403s are common on video hosts),
    try at most ONE more video: another plausible URL from media_urls or one
    re-call of find_source_clip with a sharper search_query.
 3. When video downloads keep failing - or only an image was found - use the
-   image: the find_source_clip result ALWAYS carries image_url (e.g. the
-   article's og:image / poster). Call download_image with it. A real sourced
-   image beats a placeholder every time.
+   ranked image_candidates list from find_source_clip. Start with image_url,
+   which is the highest-scoring candidate, then try the next candidate when
+   download_image rejects a low-resolution, extreme-aspect, unreadable, or
+   unavailable asset. Try at most THREE ranked images. Prefer the newest
+   source-grounded launch/demo/keynote/news visual that directly depicts the
+   topic; reject generic stock art, logos, icons and merely available images.
 4. Only if there is NO image_url anywhere and downloads all failed: call
    create_placeholder_background and use its path as the image.
 5. ALWAYS call build_cover with the local media path, is_video set
@@ -510,8 +518,9 @@ instruction and rebuild the cover accordingly:
   different candidate URL), then rebuild.
 - "title / wording is off" - call build_cover with explicit title and
   highlight overrides (highlight must remain a verbatim substring).
-- "bad image / wrong media" - pick the next-best media candidate (rerun
-  find_source_clip or use another media_urls entry) and rebuild.
+- "bad image / wrong media" - pick the next ranked image_candidates entry or
+  rerun find_source_clip with a sharper topic + launch/demo/current query;
+  never reuse the same merely available image, then rebuild.
 
 Always finish rework by calling build_cover again so the CoverSpec in state
 and the cover artifacts are replaced with the corrected version.

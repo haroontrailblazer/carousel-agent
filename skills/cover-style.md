@@ -27,8 +27,11 @@ Legacy orange is not used for new cover text or accent furniture.
    from the title. Crop for one clear focal point; slight darkening is allowed.
 2. **Grain dissolve (bottom ~38%).** Ink rises from the bottom through a
    stippled/noise edge, never a generic smooth gradient.
-3. **Title block (lower third).** Maximum two lines when the words permit,
-   condensed bold, warm-white, with exactly one verbatim phrase in `#B8EF43`.
+3. **Title block (lower third).** Use the same headline system as the inside
+   slides: 76 px-equivalent condensed bold grotesk, tight editorial line
+   height, warm-white, with exactly one verbatim phrase in `#B8EF43`. Wrap to
+   no more than three balanced lines instead of shrinking into a different
+   typographic scale.
 4. **Continuity furniture.** Preserve the faint perspective floor/grid and
    compact side-arrow cues from the current overlay, recolored to `#B8EF43`.
 5. **Brand rail.** Keep the lower edge quiet. Do not add a second headline,

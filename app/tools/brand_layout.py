@@ -27,8 +27,16 @@ SLIDE_NUMBER_LEFT = SAFE_LEFT
 SLIDE_NUMBER_TOP = SAFE_TOP
 SLIDE_NUMBER_FONT_SIZE = 32
 
-RAIL_FILL_TOP = 1136
+# Shared editorial headline contract. The deterministic cover compositor uses
+# these values directly, while the body-slide image prompt names the same size
+# and type treatment so slide 1 no longer looks like a different template.
+HEADLINE_FONT_SIZE = 76
+HEADLINE_MIN_FONT_SIZE = 60
+HEADLINE_MAX_LINES = 3
+HEADLINE_STYLE = "condensed bold grotesk"
+
 RAIL_DIVIDER_Y = 1160
+RAIL_FILL_TOP = RAIL_DIVIDER_Y
 RAIL_CENTER_Y = 1232
 RAIL_RIGHT = SLIDE_WIDTH - SAFE_RIGHT
 
@@ -57,6 +65,11 @@ _BOLD_FONT_CANDIDATES = (
     Path("C:/Windows/Fonts/seguisb.ttf"),
     Path("C:/Windows/Fonts/arialbd.ttf"),
 )
+_HEADLINE_FONT_CANDIDATES = (
+    Path("C:/Windows/Fonts/bahnschrift.ttf"),
+    Path("C:/Windows/Fonts/impact.ttf"),
+    Path("C:/Windows/Fonts/arialbd.ttf"),
+)
 _OFFICIAL_FAVICON = (
     Path(__file__).resolve().parents[2]
     / "skills"
@@ -72,6 +85,41 @@ def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFon
         if path.exists():
             return ImageFont.truetype(str(path), size=size)
     return ImageFont.load_default()
+
+
+def headline_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load the shared condensed headline face used by the cover system."""
+    for path in _HEADLINE_FONT_CANDIDATES:
+        if not path.exists():
+            continue
+        try:
+            font = ImageFont.truetype(str(path), size=size)
+        except OSError:
+            continue
+        if "bahnschrift" in path.name.lower():
+            try:
+                axes = font.get_variation_axes()
+                values: list[float] = []
+                for axis in axes:
+                    name = axis.get("name", b"")
+                    if isinstance(name, bytes):
+                        name = name.decode("ascii", errors="ignore")
+                    lowered = str(name).lower()
+                    if "weight" in lowered or lowered == "wght":
+                        values.append(min(float(axis["maximum"]), 700.0))
+                    elif "width" in lowered or lowered == "wdth":
+                        values.append(max(float(axis["minimum"]), 75.0))
+                    else:
+                        values.append(float(axis["default"]))
+                if values:
+                    font.set_variation_by_axes(values)
+            except OSError:
+                pass
+        return font
+    try:
+        return ImageFont.truetype("DejaVuSans-Bold.ttf", size=size)
+    except OSError:
+        return ImageFont.load_default(size=size)
 
 
 def draw_slide_number(
@@ -125,6 +173,8 @@ def normalize_accent_green(image: Image.Image) -> Image.Image:
             and blue <= 170
             and green >= red * 1.06
             and red >= blue * 1.18
+            and green - red >= 20
+            and green - blue >= 55
         )
         normalized.append(ACCENT_GREEN if is_lime else (red, green, blue))
     result.putdata(normalized)
@@ -211,7 +261,7 @@ def _draw_swipe_arrow(image: Image.Image, fill: tuple[int, int, int]) -> None:
 
 
 def _prepare_rail(image: Image.Image) -> tuple[int, int, int]:
-    """Clear the reserved footer and draw its divider."""
+    """Clear the rail below its divider while preserving visuals that meet it."""
     background, text, divider = _rail_colors(image)
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, RAIL_FILL_TOP, SLIDE_WIDTH, SLIDE_HEIGHT), fill=background)
@@ -335,9 +385,14 @@ def validate_footer_padding(
 
 __all__ = [
     "ACCENT_GREEN",
+    "HEADLINE_FONT_SIZE",
+    "HEADLINE_MAX_LINES",
+    "HEADLINE_MIN_FONT_SIZE",
+    "HEADLINE_STYLE",
     "apply_body_brand_rail",
     "apply_cta_brand_rail",
     "draw_slide_number",
+    "headline_font",
     "normalize_accent_green",
     "validate_footer_padding",
 ]

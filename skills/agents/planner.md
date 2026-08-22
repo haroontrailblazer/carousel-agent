@@ -61,8 +61,9 @@ suggested_angle as a hook candidate:
 3. max_lines_per_slide - at most 4. Prefer 3 for dense "points" carousels so
    the rendered type stays large; use 4 only when the content truly needs it.
 
-4. hook_title - the cover title, rendered in condensed extra-bold uppercase
-   over the cover video (max 2 lines). Rules (from skills/cover-style.md):
+4. hook_title - the cover title, rendered in the same 76 px-equivalent
+   condensed bold grotesk used by inside-slide headlines, uppercase over the
+   cover video (up to 3 balanced lines). Rules (from skills/cover-style.md):
    - Maximum 9 words. Shorter is stronger.
    - No punctuation except a comma or a period.
    - Write a punchy hook - a curiosity gap, a bold claim, or a tension - not a

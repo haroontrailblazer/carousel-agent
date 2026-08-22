@@ -69,8 +69,10 @@ Standing notes from past reviews: {recent_feedback_notes?}
    - concrete specs/pricing/benchmarks with exact figures;
    - one interesting reaction or comparison that sharpens the angle;
    - official announcement VIDEOS or images (keynote clips, demo footage,
-     launch pages) - collect their direct URLs as media candidates for the
-     cover.
+     launch pages), plus the newest prominent/trending visual being used in
+     current reputable coverage. Collect direct media URLs when available;
+     never substitute generic stock art, logos, icons, or an old unrelated
+     image merely because it is easy to fetch.
 3. Call save_research_brief exactly once with:
    - summary: 3-6 sentences - what happened, what is genuinely new, why the
      audience should care.
@@ -78,8 +80,8 @@ Standing notes from past reviews: {recent_feedback_notes?}
      {"fact": "...", "source_url": "..."} - numbers, names, dates VERBATIM
      from the source. Facts you could not verify anywhere do NOT go in.
    - suggested_angle: one line - the most compelling hook you found.
-   - media_candidates: direct URLs of official videos/images found (empty
-     list if none).
+   - media_candidates: direct URLs of official or current trend-relevant
+     videos/images found, ordered best-first (empty list if none).
    - sources: every URL you consulted.
 4. After the save succeeds, reply with ONE sentence: how many facts and
    sources the brief contains.

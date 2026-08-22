@@ -2,11 +2,11 @@
 
 Three jobs (see docs/CONTRACTS.md file map):
 
-1. ``find_source_clip(news)``   - pick the best sourced video (preferred) or
+1. ``find_source_clip(news)``   - rank the best sourced video (preferred) or
    image URL from a news item's ``media_urls``, its source page, every page
-   linked in its body text, and - when nothing sourced plays - a bounded web
-   search for an event clip. ``placeholder_background`` guarantees a cover can
-   ALWAYS be built even with zero media found.
+   linked in its body text, plus a live trend-aware visual search. Current,
+   topical, source-affine imagery outranks generic merely available assets.
+   ``placeholder_background`` guarantees a cover can ALWAYS be built.
 2. ``download_and_trim(url)``   - fetch the clip via the yt-dlp Python API and
    trim it into the configured cover window (settings.cover_clip_min_s..max_s,
    default 4-15 s), silent H.264 mp4.
@@ -32,6 +32,9 @@ import math
 import re
 import subprocess
 import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from itertools import combinations
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urljoin, urlparse
@@ -43,7 +46,15 @@ from yt_dlp.utils import DownloadError, download_range_func
 
 from app.config import settings
 from app.text_rules import require_no_em_dash
-from app.tools.brand_layout import ACCENT_GREEN, WARM_WHITE, draw_slide_number
+from app.tools.brand_layout import (
+    ACCENT_GREEN,
+    HEADLINE_FONT_SIZE,
+    HEADLINE_MAX_LINES,
+    HEADLINE_MIN_FONT_SIZE,
+    WARM_WHITE,
+    draw_slide_number,
+    headline_font,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -75,11 +86,13 @@ _IMAGE_TIMEOUT = (10, 60)
 _FFMPEG_TIMEOUT_S = 300
 _FFPROBE_TIMEOUT_S = 60
 _MAX_PROBES = 4  # cap yt-dlp probes per find_source_clip call
+_TREND_PAGE_LIMIT = 4
+_IMAGE_CANDIDATE_LIMIT = 5
 
 # Title styling (current baskaranbuilds.com tokens; skills/cover-style.md).
 _TEXT_PRIMARY = (232, 228, 214, 255)  # #E8E4D6
 _ACCENT_GREEN = (*ACCENT_GREEN, 255)  # #B8EF43
-_TITLE_MAX_LINES = 2
+_TITLE_MAX_LINES = HEADLINE_MAX_LINES
 _TITLE_MAX_WIDTH_FRAC = 0.63  # inner span between the template's arrow glyphs
 _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
 
@@ -89,18 +102,34 @@ _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
 # Fractions of width/height; excludes the side arrow glyphs (0.093-0.167 and
 # 0.839-0.907) and the grid floor.
 _TEMPLATE_TEXT_BOX = (0.175, 0.705, 0.83, 0.872)  # (x0, y0, x1, y1)
-_TEXT_LUMA_THRESHOLD = 6  # max(R,G,B) above this inside the box = text pixel
-_TEXT_SCRUB_DILATION_X = 3  # px - also scrub the anti-aliased glyph edge ring
-_TEXT_SCRUB_DILATION_Y = 2
-_FONT_CANDIDATES = (
-    Path("C:/Windows/Fonts/bahnschrift.ttf"),
-    Path("C:/Windows/Fonts/impact.ttf"),
-    Path("C:/Windows/Fonts/arialbd.ttf"),
-)
-_FALLBACK_FONT_NAME = "DejaVuSans-Bold.ttf"
-
 _STILL_COVER_SECONDS = 6.0
 _COVER_FPS = 30
+_MIN_COVER_IMAGE_PIXELS = 450_000
+_MIN_COVER_IMAGE_SIDE = 360
+_MAX_COVER_IMAGE_ASPECT = 3.2
+
+_TOPIC_STOPWORDS = {
+    "about", "after", "again", "from", "into", "just", "latest", "more",
+    "new", "over", "that", "the", "their", "this", "with", "your",
+}
+_GOOD_VISUAL_TOKENS = {
+    "announcement", "cover", "demo", "event", "hero", "keynote", "launch",
+    "product", "release", "screenshot", "stage", "visual",
+}
+_BAD_VISUAL_TOKENS = {
+    "avatar", "badge", "favicon", "icon", "logo", "placeholder", "sprite",
+    "tracking", "transparent",
+}
+
+
+@dataclass(frozen=True)
+class _MediaCandidate:
+    url: str
+    kind: str
+    score: int
+    origin: str
+    context_url: str = ""
+    reason: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +348,108 @@ _URL_IN_TEXT_RE = re.compile(r"https?://[^\s<>\"')\]]+", re.I)
 _BODY_URL_SCRAPE_LIMIT = 4  # pages linked in the body text scraped per call
 
 
+def _site(url: str) -> str:
+    """Return a comparable hostname for source-affinity scoring."""
+    host = (urlparse(url).hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _topic_tokens(news: dict) -> set[str]:
+    """Extract useful topic words for lightweight visual relevance scoring."""
+    text = " ".join(
+        [str(news.get("title") or ""), *[str(tag) for tag in news.get("tags") or []]]
+    ).lower()
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", text)
+        if len(token) >= 3 and token not in _TOPIC_STOPWORDS
+    }
+
+
+def _rank_candidate(
+    candidate: _MediaCandidate,
+    news: dict,
+    source_url: str,
+) -> _MediaCandidate:
+    """Score topicality, freshness signals, source affinity, and visual quality."""
+    score = candidate.score
+    reasons = [candidate.reason] if candidate.reason else []
+    context = f"{candidate.url} {candidate.context_url}".lower()
+    overlap = sorted(token for token in _topic_tokens(news) if token in context)
+    if overlap:
+        bonus = min(len(overlap) * 3, 12)
+        score += bonus
+        reasons.append(f"topic match +{bonus}")
+
+    source_site = _site(source_url)
+    context_site = _site(candidate.context_url or candidate.url)
+    if source_site and context_site == source_site:
+        score += 12
+        reasons.append("official/source-site +12")
+
+    good = sorted(token for token in _GOOD_VISUAL_TOKENS if token in context)
+    if good:
+        bonus = min(len(good) * 2, 8)
+        score += bonus
+        reasons.append(f"visual signal +{bonus}")
+    bad = sorted(token for token in _BAD_VISUAL_TOKENS if token in context)
+    if bad:
+        penalty = min(len(bad) * 12, 36)
+        score -= penalty
+        reasons.append(f"generic asset -{penalty}")
+
+    return _MediaCandidate(
+        url=candidate.url,
+        kind=candidate.kind,
+        score=score,
+        origin=candidate.origin,
+        context_url=candidate.context_url,
+        reason="; ".join(reasons),
+    )
+
+
+def _search_trending_pages(
+    news: dict,
+    search_query: str = "",
+) -> tuple[list[str], str]:
+    """Find current pages carrying prominent, source-grounded topic visuals.
+
+    This deliberately searches beyond URLs already attached to the news item.
+    The returned pages are scraped for their own og:image/og:video assets and
+    ranked with a freshness/relevance bonus by :func:`find_source_clip`.
+    """
+    topic = re.sub(
+        r"\s+",
+        " ",
+        (search_query or str(news.get("title") or "")).strip(),
+    )
+    if not topic:
+        return [], "trend search skipped: empty topic"
+    published = str(news.get("published_at") or "").strip()
+    date_hint = published[:10] if published else str(datetime.now(timezone.utc).date())
+    query = (
+        f'As of {date_hint}, find the newest prominent visual coverage for "{topic}". '
+        "Prefer an official launch image, product demo screenshot, keynote still, "
+        "or current reputable news image. Return pages that visibly carry the "
+        "relevant image. Avoid generic stock art, logos, icons, and old unrelated media."
+    )
+    try:
+        # Local import keeps the media layer usable in minimal/offline contexts.
+        from app.tools.research_tools import search_web
+
+        result = search_web(query)
+    except Exception as exc:  # noqa: BLE001 - trend search is best-effort
+        return [], f"trend search unavailable: {exc}"
+    if result.get("status") != "ok":
+        return [], f"trend search unavailable: {result.get('message', 'unknown error')}"
+    pages = [
+        str(url).strip()
+        for url in result.get("sources") or []
+        if str(url).strip().startswith(("http://", "https://"))
+    ]
+    return pages[:_TREND_PAGE_LIMIT], f"live trend search checked {len(pages[:_TREND_PAGE_LIMIT])} page(s)"
+
+
 def _search_video_online(query: str) -> Optional[dict[str, Any]]:
     """Web-search (YouTube via yt-dlp ``ytsearch``) for a playable event clip.
 
@@ -380,16 +511,27 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
         Dict with keys: ``found`` (bool), ``url`` (str), ``is_video`` (bool),
         ``duration_s`` (float, 0.0 when unknown), ``origin``
         ('media_urls' | 'source_url' | 'source_page' | 'body_url' |
-        'body_page' | 'web_search' | ''), and ``note`` (str).
+        'body_page' | 'trend_search' | 'web_search' | ''),
+        ``image_candidates`` (ranked still alternatives), ``trend_search``
+        (live-search status), and ``note`` (str).
     """
-    candidates: list[tuple[str, str, int, str]] = []  # (url, kind, score, origin)
-    seen: set[str] = set()
+    candidate_map: dict[str, _MediaCandidate] = {}
 
-    def add(url: str, kind: str, score: int, origin: str) -> None:
+    def add(
+        url: str,
+        kind: str,
+        score: int,
+        origin: str,
+        context_url: str = "",
+        reason: str = "",
+    ) -> None:
         key = url.split("#", 1)[0]
-        if key and key not in seen:
-            seen.add(key)
-            candidates.append((url, kind, score, origin))
+        if not key:
+            return
+        candidate = _MediaCandidate(url, kind, score, origin, context_url, reason)
+        previous = candidate_map.get(key)
+        if previous is None or candidate.score > previous.score:
+            candidate_map[key] = candidate
 
     for url in news.get("media_urls") or []:
         if not isinstance(url, str) or not url.strip():
@@ -397,14 +539,14 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
         url = url.strip()
         kind = _classify_url(url)
         score = {"video": 100, "image": 50}.get(kind, 25)
-        add(url, kind, score, "media_urls")
+        add(url, kind, score, "media_urls", reason="attached source media")
 
     source_url = str(news.get("source_url") or "").strip()
     if source_url and _classify_url(source_url) == "video":
-        add(source_url, "video", 95, "source_url")
+        add(source_url, "video", 95, "source_url", source_url, "official source video")
     if source_url:
         for url, kind, score in _scrape_page_media(source_url):
-            add(url, kind, score, "source_page")
+            add(url, kind, score, "source_page", source_url, "official source page")
 
     # Pages linked inside the body/summary text (ad-hoc runs put the links
     # there): direct media URLs become candidates, other pages are scraped
@@ -415,28 +557,80 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
     scraped_pages = 0
     for raw in _URL_IN_TEXT_RE.findall(body_text):
         url = raw.rstrip(".,;:!?")
-        if url.split("#", 1)[0] in seen or url == source_url:
+        if url.split("#", 1)[0] in candidate_map or url == source_url:
             continue
         kind = _classify_url(url)
         if kind == "video":
-            add(url, "video", 92, "body_url")
+            add(url, "video", 92, "body_url", reason="linked from news body")
         elif kind == "image":
-            add(url, "image", 48, "body_url")
+            add(url, "image", 48, "body_url", reason="linked from news body")
         elif scraped_pages < _BODY_URL_SCRAPE_LIMIT:
             scraped_pages += 1
             for media_url, media_kind, score in _scrape_page_media(url):
-                add(media_url, media_kind, max(score - 2, 1), "body_page")
+                add(
+                    media_url,
+                    media_kind,
+                    max(score - 2, 1),
+                    "body_page",
+                    url,
+                    "page linked from news body",
+                )
 
-    candidates.sort(key=lambda c: c[2], reverse=True)
+    # Do not settle for the first attached/available image. Search the live web
+    # for the topic's current prominent visual coverage, scrape those pages,
+    # then rank the resulting assets alongside the source-owned candidates.
+    trend_pages, trend_note = _search_trending_pages(news, search_query)
+    for rank, page_url in enumerate(trend_pages, start=1):
+        page_kind = _classify_url(page_url)
+        if page_kind in {"image", "video"}:
+            direct_score = (58 if page_kind == "image" else 93) - rank * 2
+            add(
+                page_url,
+                page_kind,
+                direct_score,
+                "trend_search",
+                page_url,
+                f"direct live trend result rank {rank}",
+            )
+            continue
+        for media_url, media_kind, scraped_score in _scrape_page_media(page_url):
+            if media_kind == "video":
+                score = max(scraped_score, 93 - rank * 2)
+            elif media_kind == "image":
+                score = max(scraped_score, 58 - rank * 2)
+            else:
+                score = scraped_score
+            add(
+                media_url,
+                media_kind,
+                score,
+                "trend_search",
+                page_url,
+                f"live trend result rank {rank}",
+            )
+
+    candidates = [
+        _rank_candidate(candidate, news, source_url)
+        for candidate in candidate_map.values()
+    ]
+    candidates.sort(key=lambda candidate: candidate.score, reverse=True)
 
     # Best image candidate - reported alongside every result so the caller
     # can drop to the image path the moment video downloads fail, without
     # re-searching.
-    image_url, image_origin = "", ""
-    for url, kind, _score, origin in candidates:
-        if kind == "image":
-            image_url, image_origin = url, origin
-            break
+    ranked_images = [candidate for candidate in candidates if candidate.kind == "image"]
+    image_candidates = [
+        {
+            "url": candidate.url,
+            "origin": candidate.origin,
+            "score": candidate.score,
+            "reason": candidate.reason,
+            "context_url": candidate.context_url,
+        }
+        for candidate in ranked_images[:_IMAGE_CANDIDATE_LIMIT]
+    ]
+    image_url = image_candidates[0]["url"] if image_candidates else ""
+    image_origin = image_candidates[0]["origin"] if image_candidates else ""
 
     def result(found: bool, url: str, is_video: bool, duration: float,
                origin: str, note: str) -> dict:
@@ -448,28 +642,34 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
             "origin": origin,
             "image_url": image_url,
             "image_origin": image_origin,
+            "image_candidates": image_candidates,
+            "trend_search": trend_note,
             "note": note,
         }
 
     # Confirm video candidates (bounded number of network probes).
     probes = 0
-    for url, kind, _score, origin in candidates:
-        if kind not in ("video", "unknown"):
+    for candidate in candidates:
+        if candidate.kind not in ("video", "unknown"):
             continue
         if probes >= _MAX_PROBES:
             break
         probes += 1
-        info = _probe_with_ytdlp(url)
+        info = _probe_with_ytdlp(candidate.url)
         if info is not None:
             return result(
-                True, url, True, round(info["duration"], 2), origin,
+                True,
+                candidate.url,
+                True,
+                round(info["duration"], 2),
+                candidate.origin,
                 info["title"] or "probed with yt-dlp",
             )
-        if _url_ext(url) in VIDEO_EXTS:
+        if _url_ext(candidate.url) in VIDEO_EXTS:
             # Direct video file that yt-dlp could not probe (e.g. signed CDN
             # URL) - trust the extension and let download_and_trim try.
             return result(
-                True, url, True, 0.0, origin,
+                True, candidate.url, True, 0.0, candidate.origin,
                 "direct video file (probe skipped/failed)",
             )
 
@@ -689,8 +889,23 @@ def download_image(url: str, workdir: str = "") -> str:
     try:
         with Image.open(path) as img:
             img.load()
+            width, height = img.size
     except OSError as exc:
+        path.unlink(missing_ok=True)
         raise RuntimeError(f"downloaded file is not a readable image: {url}") from exc
+    short_side = min(width, height)
+    aspect = max(width / max(height, 1), height / max(width, 1))
+    if (
+        width * height < _MIN_COVER_IMAGE_PIXELS
+        or short_side < _MIN_COVER_IMAGE_SIDE
+        or aspect > _MAX_COVER_IMAGE_ASPECT
+    ):
+        path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "image is unsuitable for a 1080x1350 cover "
+            f"({width}x{height}, aspect {aspect:.2f}); try the next ranked "
+            "image_candidates entry"
+        )
     return str(path)
 
 
@@ -699,69 +914,48 @@ def download_image(url: str, workdir: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 
-def _load_title_font(size: int) -> ImageFont.FreeTypeFont:
-    """Load the title font at ``size`` following the fallback chain.
-
-    Bahnschrift is a variable font: when it loads, the weight axis is pushed
-    to extra-bold and the width axis to condensed per skills/cover-style.md.
-    """
-    for path in _FONT_CANDIDATES:
-        if not path.exists():
-            continue
-        try:
-            font = ImageFont.truetype(str(path), size)
-        except OSError:
-            continue
-        if "bahnschrift" in path.name.lower():
-            try:
-                axes = font.get_variation_axes()
-                values: list[float] = []
-                for axis in axes:
-                    name = axis.get("name", b"")
-                    if isinstance(name, bytes):
-                        name = name.decode("ascii", errors="ignore")
-                    lowered = name.lower()
-                    if "weight" in lowered or lowered == "wght":
-                        values.append(min(float(axis["maximum"]), 700.0))
-                    elif "width" in lowered or lowered == "wdth":
-                        values.append(max(float(axis["minimum"]), 75.0))
-                    else:
-                        values.append(float(axis["default"]))
-                if values:
-                    font.set_variation_by_axes(values)
-            except OSError:
-                pass
-        return font
-    try:
-        return ImageFont.truetype(_FALLBACK_FONT_NAME, size)
-    except OSError:
-        return ImageFont.load_default(size=size)  # type: ignore[return-value]
+def _load_title_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load the exact shared headline face used by the carousel system."""
+    return headline_font(size)
 
 
-def _line_width(font: ImageFont.FreeTypeFont, text: str) -> float:
+def _line_width(
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    text: str,
+) -> float:
     """Width of ``text`` measured char-by-char (matches per-char drawing)."""
     return sum(font.getlength(ch) for ch in text)
 
 
-def _wrap_title(title: str, font: ImageFont.FreeTypeFont, max_w: float) -> list[str]:
-    """Split the title into at most two visually balanced lines.
-
-    Returns the best split (minimizing the wider line) when one line does not
-    fit; single-word or already-fitting titles stay on one line.
-    """
+def _wrap_title(
+    title: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    max_w: float,
+) -> list[str]:
+    """Wrap a cover hook into the fewest balanced shared-headline lines."""
     if _line_width(font, title) <= max_w:
         return [title]
     words = title.split(" ")
     if len(words) < 2:
         return [title]
-    best: tuple[float, list[str]] = (float("inf"), [title])
-    for i in range(1, len(words)):
-        l1 = " ".join(words[:i])
-        l2 = " ".join(words[i:])
-        widest = max(_line_width(font, l1), _line_width(font, l2))
-        if widest < best[0]:
-            best = (widest, [l1, l2])
-    return best[1]
+    fallback: tuple[float, list[str]] = (float("inf"), [title])
+    max_lines = min(_TITLE_MAX_LINES, len(words))
+    for line_count in range(2, max_lines + 1):
+        best: tuple[float, list[str]] = (float("inf"), [title])
+        for cuts in combinations(range(1, len(words)), line_count - 1):
+            boundaries = (0, *cuts, len(words))
+            lines = [
+                " ".join(words[boundaries[i] : boundaries[i + 1]])
+                for i in range(line_count)
+            ]
+            widths = [_line_width(font, line) for line in lines]
+            score = max(widths) + (max(widths) - min(widths)) * 0.12
+            if score < best[0]:
+                best = (score, lines)
+        fallback = best
+        if all(_line_width(font, line) <= max_w for line in best[1]):
+            return best[1]
+    return fallback[1]
 
 
 def _highlight_color() -> tuple[int, int, int, int]:
@@ -772,7 +966,8 @@ def _highlight_color() -> tuple[int, int, int, int]:
 def _render_title_block(title: str, highlight: str) -> Image.Image:
     """Render the cover title onto a transparent 1080x1350 RGBA image.
 
-    Centered in the lower third, max two lines, condensed extra-bold
+    Centered in the lower third, up to three lines, shared 76 px-equivalent
+    condensed bold grotesk typography,
     uppercase, white, with the highlight phrase in a per-character horizontal
     single brand green (#B8EF43), with no gradient or shade variation.
     """
@@ -786,9 +981,9 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
     hl_end = hl_start + len(hl) if hl_start >= 0 else -1
 
     max_w = width * _TITLE_MAX_WIDTH_FRAC
-    font = _load_title_font(88)
+    font = _load_title_font(HEADLINE_FONT_SIZE)
     lines = [text]
-    for size in range(88, 32, -4):
+    for size in range(HEADLINE_FONT_SIZE, HEADLINE_MIN_FONT_SIZE - 1, -2):
         font = _load_title_font(size)
         lines = _wrap_title(text, font, max_w)
         if len(lines) <= _TITLE_MAX_LINES and all(
@@ -799,7 +994,7 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
     draw = ImageDraw.Draw(canvas)
     ascent, descent = font.getmetrics()
     line_h = ascent + descent
-    gap = int(line_h * 0.12)
+    gap = int(line_h * 0.10)
     total_h = len(lines) * line_h + (len(lines) - 1) * gap
     top = int(height * _TITLE_CENTER_Y_FRAC - total_h / 2)
     top = min(top, height - int(height * 0.06) - total_h)  # keep off the grid floor
@@ -828,10 +1023,11 @@ def _scrub_template_text(tpl: Image.Image) -> Image.Image:
 
     The shipped STRANGE-COVER template contains its reference title
     ("STOP PROMPTING YOUR AI, GIVE IT A LOOP") rendered into the dissolve
-    zone. Every text-colored pixel inside ``_TEMPLATE_TEXT_BOX`` is replaced
-    with pure black whose alpha is linearly interpolated from the nearest
-    non-text background pixels on the same row - seamless even where the
-    grain dissolve is only partially opaque. Arrows and grid are untouched.
+    zone. Clear the complete reserved title box, interpolating the surrounding
+    overlay alpha across each row. Clearing the whole reservation removes the
+    original glyphs and their dark anti-aliased shadows; glyph-only masking
+    left a visible ghost behind newly rendered headlines. Arrows and the grid
+    sit outside this reservation and remain untouched.
     """
     width, height = tpl.size
     x0 = int(width * _TEMPLATE_TEXT_BOX[0])
@@ -839,46 +1035,15 @@ def _scrub_template_text(tpl: Image.Image) -> Image.Image:
     x1 = int(width * _TEMPLATE_TEXT_BOX[2])
     y1 = int(height * _TEMPLATE_TEXT_BOX[3])
     px = tpl.load()
-
-    # Pass 1: per-row runs of text pixels, dilated horizontally so the
-    # anti-aliased edge ring (near-black but higher-alpha) is caught too.
-    row_runs: dict[int, list[tuple[int, int]]] = {}
+    left = max(x0 - 1, 0)
+    right = min(x1, width - 1)
+    span = max(x1 - x0, 1)
     for y in range(y0, y1):
-        runs: list[tuple[int, int]] = []
-        start: Optional[int] = None
-        for x in range(x0, x1):
-            r, g, b, _a = px[x, y]
-            if max(r, g, b) > _TEXT_LUMA_THRESHOLD:
-                if start is None:
-                    start = x
-            elif start is not None:
-                runs.append((start - _TEXT_SCRUB_DILATION_X, x + _TEXT_SCRUB_DILATION_X))
-                start = None
-        if start is not None:
-            runs.append((start - _TEXT_SCRUB_DILATION_X, x1 + _TEXT_SCRUB_DILATION_X))
-        row_runs[y] = runs
-
-    # Pass 2: vertical dilation (merge neighbour rows' runs), then repaint each
-    # run black with alpha interpolated between its just-outside anchors.
-    for y in range(y0, y1):
-        collected: list[tuple[int, int]] = []
-        for yy in range(max(y0, y - _TEXT_SCRUB_DILATION_Y), min(y1, y + _TEXT_SCRUB_DILATION_Y + 1)):
-            collected.extend(row_runs.get(yy, ()))
-        merged: list[list[int]] = []
-        for s, e in sorted(collected):
-            if merged and s <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], e)
-            else:
-                merged.append([s, e])
-        for s, e in merged:
-            s = max(s, 1)
-            e = min(e, width - 1)
-            left_a = px[s - 1, y][3]
-            right_a = px[e, y][3]
-            span = e - s
-            for i, rx in enumerate(range(s, e)):
-                alpha = round(left_a + (right_a - left_a) * (i + 1) / (span + 1))
-                px[rx, y] = (0, 0, 0, alpha)
+        left_a = px[left, y][3]
+        right_a = px[right, y][3]
+        for offset, x in enumerate(range(x0, x1)):
+            alpha = round(left_a + (right_a - left_a) * offset / span)
+            px[x, y] = (0, 0, 0, alpha)
     return tpl
 
 
@@ -972,7 +1137,8 @@ def compose_cover(
 
     Args:
         media_path: Local path of the trimmed clip or downloaded image.
-        title: Cover hook title (rendered uppercase, max two lines).
+        title: Cover hook title (rendered uppercase in the shared inside-slide
+            headline style, up to three balanced lines).
         highlight: Verbatim phrase inside ``title`` rendered in solid #B8EF43.
         is_video: True when ``media_path`` is a video clip.
         workdir: Run-specific working folder.

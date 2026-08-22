@@ -31,7 +31,9 @@ the carousel should alternate them deliberately for rhythm.
 
 - Canvas: 1080 x 1350 px, portrait 4:5.
 - Safe area: at least 88 px left/right and 76 px top/bottom.
-- Headings: Bricolage Grotesque or a close bold condensed grotesk; uppercase is
+- Headings: 76 px-equivalent at 1080 px canvas width, Bricolage Grotesque or a
+  close bold condensed grotesk, with tight editorial line-height. This exact
+  scale and treatment is shared by the cover and inside slides; uppercase is
   allowed for short hooks, sentence case is preferred for editorial headings.
 - Editorial emphasis: Instrument Serif or a close high-contrast serif, used
   sparingly for one phrase rather than whole paragraphs.
@@ -110,8 +112,8 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
   configured Instagram handle and an icon-only right arrow. Never redraw,
   simplify, or replace the favicon with a generic lime spark.
 - The footer is composited deterministically after generation. Leave the full
-  area from y=1136 through the bottom edge empty; never draw replacement footer
-  furniture inside the generated artwork.
+  area below the divider (y=1161 through the bottom edge) empty; never draw
+  replacement footer furniture inside the generated artwork.
 - One thin divider may anchor the rail. Do not add a thick footer block.
 - Exactly one `#B8EF43` emphasis moment per slide: a phrase, value, path, or node.
 - The rail is consistent across light and dark slides; invert text colors for
@@ -127,6 +129,13 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
 - Use at most one visual technique per slide. Do not combine a chart, diagram,
   code block, portrait, and decorative texture.
 - Keep illustrations away from body copy and preserve breathing room.
+- Bottom-anchor any dominant visual that occupies most of the lower content
+  area: its lowest visible edge must meet the footer divider at y=1160 with no
+  empty background band between the visual and the line. It may be naturally
+  cropped by that divider, but it must never cross into the rail below it.
+- A smaller illustration that is clearly centered and does not span most of
+  the available width or lower area may float above the divider. Keep that gap
+  visually tight; do not push a compact visual down merely to make it touch.
 
 ## CTA slide
 
@@ -152,7 +161,8 @@ or invented links.
 
 - Editorial content: x=88..992 and y=140..1110. The number alone occupies the
   reserved x=88..200, y=76..130 zone.
-- Footer reservation: y=1136..1350; generated content never enters it.
+- Footer reservation: y=1161..1350; generated content never enters it. A
+  dominant lower visual may extend through y=1160 so it meets the divider.
 - Divider: x=88..992 at y=1160.
 - Footer centerline: y=1232.
 - Body favicon and CTA favicon begin at x=88; both handles begin at x=160.
