@@ -7,6 +7,7 @@ identical geometry and exact text.
 
 from __future__ import annotations
 
+from itertools import combinations
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
@@ -34,6 +35,11 @@ HEADLINE_FONT_SIZE = 76
 HEADLINE_MIN_FONT_SIZE = 60
 HEADLINE_MAX_LINES = 3
 HEADLINE_STYLE = "condensed bold grotesk"
+BODY_FONT_SIZE = 36
+TEXT_PANEL_TOP = 140
+TEXT_PANEL_BOTTOM = 620
+TEXT_CONTENT_LEFT = SAFE_LEFT
+TEXT_CONTENT_RIGHT = SLIDE_WIDTH - SAFE_RIGHT
 
 RAIL_DIVIDER_Y = 1160
 RAIL_FILL_TOP = RAIL_DIVIDER_Y
@@ -120,6 +126,182 @@ def headline_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         return ImageFont.truetype("DejaVuSans-Bold.ttf", size=size)
     except OSError:
         return ImageFont.load_default(size=size)
+
+
+def _line_width(
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    text: str,
+) -> float:
+    """Measure one line using the same font instance used for drawing."""
+    return float(font.getlength(text))
+
+
+def _balanced_wrap(
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    max_width: int,
+    max_lines: int,
+) -> list[str]:
+    """Wrap a short headline into balanced lines without shrinking its font."""
+    normalized = " ".join(str(text or "").split())
+    if not normalized:
+        return []
+    if _line_width(font, normalized) <= max_width:
+        return [normalized]
+    words = normalized.split(" ")
+    if any(_line_width(font, word) > max_width for word in words):
+        raise ValueError("headline contains a word wider than the fixed text area")
+    best_overall: tuple[float, list[str]] | None = None
+    for line_count in range(2, min(max_lines, len(words)) + 1):
+        best: tuple[float, list[str]] | None = None
+        for cuts in combinations(range(1, len(words)), line_count - 1):
+            boundaries = (0, *cuts, len(words))
+            lines = [
+                " ".join(words[boundaries[i] : boundaries[i + 1]])
+                for i in range(line_count)
+            ]
+            widths = [_line_width(font, line) for line in lines]
+            score = max(widths) + (max(widths) - min(widths)) * 0.12
+            if best is None or score < best[0]:
+                best = (score, lines)
+        if best is None:
+            continue
+        best_overall = best
+        if all(_line_width(font, line) <= max_width for line in best[1]):
+            return best[1]
+    if best_overall is None or any(
+        _line_width(font, line) > max_width for line in best_overall[1]
+    ):
+        raise ValueError(
+            f"headline does not fit at the fixed {HEADLINE_FONT_SIZE}px size "
+            f"within {HEADLINE_MAX_LINES} lines"
+        )
+    return best_overall[1]
+
+
+def _greedy_wrap(
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    max_width: int,
+) -> list[str]:
+    """Wrap body copy at a fixed size while preserving every word verbatim."""
+    normalized = " ".join(str(text or "").split())
+    if not normalized:
+        return []
+    words = normalized.split(" ")
+    if any(_line_width(font, word) > max_width for word in words):
+        raise ValueError("body copy contains a word wider than the fixed text area")
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if _line_width(font, candidate) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _headline_highlight(headline: str) -> str:
+    """Choose one stable emphasis phrase without changing the approved copy."""
+    words = " ".join(str(headline or "").split()).split(" ")
+    if not words:
+        return ""
+    return " ".join(words[-2:]) if len(words) >= 2 else words[0]
+
+
+def apply_slide_typography(
+    image: Image.Image,
+    headline: str,
+    body_lines: list[str],
+    *,
+    uppercase_headline: bool = False,
+) -> Image.Image:
+    """Composite fixed Baskaran Builds typography over a text-free visual.
+
+    Headline and body sizes never change between slides. If approved copy does
+    not fit the shared reservation, rendering fails visibly instead of silently
+    switching to a smaller or different type treatment.
+    """
+    result = image.convert("RGB")
+    background, text_color, _divider = _rail_colors(result)
+    headline_text = " ".join(str(headline or "").split())
+    if uppercase_headline:
+        headline_text = headline_text.upper()
+    clean_body = [" ".join(str(line).split()) for line in body_lines if str(line).strip()]
+
+    max_width = TEXT_CONTENT_RIGHT - TEXT_CONTENT_LEFT
+    head_font = headline_font(HEADLINE_FONT_SIZE)
+    body_font = _font(BODY_FONT_SIZE)
+    headline_lines = _balanced_wrap(
+        headline_text,
+        head_font,
+        max_width,
+        HEADLINE_MAX_LINES,
+    )
+    wrapped_body = [_greedy_wrap(line, body_font, max_width) for line in clean_body]
+
+    head_ascent, head_descent = head_font.getmetrics()
+    body_ascent, body_descent = body_font.getmetrics()
+    head_line_height = head_ascent + head_descent
+    body_line_height = body_ascent + body_descent
+    head_gap = max(4, round(head_line_height * 0.06))
+    body_gap = max(5, round(body_line_height * 0.14))
+    thought_gap = 10
+    headline_height = (
+        len(headline_lines) * head_line_height
+        + max(0, len(headline_lines) - 1) * head_gap
+    )
+    body_height = sum(
+        len(lines) * body_line_height + max(0, len(lines) - 1) * body_gap
+        for lines in wrapped_body
+    ) + max(0, len(wrapped_body) - 1) * thought_gap
+    section_gap = 28 if wrapped_body else 0
+    total_height = headline_height + section_gap + body_height
+    if TEXT_PANEL_TOP + total_height > TEXT_PANEL_BOTTOM:
+        raise ValueError(
+            "approved slide copy does not fit the fixed 76px headline and "
+            "36px body typography reservation"
+        )
+
+    draw = ImageDraw.Draw(result)
+    draw.rectangle(
+        (0, TEXT_PANEL_TOP - 8, SLIDE_WIDTH, TEXT_PANEL_BOTTOM),
+        fill=background,
+    )
+    highlight = _headline_highlight(headline_text)
+    highlight_start = headline_text.rfind(highlight) if highlight else -1
+    highlight_end = highlight_start + len(highlight) if highlight_start >= 0 else -1
+    global_index = 0
+    y = TEXT_PANEL_TOP
+    for line in headline_lines:
+        x = float(TEXT_CONTENT_LEFT)
+        for char in line:
+            color = ACCENT_GREEN if highlight_start <= global_index < highlight_end else text_color
+            draw.text((x, y), char, font=head_font, fill=color)
+            x += head_font.getlength(char)
+            global_index += 1
+        global_index += 1
+        y += head_line_height + head_gap
+    if headline_lines:
+        y -= head_gap
+    y += section_gap
+    for thought_index, lines in enumerate(wrapped_body):
+        for line_index, line in enumerate(lines):
+            draw.text(
+                (TEXT_CONTENT_LEFT, y),
+                line,
+                font=body_font,
+                fill=text_color,
+            )
+            y += body_line_height
+            if line_index < len(lines) - 1:
+                y += body_gap
+        if thought_index < len(wrapped_body) - 1:
+            y += thought_gap
+    return result
 
 
 def draw_slide_number(
@@ -385,12 +567,14 @@ def validate_footer_padding(
 
 __all__ = [
     "ACCENT_GREEN",
+    "BODY_FONT_SIZE",
     "HEADLINE_FONT_SIZE",
     "HEADLINE_MAX_LINES",
     "HEADLINE_MIN_FONT_SIZE",
     "HEADLINE_STYLE",
     "apply_body_brand_rail",
     "apply_cta_brand_rail",
+    "apply_slide_typography",
     "draw_slide_number",
     "headline_font",
     "normalize_accent_green",

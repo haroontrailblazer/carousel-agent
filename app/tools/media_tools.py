@@ -50,7 +50,6 @@ from app.tools.brand_layout import (
     ACCENT_GREEN,
     HEADLINE_FONT_SIZE,
     HEADLINE_MAX_LINES,
-    HEADLINE_MIN_FONT_SIZE,
     WARM_WHITE,
     draw_slide_number,
     headline_font,
@@ -982,14 +981,14 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
 
     max_w = width * _TITLE_MAX_WIDTH_FRAC
     font = _load_title_font(HEADLINE_FONT_SIZE)
-    lines = [text]
-    for size in range(HEADLINE_FONT_SIZE, HEADLINE_MIN_FONT_SIZE - 1, -2):
-        font = _load_title_font(size)
-        lines = _wrap_title(text, font, max_w)
-        if len(lines) <= _TITLE_MAX_LINES and all(
-            _line_width(font, ln) <= max_w for ln in lines
-        ):
-            break
+    lines = _wrap_title(text, font, max_w)
+    if len(lines) > _TITLE_MAX_LINES or any(
+        _line_width(font, line) > max_w for line in lines
+    ):
+        raise ValueError(
+            f"cover title does not fit at the fixed {HEADLINE_FONT_SIZE}px size "
+            f"within {_TITLE_MAX_LINES} lines"
+        )
 
     draw = ImageDraw.Draw(canvas)
     ascent, descent = font.getmetrics()

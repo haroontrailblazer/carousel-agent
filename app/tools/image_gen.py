@@ -8,12 +8,14 @@ Template Design and CTA agents):
 
 Rendering contract (see docs/CONTRACTS.md + skills/design-skill.md):
 
-- When a template reference image exists, the ``images.edit`` endpoint is used
-  so the model reproduces the template layout and only swaps the text; the
-  prompt demands the text VERBATIM, character for character (the
-  Stitch & Verify agent rejects slides whose rendered text drifts).
-- Without a template, ``images.generate`` is used with a detailed style prompt
-  built from skills/design-skill.md.
+- The image model creates a text-free visual layer. Approved copy is composited
+  afterward with Pillow, so headline and body typography are identical across
+  every render and remain verbatim.
+- A real news-subject reference can be supplied to ``images.edit`` for slides
+  that identify a film, person, product, character, or event. The model must
+  preserve that exact subject instead of inventing a generic substitute.
+- Without a reference, ``images.generate`` is used with a detailed style
+  prompt built from skills/design-skill.md.
 - gpt-image-2 arbitrary sizes must be divisible by 16, so generation happens
   at 1088x1360 (exact 4:5) and the result is downscaled with Pillow LANCZOS to
   1080x1350 before being written to ``out_path``.
@@ -42,10 +44,9 @@ from app import observability
 from app.config import load_skill, settings
 from app.text_rules import require_no_em_dash, require_readable_text
 from app.tools.brand_layout import (
-    HEADLINE_FONT_SIZE,
-    HEADLINE_STYLE,
     apply_body_brand_rail,
     apply_cta_brand_rail,
+    apply_slide_typography,
     normalize_accent_green,
 )
 
@@ -81,16 +82,15 @@ only a compact centered visual may float above it with a tight gap. CTA slide:
 same family, one clear action, no swipe arrow.
 """.strip()
 
-_VERBATIM_RULE = (
-    "CRITICAL TEXT RULE: every quoted string below must appear in the image "
-    "VERBATIM - matching character for character, including capitalization, "
-    "punctuation, digits and spacing. Do NOT paraphrase, translate, correct "
-    "spelling, abbreviate, drop words, or add any words, labels or watermarks "
-    "that are not listed. Render no other text anywhere in the image. Use "
-    "clear, correctly formed letters for every word. Do not create fake "
-    "words, garbled letters, pseudo-text, tiny decorative text, or symbols "
-    "that resemble writing. If a decorative visual would normally contain "
-    "labels, use an unlabeled shape instead."
+_NO_TEXT_RULE = (
+    "CRITICAL VISUAL-LAYER RULE: render no text, letters, digits, labels, "
+    "captions, logos, handles, watermarks, pseudo-text, or writing-like marks "
+    "anywhere. Typography is added deterministically after generation. Keep "
+    "the entire upper text panel from y=132 through y=620 visually blank and "
+    "flat. If a chart, interface, sign, poster, or diagram normally contains "
+    "writing, remove its labels and use only clear unlabeled shapes. Do not "
+    "use lime or any green accent in the visual layer because the typography "
+    "layer owns the slide's single #B8EF43 emphasis."
 )
 
 
@@ -223,10 +223,13 @@ def _finalize(png_bytes: bytes, out_path: str) -> str:
     return str(destination)
 
 
-def _quoted_block(label: str, lines: list[str]) -> str:
-    """Format text lines as an explicitly quoted, numbered block for the prompt."""
-    numbered = "\n".join(f'  {i}. "{line}"' for i, line in enumerate(lines, start=1))
-    return f"{label}:\n{numbered}" if numbered else f"{label}: (none)"
+def _meaning_block(headline: str, lines: list[str]) -> str:
+    """Describe the approved message as visual context, never as image text."""
+    body = " | ".join(lines) if lines else "No supporting body copy."
+    return (
+        "MESSAGE TO EXPLAIN VISUALLY ONLY. Do not render these words: "
+        f"headline={headline!r}; supporting ideas={body!r}."
+    )
 
 
 def generate_slide_image(
@@ -236,6 +239,8 @@ def generate_slide_image(
     slide_no: int,
     out_path: str,
     layout_hint: str = "editorial explainer",
+    visual_context: str = "",
+    visual_reference: str = "",
 ) -> str:
     """Render one body slide (1080x1350 PNG) with gpt-image-2.
 
@@ -252,6 +257,10 @@ def generate_slide_image(
             shown as a small quiet number tag, e.g. "02".
         out_path: Destination PNG path; parent directories are created.
         layout_hint: Content-aware archetype chosen by the template agent.
+        visual_context: Research-grounded description of the exact news subject,
+            the slide purpose, and verified facts relevant to its visual.
+        visual_reference: Optional local image containing the real news subject.
+            Used as a factual identity reference, not as a text/layout source.
 
     Returns:
         The absolute/normalized path of the written PNG as a string.
@@ -260,52 +269,65 @@ def generate_slide_image(
     require_readable_text([headline, *copy_lines], "body slide copy")
     tag = f"{slide_no:02d}"
     allowed = [
-        _VERBATIM_RULE,
+        _NO_TEXT_RULE,
         "",
         f'Use the "{layout_hint}" layout archetype from the design system.',
+        _meaning_block(headline, copy_lines),
         (
-            "Match slide 1 headline typography: use a "
-            f"{HEADLINE_FONT_SIZE}px-equivalent {HEADLINE_STYLE} headline at "
-            "1080px canvas width, with tight editorial line-height and no "
-            "shadow, outline, glow, or alternate display font."
-        ),
-        _quoted_block("Headline (bold, with ONE lime word or phrase)", [headline]),
-        _quoted_block(
-            "Body lines (left-aligned, in this exact order, one per line)",
-            copy_lines,
-        ),
-        (
-            "Keep all editorial text inside x=88..992 and y=140..1110. Leave "
-            "x=88..200 and y=76..130 blank for the deterministic slide number. "
-            "For a dominant image or illustration that occupies most of the lower "
-            "content area, extend its lowest visible edge to y=1160 so it touches "
-            "the footer divider with no empty band. Do not stop a large visual above "
-            "the line. A compact, clearly centered visual that does not fill most of "
-            "the width or lower area may float above the divider with a tight gap. "
-            "Never cross below y=1160. Leave y=1161..1350 completely blank for the "
-            "deterministic brand rail; do not draw a logo, handle, divider, arrow, "
-            "slide number, footer text, or footer decoration."
+            "Build the explanatory visual only in y=640..1160. For a dominant "
+            "image or illustration that occupies most of this lower content "
+            "area, extend its lowest visible edge to y=1160 so it touches the "
+            "footer divider with no empty band. A compact centered visual may "
+            "float above the divider with a tight gap. Never cross below y=1160. "
+            "Leave x=88..200 and y=76..130 blank for the deterministic slide "
+            "number. Leave y=1161..1350 completely blank for the deterministic "
+            "brand rail."
         ),
     ]
+    if visual_context.strip():
+        allowed.insert(
+            2,
+            (
+                "VISUAL GROUNDING SOURCE OF TRUTH:\n"
+                f"{visual_context.strip()}\n"
+                "Every visible subject must correspond to this exact news item. "
+                "Do not substitute a different film, person, character, product, "
+                "interface, country, studio, or event."
+            ),
+        )
     text_spec = "\n".join(allowed)
     template = _template_file(template_ref)
+    subject_reference = _template_file(visual_reference) if visual_reference else None
     if template is not None:
         prompt = (
-            "The attached image is the slide layout template. Reproduce its "
-            "layout, typography, colors, spacing and composition EXACTLY - "
-            "change nothing about the design. Replace ONLY the text content "
-            "with the text specified below.\n\n" + text_spec
+            "The attached image is a layout reference. Preserve its visual "
+            "composition and spacing, but remove all existing typography and "
+            "footer furniture so the output is a clean text-free layer.\n\n"
+            + text_spec
         )
+        input_image = template
+    elif subject_reference is not None:
+        prompt = (
+            "The attached image is a factual subject reference, not a layout "
+            "template. Preserve the recognizable subject identity, character "
+            "design, and source visual language. Do not reproduce any title, "
+            "overlay, footer, or writing from the reference. Create a new "
+            "text-free lower visual that follows the instructions below.\n\n"
+            + text_spec
+        )
+        input_image = subject_reference
     else:
         prompt = (
             "Design a single Instagram carousel body slide, portrait 4:5.\n\n"
             f"{_style_prompt()}\n\n{text_spec}"
         )
-    png = _call_images_api(prompt, template)
+        input_image = None
+    png = _call_images_api(prompt, input_image)
     result = _finalize(png, out_path)
     with Image.open(result) as rendered:
         normalized = normalize_accent_green(rendered)
-        branded = apply_body_brand_rail(normalized, settings.ig_handle, slide_no)
+        typeset = apply_slide_typography(normalized, headline, copy_lines)
+        branded = apply_body_brand_rail(typeset, settings.ig_handle, slide_no)
     branded.save(result, format="PNG")
     logger.info("Rendered body slide %s -> %s", tag, result)
     return result
@@ -348,21 +370,19 @@ def generate_cta_image(
     }
     hint = variant_hints.get(cta_type, variant_hints["follow"])
     all_lines = [line for line in lines if line and line.strip()]
-    text_parts = [
-        _VERBATIM_RULE,
-        "",
-        f"CTA variant: {cta_type}. {hint}",
-        _quoted_block("CTA headline (big, centered)", [headline]),
-        _quoted_block("Supporting lines (in this exact order)", all_lines),
-    ]
     normalized_handle = settings.ig_handle.strip().lstrip("@").lower()
     normalized_link = link_text.strip().lstrip("@").lower()
+    render_lines = list(all_lines)
     if link_text and normalized_link != normalized_handle:
-        text_parts.append(
-            f'Destination link (inside the CTA content area): "{link_text.strip()}"'
-        )
+        render_lines.append(link_text.strip())
+    text_parts = [
+        _NO_TEXT_RULE,
+        "",
+        f"CTA variant: {cta_type}. {hint}",
+        _meaning_block(headline, render_lines),
+    ]
     text_parts.append(
-        "Keep all CTA text and visuals inside x=88..992 and y=140..1110. "
+        "Keep the CTA visual inside x=88..992 and y=640..1160. "
         "Leave x=88..200 and y=76..130 blank for the deterministic slide number. "
         "Leave y=1161..1350 completely blank for the deterministic favicon "
         "and handle rail. Do not draw a handle, footer portrait, logo, divider, "
@@ -373,10 +393,9 @@ def generate_cta_image(
     template = _template_file(template_ref)
     if template is not None:
         prompt = (
-            "The attached image is the CTA slide layout template. Reproduce "
-            "its layout, typography, colors, spacing and composition EXACTLY "
-            "- change nothing about the design. Replace ONLY the text content "
-            "with the text specified below.\n\n" + text_spec
+            "The attached image is a CTA layout reference. Preserve its visual "
+            "composition, but remove all existing typography and footer "
+            "furniture so the output is a clean text-free layer.\n\n" + text_spec
         )
     else:
         prompt = (
@@ -388,8 +407,9 @@ def generate_cta_image(
     result = _finalize(png, out_path)
     with Image.open(result) as rendered:
         normalized = normalize_accent_green(rendered)
+        typeset = apply_slide_typography(normalized, headline, render_lines)
         branded = apply_cta_brand_rail(
-            normalized,
+            typeset,
             settings.ig_handle,
             slide_no,
         )

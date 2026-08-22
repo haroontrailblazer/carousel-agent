@@ -19,21 +19,35 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
 
 from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
+from PIL import Image
 
 from app.config import agent_instructions, load_skill, settings
 from app.llm import resolve_model
-from app.schemas import CarouselPlan, CopySet, RenderedSlide, SlideCopy
+from app.schemas import (
+    CarouselPlan,
+    CopySet,
+    CoverSpec,
+    NewsItem,
+    RenderedSlide,
+    ResearchBrief,
+    SlideCopy,
+    SlidePlan,
+)
 from app.state import (
     AGENT_TEMPLATE_DESIGN,
     K_BODY_SLIDES,
+    K_COVER,
     K_COPY,
+    K_NEWS_ITEM,
     K_PLAN,
+    K_RESEARCH,
     K_RUN_ID,
     get_model,
 )
@@ -192,7 +206,15 @@ def _layout_hint(slide: SlideCopy) -> str:
     text = " ".join(slide.lines).lower()
     if re.search(r"\b(vs\.?|versus|compare|comparison|before|after|old|new)\b", text):
         return "comparison"
-    if re.search(r"(?:\d[\d,.]*\s*%|[$€£₹]\s*\d|\b\d{2,}\b)", text):
+    number_tokens = re.findall(r"\b\d[\d,]*\b", text)
+    has_non_year_number = any(
+        not (token.isdigit() and 1900 <= int(token) <= 2099)
+        for token in number_tokens
+    )
+    if (
+        re.search(r"\d[\d,.]*\s*%|[$€£₹]\s*\d", text)
+        or has_non_year_number
+    ):
         return "data evidence"
     if re.search(
         r"\b(step|process|workflow|first|then|next|finally|loop|sequence)\b|(?:->|→)",
@@ -205,6 +227,81 @@ def _layout_hint(slide: SlideCopy) -> str:
     ):
         return "dark proof"
     return "editorial explainer" if slide.index % 2 == 0 else "statement pause"
+
+
+def _visual_context(
+    news: NewsItem | None,
+    research: ResearchBrief | None,
+    plan_slide: SlidePlan | None,
+) -> str:
+    """Build a compact source-of-truth block for visual generation."""
+    sections: list[str] = []
+    if news is not None:
+        if news.title.strip():
+            sections.append(f"Exact news item: {news.title.strip()}")
+        if news.summary.strip():
+            sections.append(f"News summary: {news.summary.strip()}")
+    if research is not None:
+        if research.summary.strip():
+            sections.append(f"Verified research: {research.summary.strip()}")
+        facts = [fact.fact.strip() for fact in research.key_facts if fact.fact.strip()]
+        if facts:
+            sections.append("Verified facts: " + " | ".join(facts[:6]))
+    if plan_slide is not None:
+        if plan_slide.purpose.strip():
+            sections.append(f"This slide's purpose: {plan_slide.purpose.strip()}")
+        points = [point.strip() for point in plan_slide.key_points if point.strip()]
+        if points:
+            sections.append("This slide's approved points: " + " | ".join(points))
+    return "\n".join(sections)[:2800]
+
+
+def _needs_subject_reference(plan_slide: SlidePlan | None) -> bool:
+    """True when the slide must visibly identify the exact news subject."""
+    if plan_slide is None:
+        return False
+    text = " ".join([plan_slide.purpose, *plan_slide.key_points]).lower()
+    return bool(
+        re.search(
+            r"\b(who|what|introduce|identify|identity|film|movie|person|"
+            r"character|product|company|event|subject)\b",
+            text,
+        )
+    )
+
+
+async def _cover_subject_reference(
+    tool_context: ToolContext,
+    cover: CoverSpec | None,
+    out_dir: Path,
+) -> str:
+    """Extract the sourced top media zone from the current cover poster."""
+    if cover is None or not cover.poster_artifact.strip():
+        return ""
+    try:
+        part = await tool_context.load_artifact(cover.poster_artifact)
+    except Exception as exc:
+        logger.warning("Could not load cover poster for subject grounding: %s", exc)
+        return ""
+    data = (
+        part.inline_data.data
+        if part is not None and part.inline_data is not None
+        else None
+    )
+    if not data:
+        logger.warning("Cover poster has no inline image bytes for subject grounding.")
+        return ""
+    try:
+        with Image.open(BytesIO(data)) as source:
+            rgb = source.convert("RGB")
+            crop_bottom = max(1, round(rgb.height * 0.62))
+            subject = rgb.crop((0, 0, rgb.width, crop_bottom))
+            path = out_dir / "news-subject-reference.png"
+            subject.save(path, format="PNG")
+    except Exception as exc:
+        logger.warning("Could not extract cover subject reference: %s", exc)
+        return ""
+    return str(path)
 
 
 def _run_workdir(state: Any) -> Path:
@@ -249,6 +346,9 @@ async def render_body_slides(
             ),
         }
     plan = get_model(state, K_PLAN, CarouselPlan)
+    news = get_model(state, K_NEWS_ITEM, NewsItem)
+    research = get_model(state, K_RESEARCH, ResearchBrief)
+    cover = get_model(state, K_COVER, CoverSpec)
 
     slides = sorted(copy_set.slides, key=lambda s: s.index)
     wanted = {int(i) for i in indices} if indices else None
@@ -272,6 +372,15 @@ async def render_body_slides(
 
     template_ref = _discover_template_ref("Body slide template")
     out_dir = _run_workdir(state)
+    plan_slides = {slide.index: slide for slide in plan.slides} if plan is not None else {}
+    needs_reference = any(
+        _needs_subject_reference(plan_slides.get(slide.index)) for slide in slides
+    )
+    subject_reference = (
+        await _cover_subject_reference(tool_context, cover, out_dir)
+        if needs_reference
+        else ""
+    )
 
     # Partial re-renders merge into the existing rendered list; full renders
     # replace it (dropping stale entries for slides no longer in the copy).
@@ -295,6 +404,7 @@ async def render_body_slides(
             # generate_slide_image blocks on a slow image API call - keep the
             # event loop free by running it in a worker thread.
             layout_hint = _layout_hint(slide)
+            plan_slide = plan_slides.get(slide.index)
             written = await asyncio.to_thread(
                 image_gen.generate_slide_image,
                 template_ref,
@@ -303,6 +413,8 @@ async def render_body_slides(
                 slide.index,
                 str(out_path),
                 layout_hint,
+                _visual_context(news, research, plan_slide),
+                subject_reference if _needs_subject_reference(plan_slide) else "",
             )
             png_bytes = Path(written).read_bytes()
             await tool_context.save_artifact(
