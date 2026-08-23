@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 from PIL import Image, ImageDraw, ImageFont
@@ -48,7 +48,6 @@ from app.config import settings
 from app.text_rules import require_no_em_dash
 from app.tools.brand_layout import (
     ACCENT_GREEN,
-    HEADLINE_FONT_SIZE,
     HEADLINE_MAX_LINES,
     WARM_WHITE,
     draw_slide_number,
@@ -92,7 +91,8 @@ _IMAGE_CANDIDATE_LIMIT = 5
 _TEXT_PRIMARY = (232, 228, 214, 255)  # #E8E4D6
 _ACCENT_GREEN = (*ACCENT_GREEN, 255)  # #B8EF43
 _TITLE_MAX_LINES = HEADLINE_MAX_LINES
-_TITLE_MAX_WIDTH_FRAC = 0.63  # inner span between the template's arrow glyphs
+_COVER_TITLE_FONT_SIZE = 128
+_TITLE_MAX_WIDTH_FRAC = 0.78
 _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
 
 # Region of the template occupied by its baked-in EXAMPLE title text
@@ -114,6 +114,17 @@ _TOPIC_STOPWORDS = {
 _GOOD_VISUAL_TOKENS = {
     "announcement", "cover", "demo", "event", "hero", "keynote", "launch",
     "product", "release", "screenshot", "stage", "visual",
+}
+_REPUTABLE_VISUAL_SITES = {
+    "apnews.com",
+    "caixin.com",
+    "douban.com",
+    "maoyan.com",
+    "sina.cn",
+    "sixthtone.com",
+    "themoviedb.org",
+    "wikipedia.org",
+    "wikimedia.org",
 }
 _BAD_VISUAL_TOKENS = {
     "avatar", "badge", "favicon", "icon", "logo", "placeholder", "sprite",
@@ -365,6 +376,46 @@ def _topic_tokens(news: dict) -> set[str]:
     }
 
 
+def _is_reputable_visual_site(site: str) -> bool:
+    """Return whether a host belongs to a trusted source or media catalog."""
+    return any(
+        site == trusted or site.endswith("." + trusted)
+        for trusted in _REPUTABLE_VISUAL_SITES
+    )
+
+
+def _default_visual_query(news: dict) -> str:
+    """Build a clean topic query even when an ad-hoc title contains only URLs."""
+    raw = " ".join(
+        str(news.get(key) or "") for key in ("title", "summary", "body")
+    )
+    urls = _URL_IN_TEXT_RE.findall(raw)
+    without_urls = _URL_IN_TEXT_RE.sub(" ", raw)
+    clean_text = re.sub(r"\s+", " ", without_urls).strip()
+    slug_phrases: list[str] = []
+    for url in urls:
+        path = unquote(urlparse(url).path).strip("/")
+        if not path:
+            continue
+        slug = path.split("/")[-1]
+        phrase = re.sub(r"[-_]+", " ", slug)
+        phrase = re.sub(
+            r"\b(?:index|article|detail|movie|movies|news)\b",
+            " ",
+            phrase,
+            flags=re.I,
+        )
+        phrase = re.sub(r"\b\d{4,}\b", " ", phrase)
+        phrase = re.sub(r"\s+", " ", phrase).strip()
+        if phrase and any(char.isalpha() for char in phrase):
+            slug_phrases.append(phrase)
+    topic = slug_phrases[0] if slug_phrases else clean_text
+    topic = re.sub(r"\s+", " ", topic).strip()
+    if clean_text and clean_text.lower() not in topic.lower():
+        topic = f"{topic} {clean_text}".strip()
+    return f"{topic} official current news image film still poster".strip()
+
+
 def _rank_candidate(
     candidate: _MediaCandidate,
     news: dict,
@@ -385,6 +436,12 @@ def _rank_candidate(
     if source_site and context_site == source_site:
         score += 12
         reasons.append("official/source-site +12")
+    if _is_reputable_visual_site(context_site):
+        score += 14
+        reasons.append("trusted visual source +14")
+    if context_site.endswith(".blog"):
+        score -= 30
+        reasons.append("unverified blog source -30")
 
     good = sorted(token for token in _GOOD_VISUAL_TOKENS if token in context)
     if good:
@@ -420,7 +477,7 @@ def _search_trending_pages(
     topic = re.sub(
         r"\s+",
         " ",
-        (search_query or str(news.get("title") or "")).strip(),
+        (search_query or _default_visual_query(news)).strip(),
     )
     if not topic:
         return [], "trend search skipped: empty topic"
@@ -509,7 +566,7 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
     Returns:
         Dict with keys: ``found`` (bool), ``url`` (str), ``is_video`` (bool),
         ``duration_s`` (float, 0.0 when unknown), ``origin``
-        ('media_urls' | 'source_url' | 'source_page' | 'body_url' |
+        ('media_urls' | 'media_page' | 'source_url' | 'source_page' | 'body_url' |
         'body_page' | 'trend_search' | 'web_search' | ''),
         ``image_candidates`` (ranked still alternatives), ``trend_search``
         (live-search status), and ``note`` (str).
@@ -539,6 +596,16 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
         kind = _classify_url(url)
         score = {"video": 100, "image": 50}.get(kind, 25)
         add(url, kind, score, "media_urls", reason="attached source media")
+        if kind == "unknown":
+            for media_url, media_kind, scraped_score in _scrape_page_media(url):
+                add(
+                    media_url,
+                    media_kind,
+                    max(scraped_score, 66 if media_kind == "image" else 94),
+                    "media_page",
+                    url,
+                    "media from an attached research source page",
+                )
 
     source_url = str(news.get("source_url") or "").strip()
     if source_url and _classify_url(source_url) == "video":
@@ -965,8 +1032,8 @@ def _highlight_color() -> tuple[int, int, int, int]:
 def _render_title_block(title: str, highlight: str) -> Image.Image:
     """Render the cover title onto a transparent 1080x1350 RGBA image.
 
-    Centered in the lower third, up to three lines, shared 76 px-equivalent
-    condensed bold grotesk typography,
+    Centered in the lower third, up to three lines, 128 px condensed bold
+    grotesk typography,
     uppercase, white, with the highlight phrase in a per-character horizontal
     single brand green (#B8EF43), with no gradient or shade variation.
     """
@@ -980,13 +1047,13 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
     hl_end = hl_start + len(hl) if hl_start >= 0 else -1
 
     max_w = width * _TITLE_MAX_WIDTH_FRAC
-    font = _load_title_font(HEADLINE_FONT_SIZE)
+    font = _load_title_font(_COVER_TITLE_FONT_SIZE)
     lines = _wrap_title(text, font, max_w)
     if len(lines) > _TITLE_MAX_LINES or any(
         _line_width(font, line) > max_w for line in lines
     ):
         raise ValueError(
-            f"cover title does not fit at the fixed {HEADLINE_FONT_SIZE}px size "
+            f"cover title does not fit at the fixed {_COVER_TITLE_FONT_SIZE}px size "
             f"within {_TITLE_MAX_LINES} lines"
         )
 

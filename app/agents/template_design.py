@@ -260,12 +260,12 @@ def _needs_subject_reference(plan_slide: SlidePlan | None) -> bool:
     """True when the slide must visibly identify the exact news subject."""
     if plan_slide is None:
         return False
-    text = " ".join([plan_slide.purpose, *plan_slide.key_points]).lower()
+    purpose = plan_slide.purpose.lower()
     return bool(
         re.search(
-            r"\b(who|what|introduce|identify|identity|film|movie|person|"
-            r"character|product|company|event|subject)\b",
-            text,
+            r"\b(introduce|identify|identity|subject|meet)\b|"
+            r"\b(show|explain) what\b|\b(who|what) (is|are)\b",
+            purpose,
         )
     )
 

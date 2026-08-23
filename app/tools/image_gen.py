@@ -11,9 +11,9 @@ Rendering contract (see docs/CONTRACTS.md + skills/design-skill.md):
 - The image model creates a text-free visual layer. Approved copy is composited
   afterward with Pillow, so headline and body typography are identical across
   every render and remain verbatim.
-- A real news-subject reference can be supplied to ``images.edit`` for slides
-  that identify a film, person, product, character, or event. The model must
-  preserve that exact subject instead of inventing a generic substitute.
+- A real news-subject reference can be supplied for slides that identify a
+  film, person, product, character, or event. It is composited into the lower
+  visual zone after generation and is never used as an edit-template input.
 - Without a reference, ``images.generate`` is used with a detailed style
   prompt built from skills/design-skill.md.
 - gpt-image-2 arbitrary sizes must be divisible by 16, so generation happens
@@ -38,12 +38,16 @@ from openai import (
     OpenAI,
     OpenAIError,
 )
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app import observability
 from app.config import load_skill, settings
 from app.text_rules import require_no_em_dash, require_readable_text
 from app.tools.brand_layout import (
+    RAIL_DIVIDER_Y,
+    SLIDE_WIDTH,
+    TEXT_PANEL_BOTTOM,
+    anchor_dominant_visual_to_divider,
     apply_body_brand_rail,
     apply_cta_brand_rail,
     apply_slide_typography,
@@ -90,7 +94,10 @@ _NO_TEXT_RULE = (
     "flat. If a chart, interface, sign, poster, or diagram normally contains "
     "writing, remove its labels and use only clear unlabeled shapes. Do not "
     "use lime or any green accent in the visual layer because the typography "
-    "layer owns the slide's single #B8EF43 emphasis."
+    "layer owns the slide's single #B8EF43 emphasis. Generated illustration "
+    "uses only paper, ink, warm white, and muted neutral tones. Do not use red, "
+    "orange, blue, purple, or unrelated gradients. Real source-image colors "
+    "are allowed only in the sourced image composited after generation."
 )
 
 
@@ -223,6 +230,27 @@ def _finalize(png_bytes: bytes, out_path: str) -> str:
     return str(destination)
 
 
+def _composite_subject_reference(
+    image: Image.Image,
+    visual_reference: str,
+) -> Image.Image:
+    """Place a sourced subject image into the lower visual zone without restyling it."""
+    result = image.convert("RGB")
+    reference = _template_file(visual_reference) if visual_reference else None
+    if reference is None:
+        return result
+    _filename, data, _mime = reference
+    with Image.open(BytesIO(data)) as source:
+        fitted = ImageOps.fit(
+            source.convert("RGB"),
+            (SLIDE_WIDTH, RAIL_DIVIDER_Y - TEXT_PANEL_BOTTOM),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.45),
+        )
+    result.paste(fitted, (0, TEXT_PANEL_BOTTOM))
+    return result
+
+
 def _meaning_block(headline: str, lines: list[str]) -> str:
     """Describe the approved message as visual context, never as image text."""
     body = " | ".join(lines) if lines else "No supporting body copy."
@@ -246,8 +274,8 @@ def generate_slide_image(
 
     Args:
         template_ref: Path to the template reference image. When the file
-            exists the images.edit endpoint reproduces its layout with the new
-            text; when empty/missing, images.generate is used with the full
+            exists the images.edit endpoint reproduces its text-free visual
+            layout; when empty/missing, images.generate is used with the full
             style prompt from skills/design-skill.md.
         copy_lines: The approved body copy lines (rendered verbatim, one
             thought per line, in order).
@@ -297,7 +325,6 @@ def generate_slide_image(
         )
     text_spec = "\n".join(allowed)
     template = _template_file(template_ref)
-    subject_reference = _template_file(visual_reference) if visual_reference else None
     if template is not None:
         prompt = (
             "The attached image is a layout reference. Preserve its visual "
@@ -306,27 +333,31 @@ def generate_slide_image(
             + text_spec
         )
         input_image = template
-    elif subject_reference is not None:
-        prompt = (
-            "The attached image is a factual subject reference, not a layout "
-            "template. Preserve the recognizable subject identity, character "
-            "design, and source visual language. Do not reproduce any title, "
-            "overlay, footer, or writing from the reference. Create a new "
-            "text-free lower visual that follows the instructions below.\n\n"
-            + text_spec
-        )
-        input_image = subject_reference
     else:
+        reference_note = (
+            "A sourced subject image will be composited into the lower visual "
+            "zone after generation. Create only a restrained brand-consistent "
+            "frame and do not invent or depict a replacement subject.\n\n"
+            if visual_reference.strip()
+            else ""
+        )
         prompt = (
             "Design a single Instagram carousel body slide, portrait 4:5.\n\n"
-            f"{_style_prompt()}\n\n{text_spec}"
+            f"{_style_prompt()}\n\n{reference_note}{text_spec}"
         )
         input_image = None
     png = _call_images_api(prompt, input_image)
     result = _finalize(png, out_path)
     with Image.open(result) as rendered:
-        normalized = normalize_accent_green(rendered)
-        typeset = apply_slide_typography(normalized, headline, copy_lines)
+        grounded = _composite_subject_reference(rendered, visual_reference)
+        normalized = normalize_accent_green(grounded)
+        anchored = anchor_dominant_visual_to_divider(normalized)
+        typeset = apply_slide_typography(
+            anchored,
+            headline,
+            copy_lines,
+            theme="paper",
+        )
         branded = apply_body_brand_rail(typeset, settings.ig_handle, slide_no)
     branded.save(result, format="PNG")
     logger.info("Rendered body slide %s -> %s", tag, result)
@@ -407,7 +438,13 @@ def generate_cta_image(
     result = _finalize(png, out_path)
     with Image.open(result) as rendered:
         normalized = normalize_accent_green(rendered)
-        typeset = apply_slide_typography(normalized, headline, render_lines)
+        anchored = anchor_dominant_visual_to_divider(normalized)
+        typeset = apply_slide_typography(
+            anchored,
+            headline,
+            render_lines,
+            theme="ink",
+        )
         branded = apply_cta_brand_rail(
             typeset,
             settings.ig_handle,

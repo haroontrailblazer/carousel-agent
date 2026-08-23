@@ -85,7 +85,9 @@ also yours to use - prefer their exact numbers over vaguer news text:
    when it appears in the source, and make its meaning clear from the sentence.
    Never output invented words, keyboard mash, pseudo-Latin, placeholder text,
    corrupted characters, or decorative strings that only look like language.
-14. Proofread every line before returning it. Each line must make sense to a
+14. Slide copy must use Latin-script English transliterations only. Do not add
+   Chinese characters or alternate-script names in parentheses.
+15. Proofread every line before returning it. Each line must make sense to a
    reader without guessing what a malformed or shortened word was meant to say.
 
 ## Caption rules

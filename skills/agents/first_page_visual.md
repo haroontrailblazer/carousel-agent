@@ -38,6 +38,11 @@ other slide, never write body copy or captions, and never AI-generate media.
    trend_search and image_candidates in the result; never choose an image
    merely because it was the first available URL. You may pass search_query
    to sharpen the hunt (e.g. "<product> launch keynote demo").
+   When the news title is one or more URLs, derive a clean subject query from
+   the research brief and URL slug, such as "Niu Lai animated film official
+   still poster". Prefer attached official or trusted media pages over an
+   unverified blog OG image. Reject text-heavy generic graphics that do not
+   visibly show the real subject.
 2. If it returned a video: call download_and_trim with that URL to get a
    local short clip. If the download fails (403s are common on video hosts),
    try at most ONE more video: another plausible URL from media_urls or one

@@ -218,6 +218,7 @@ def apply_slide_typography(
     body_lines: list[str],
     *,
     uppercase_headline: bool = False,
+    theme: Literal["auto", "paper", "ink"] = "auto",
 ) -> Image.Image:
     """Composite fixed Baskaran Builds typography over a text-free visual.
 
@@ -226,7 +227,12 @@ def apply_slide_typography(
     switching to a smaller or different type treatment.
     """
     result = image.convert("RGB")
-    background, text_color, _divider = _rail_colors(result)
+    if theme == "paper":
+        background, text_color = PAPER, TEXT_DARK
+    elif theme == "ink":
+        background, text_color = INK, WARM_WHITE
+    else:
+        background, text_color, _divider = _visual_field_colors(result)
     headline_text = " ".join(str(headline or "").split())
     if uppercase_headline:
         headline_text = headline_text.upper()
@@ -267,10 +273,7 @@ def apply_slide_typography(
         )
 
     draw = ImageDraw.Draw(result)
-    draw.rectangle(
-        (0, TEXT_PANEL_TOP - 8, SLIDE_WIDTH, TEXT_PANEL_BOTTOM),
-        fill=background,
-    )
+    draw.rectangle((0, 0, SLIDE_WIDTH, TEXT_PANEL_BOTTOM), fill=background)
     highlight = _headline_highlight(headline_text)
     highlight_start = headline_text.rfind(highlight) if highlight else -1
     highlight_end = highlight_start + len(highlight) if highlight_start >= 0 else -1
@@ -364,10 +367,21 @@ def normalize_accent_green(image: Image.Image) -> Image.Image:
 
 
 def _is_light_slide(image: Image.Image) -> bool:
-    """Classify the slide theme from the reserved footer area."""
-    sample = image.convert("RGB").crop((24, 1260, 64, 1300))
+    """Classify a finished slide from its deterministic upper field."""
+    sample = image.convert("RGB").crop((24, 180, 80, 250))
     r, g, b = ImageStat.Stat(sample).mean[:3]
     return 0.2126 * r + 0.7152 * g + 0.0722 * b >= 145
+
+
+def _visual_field_colors(image: Image.Image) -> tuple[tuple[int, int, int], ...]:
+    """Infer a theme from a generated lower visual before typography exists."""
+    sample = image.convert("RGB").crop(
+        (0, TEXT_PANEL_BOTTOM, SLIDE_WIDTH, RAIL_DIVIDER_Y)
+    )
+    r, g, b = ImageStat.Stat(sample).mean[:3]
+    if 0.2126 * r + 0.7152 * g + 0.0722 * b >= 145:
+        return PAPER, TEXT_DARK, MUTED_DARK
+    return INK, WARM_WHITE, MUTED_LIGHT
 
 
 def _rail_colors(image: Image.Image) -> tuple[tuple[int, int, int], ...]:
@@ -375,6 +389,47 @@ def _rail_colors(image: Image.Image) -> tuple[tuple[int, int, int], ...]:
     if _is_light_slide(image):
         return PAPER, TEXT_DARK, MUTED_DARK
     return INK, WARM_WHITE, MUTED_LIGHT
+
+
+def anchor_dominant_visual_to_divider(image: Image.Image) -> Image.Image:
+    """Extend a wide lower visual to the footer divider when it stops early."""
+    result = image.convert("RGB")
+    visual_top = TEXT_PANEL_BOTTOM
+    visual_bottom = RAIL_DIVIDER_Y
+    bottom_band = result.crop((0, visual_bottom - 8, SLIDE_WIDTH, visual_bottom))
+    mean = ImageStat.Stat(bottom_band).mean[:3]
+    background = tuple(round(channel) for channel in mean)
+    pixels = result.load()
+    dominant_rows: list[int] = []
+    sampled_columns = len(range(0, SLIDE_WIDTH, 4))
+    for y in range(visual_top, visual_bottom):
+        changed = 0
+        for x in range(0, SLIDE_WIDTH, 4):
+            red, green, blue = pixels[x, y]
+            delta = (
+                abs(red - background[0])
+                + abs(green - background[1])
+                + abs(blue - background[2])
+            )
+            if delta >= 70:
+                changed += 1
+        if changed / sampled_columns >= 0.32:
+            dominant_rows.append(y)
+    if not dominant_rows:
+        return result
+    last_content = max(dominant_rows)
+    if last_content >= visual_bottom - 5:
+        return result
+    source_height = last_content + 1 - visual_top
+    if source_height < 180:
+        return result
+    source = result.crop((0, visual_top, SLIDE_WIDTH, last_content + 1))
+    source = source.resize(
+        (SLIDE_WIDTH, visual_bottom - visual_top),
+        Image.Resampling.LANCZOS,
+    )
+    result.paste(source, (0, visual_top))
+    return result
 
 
 def _draw_round_line(
@@ -575,6 +630,7 @@ __all__ = [
     "apply_body_brand_rail",
     "apply_cta_brand_rail",
     "apply_slide_typography",
+    "anchor_dominant_visual_to_divider",
     "draw_slide_number",
     "headline_font",
     "normalize_accent_green",

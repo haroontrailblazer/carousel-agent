@@ -13,6 +13,65 @@ from app.tools.brand_layout import ACCENT_GREEN, HEADLINE_FONT_SIZE, headline_fo
 
 
 class FindSourceClipTests(unittest.TestCase):
+    def test_attached_photo_page_is_scraped_for_its_real_image(self) -> None:
+        page = "https://movie.douban.com/photos/photo/2934982707/"
+        image = "https://img.doubanio.com/view/photo/l/public/p2934982707.jpg"
+        news = {"title": "Niu Lai animated film", "media_urls": [page]}
+
+        def scrape(url: str) -> list[tuple[str, str, int]]:
+            return [(image, "image", 45)] if url == page else []
+
+        with (
+            patch.object(media_tools, "_scrape_page_media", side_effect=scrape),
+            patch.object(
+                media_tools,
+                "_search_trending_pages",
+                return_value=([], "live trend search checked 0 page(s)"),
+            ),
+            patch.object(media_tools, "_probe_with_ytdlp", return_value=None),
+            patch.object(media_tools, "_search_video_online", return_value=None),
+        ):
+            result = media_tools.find_source_clip(news)
+
+        self.assertEqual(result["image_url"], image)
+        self.assertEqual(result["image_origin"], "media_page")
+
+    def test_url_only_news_title_becomes_subject_query(self) -> None:
+        query = media_tools._default_visual_query(
+            {
+                "title": "https://en.wikipedia.org/wiki/Niu_Lai",
+                "body": "here is a new Chinese movie getting viral",
+            }
+        )
+        self.assertIn("Niu Lai", query)
+        self.assertNotIn("https://", query)
+
+    def test_trusted_catalog_image_outranks_unverified_blog_og(self) -> None:
+        news = {"title": "Niu Lai animated film", "tags": []}
+        trusted = media_tools._rank_candidate(
+            media_tools._MediaCandidate(
+                "https://img.doubanio.com/niu-lai.jpg",
+                "image",
+                58,
+                "media_page",
+                "https://movie.douban.com/photos/photo/2934982707/",
+            ),
+            news,
+            "",
+        )
+        blog = media_tools._rank_candidate(
+            media_tools._MediaCandidate(
+                "https://niulai.blog/og.png",
+                "image",
+                58,
+                "trend_search",
+                "https://niulai.blog/",
+            ),
+            news,
+            "",
+        )
+        self.assertGreater(trusted.score, blog.score)
+
     def test_live_trend_visual_can_outrank_first_available_image(self) -> None:
         news = {
             "title": "Widget Agent launch",

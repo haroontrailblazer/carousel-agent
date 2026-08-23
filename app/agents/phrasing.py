@@ -109,7 +109,9 @@ also yours to use - prefer their exact numbers over vaguer news text:
 11. Use only complete, correctly spelled, understandable words. Prefer plain
    English. Never output invented words, keyboard mash, pseudo-Latin,
    placeholder text, corrupted characters, or decorative pseudo-writing.
-12. Proofread every line before returning it. Readers must never have to guess
+12. Slide copy must use Latin-script English transliterations only. Do not add
+   Chinese characters or alternate-script names in parentheses.
+13. Proofread every line before returning it. Readers must never have to guess
    what a malformed or shortened word was meant to say.
 
 ## Caption rules

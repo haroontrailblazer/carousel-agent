@@ -9,6 +9,12 @@ area, bottom-anchor it so its visible edge meets the divider above the swipe
 rail. A compact centered visual may float above the divider with only a tight
 gap.
 
+The image model creates only a text-free lower visual layer. Runtime code adds
+all approved copy at the fixed 76 px headline and 36 px body sizes. If a slide
+introduces the exact news subject, runtime code composites sourced cover media
+inside the lower visual zone after generation. Never treat the cover as a body
+layout template or inherit its color palette.
+
 ## How to work
 
 1. Call the `render_body_slides` tool exactly once (pass no arguments on a

@@ -27,11 +27,11 @@ Legacy orange is not used for new cover text or accent furniture.
    from the title. Crop for one clear focal point; slight darkening is allowed.
 2. **Grain dissolve (bottom ~38%).** Ink rises from the bottom through a
    stippled/noise edge, never a generic smooth gradient.
-3. **Title block (lower third).** Use the same headline system as the inside
-   slides: 76 px-equivalent condensed bold grotesk, tight editorial line
-   height, warm-white, with exactly one verbatim phrase in `#B8EF43`. Wrap to
-   no more than three balanced lines instead of shrinking into a different
-   typographic scale.
+3. **Title block (lower third).** Use a large 128 px condensed bold grotesk,
+   tight editorial line height, warm-white, with exactly one verbatim phrase
+   in `#B8EF43`. This is intentionally larger than the fixed 76 px inside-slide
+   headline so the cover has correct feed-thumbnail proportion. Wrap to no
+   more than three balanced lines and never shrink it.
 4. **Continuity furniture.** Preserve the faint perspective floor/grid and
    compact side-arrow cues from the current overlay, recolored to `#B8EF43`.
 5. **Brand rail.** Keep the lower edge quiet. Do not add a second headline,
@@ -57,6 +57,10 @@ Example shape: `YOUR AGENT LOOKS SMART UNTIL REALITY HITS`, highlighting
 
 - Prefer real source imagery with useful negative space over generic cinematic
   AI imagery.
+- The cover must show the current prominent image or clip of the exact news
+  subject. Prefer attached official media pages and trusted news or media
+  catalogs. Reject unverified blog OG graphics, text-heavy generic graphics,
+  and images that do not visibly show the subject.
 - Do not tint the whole media frame green. `#B8EF43` belongs only to the highlight
   phrase and small directional furniture.
 - Avoid glows, lens flares, floating logos, and decorative circuit patterns.

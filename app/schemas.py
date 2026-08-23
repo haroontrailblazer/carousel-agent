@@ -6,6 +6,7 @@ Keep field names stable: the orchestrator, tools and review API all rely on them
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
@@ -104,6 +105,19 @@ class CopySet(PublishedTextModel):
 
     slides: list[SlideCopy] = Field(default_factory=list)
     caption: str = ""
+
+    @model_validator(mode="after")
+    def validate_latin_slide_copy(self) -> "CopySet":
+        """Keep alternate-script names out of rendered carousel typography."""
+        cjk = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+        for slide in self.slides:
+            for line in slide.lines:
+                if cjk.search(line):
+                    raise ValueError(
+                        "slide copy must use the English transliteration only; "
+                        "remove alternate-script names and parenthetical glyphs"
+                    )
+        return self
 
 
 class RenderedSlide(BaseModel):

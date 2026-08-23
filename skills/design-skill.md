@@ -24,17 +24,20 @@ Use these exact current `baskaranbuilds.com` variables:
   tint, gradient, glow, or alternate green.
 
 Do not use the legacy orange palette on new slides. Do not introduce blue,
-purple, neon glow, or unrelated gradients. A slide may be either ink or paper;
-the carousel should alternate them deliberately for rhythm.
+purple, neon glow, or unrelated gradients. Body slides use one consistent
+paper frame for the title field, number, divider, and footer. Ink may appear
+inside the lower explanatory visual. The CTA uses an ink frame.
 
 ## Format and type
 
 - Canvas: 1080 x 1350 px, portrait 4:5.
 - Safe area: at least 88 px left/right and 76 px top/bottom.
-- Headings: 76 px-equivalent at 1080 px canvas width, Bricolage Grotesque or a
-  close bold condensed grotesk, with tight editorial line-height. This exact
-  scale and treatment is shared by the cover and inside slides; uppercase is
-  allowed for short hooks, sentence case is preferred for editorial headings.
+- Inside-slide headings: exactly 76 px at 1080 px canvas width, Bricolage
+  Grotesque or a close bold condensed grotesk, with tight editorial
+  line-height. Every body and CTA headline uses this same size and face.
+- The cover keeps the same condensed family but uses its own larger 128 px
+  display scale. Never use the cover image or cover palette as a body-slide
+  layout template.
 - Editorial emphasis: Instrument Serif or a close high-contrast serif, used
   sparingly for one phrase rather than whole paragraphs.
 - Labels/data: Instrument Sans or a compact clean grotesk.
@@ -121,6 +124,17 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
 
 ## Illustration, charts, and proof
 
+- The image model generates only the lower visual layer. Headline, body copy,
+  slide number, and footer are composited deterministically after generation.
+  Generated artwork must contain no text, letters, digits, labels, watermarks,
+  pseudo-writing, or green accent.
+- When a slide introduces the exact news subject, use the sourced cover media
+  as a factual image inside the lower visual zone. Composite it after visual
+  generation. Never send the cover image through the image-edit endpoint as a
+  body template because that contaminates the slide palette and composition.
+- All non-photo visual styling stays inside the Baskaran Builds ink, paper,
+  warm-white, muted, and single-green system. Do not inherit red, orange, or
+  unrelated colors from a cover image into the text panel or footer.
 - Prefer line drawings with human irregularity, simple geometric data marks,
   sparse dot matrices, flow lines, comparison dividers, and real code snippets.
 - Never fabricate a chart to make a slide look analytical. Every plotted value
@@ -133,6 +147,9 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
   area: its lowest visible edge must meet the footer divider at y=1160 with no
   empty background band between the visual and the line. It may be naturally
   cropped by that divider, but it must never cross into the rail below it.
+- The compositor detects a wide visual that stops early and extends it to the
+  divider. Do not leave a paper or ink band between dominant artwork and the
+  line.
 - A smaller illustration that is clearly centered and does not span most of
   the available width or lower area may float above the divider. Keep that gap
   visually tight; do not push a compact visual down merely to make it touch.
@@ -161,6 +178,10 @@ or invented links.
 
 - Editorial content: x=88..992 and y=140..1110. The number alone occupies the
   reserved x=88..200, y=76..130 zone.
+- The entire upper field y=0..620 is repainted as one coherent ink or paper
+  surface before text and the number are added. Body slides use paper and the
+  CTA uses ink. Never leave a mismatched top strip or a different-color tile
+  behind the slide number.
 - Footer reservation: y=1161..1350; generated content never enters it. A
   dominant lower visual may extend through y=1160 so it meets the divider.
 - Divider: x=88..992 at y=1160.
@@ -173,6 +194,8 @@ or invented links.
 ## Hard quality gates
 
 - Approved copy is rendered verbatim. Never paraphrase, correct, or add words.
+- Use Latin-script English transliterations in visible slide copy. Do not add
+  Chinese characters or alternate-script names in parentheses.
 - Every visible word must be valid, correctly formed, and understandable. Do
   not draw pseudo-text, garbled letters, decorative writing, invented labels,
   or random symbols that resemble language. When an illustration would
