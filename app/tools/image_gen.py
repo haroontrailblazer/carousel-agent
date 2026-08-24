@@ -281,8 +281,9 @@ def generate_slide_image(
             thought per line, in order).
         headline: The slide headline (rendered verbatim, uppercase condensed
             per the design system).
-        slide_no: 1-based slide number in the carousel (slide 1 is the cover),
-            shown as a small quiet number tag, e.g. "02".
+        slide_no: 1-based number within the body-slide sequence, shown as a
+            small quiet number tag. The first body slide is "01"; the cover
+            and CTA are unnumbered.
         out_path: Destination PNG path; parent directories are created.
         layout_hint: Content-aware archetype chosen by the template agent.
         visual_context: Research-grounded description of the exact news subject,
@@ -371,7 +372,6 @@ def generate_cta_image(
     link_text: str,
     template_ref: str,
     out_path: str,
-    slide_no: int | None = None,
 ) -> str:
     """Render the closing CTA slide (1080x1350 PNG) with gpt-image-2.
 
@@ -414,7 +414,6 @@ def generate_cta_image(
     ]
     text_parts.append(
         "Keep the CTA visual inside x=88..992 and y=640..1160. "
-        "Leave x=88..200 and y=76..130 blank for the deterministic slide number. "
         "Leave y=1161..1350 completely blank for the deterministic favicon "
         "and handle rail. Do not draw a handle, footer portrait, logo, divider, "
         "footer decoration, slide number, or swipe arrow in that reserved area."
@@ -448,7 +447,6 @@ def generate_cta_image(
         branded = apply_cta_brand_rail(
             typeset,
             settings.ig_handle,
-            slide_no,
         )
     branded.save(result, format="PNG")
     logger.info("Rendered CTA slide (%s) -> %s", cta_type, result)

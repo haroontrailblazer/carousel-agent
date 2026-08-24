@@ -529,15 +529,10 @@ def apply_body_brand_rail(
 def apply_cta_brand_rail(
     image: Image.Image,
     handle: str,
-    slide_no: int | str | None = None,
 ) -> Image.Image:
-    """Add only the official favicon and handle to the CTA rail."""
+    """Add only the official favicon and handle to the unnumbered CTA rail."""
     result = image.convert("RGB")
-    background, _, _ = _rail_colors(result)
     text = _prepare_rail(result)
-    if slide_no is not None:
-        _clear_slide_number_zone(result, background)
-        draw_slide_number(result, slide_no, fill=text)
     favicon_top = round(RAIL_CENTER_Y - CTA_FAVICON_SIZE / 2)
     favicon = _favicon_from_source(CTA_FAVICON_SIZE)
     result.paste(favicon, (CTA_FAVICON_LEFT, favicon_top), favicon)

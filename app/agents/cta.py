@@ -28,8 +28,8 @@ from google.genai import types
 
 from app.config import agent_instructions, load_skill, settings
 from app.llm import resolve_model
-from app.schemas import CarouselPlan, CTASlide
-from app.state import AGENT_CTA, K_CTA_SLIDE, K_PLAN, K_RUN_ID, get_model, set_model
+from app.schemas import CTASlide
+from app.state import AGENT_CTA, K_CTA_SLIDE, K_RUN_ID, set_model
 from app.text_rules import require_no_em_dash
 from app.tools import image_gen
 
@@ -303,8 +303,6 @@ async def render_cta_slide(
     link_url, link_text = _resolve_link(kind, redirect_destination)
     template_ref = _discover_template_ref("CTA slide")
     out_path = _run_workdir(tool_context.state) / _ARTIFACT_NAME
-    plan = get_model(tool_context.state, K_PLAN, CarouselPlan)
-    slide_no = plan.slide_count if plan is not None else None
 
     try:
         # generate_cta_image blocks on a slow image API call - keep the event
@@ -317,7 +315,6 @@ async def render_cta_slide(
             link_text,
             template_ref,
             str(out_path),
-            slide_no,
         )
         png_bytes = Path(written).read_bytes()
         await tool_context.save_artifact(

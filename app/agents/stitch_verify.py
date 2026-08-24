@@ -12,8 +12,8 @@ for budgets) and:
    plan, existence of every referenced artifact, and the copy-vs-rendered
    check on every body-slide PNG (the contract's size-heuristic variant:
    real PNG, exact target slide size, byte-size sanity floor), plus exact
-   fixed slide-number, brand-rail, and safe-area validation on every body and
-   CTA slide.
+   fixed body-slide number plus brand-rail and safe-area validation. The cover
+   and CTA are intentionally unnumbered.
 3. Writes ``K_BUNDLE`` + ``K_QA_REPORT``. On CRITICAL failures it also writes
    a :class:`app.schemas.ReworkPlan` to ``K_REWORK_PLAN`` (and the distilled
    correction text to ``K_REWORK_FEEDBACK``) targeting the responsible agents,
@@ -114,8 +114,8 @@ a review mail.
      duration within the configured window, per-slide line budget from the
      plan, that every
      referenced artifact actually exists, a copy-vs-rendered size check, and
-     deterministic slide-number and footer safe-area validation on every
-     body/CTA slide so
+     deterministic body-slide-number and footer safe-area validation (with
+     the cover and CTA intentionally unnumbered) so
      every body-slide PNG is a real, full-size render actually able to
      carry its approved text);
    - stores the QAReport, and on CRITICAL failures also stores a ReworkPlan
@@ -357,7 +357,7 @@ async def _verify_brand_padding(
     slide_index: int,
     kind: Literal["body", "cta"],
 ) -> Optional[QAIssue]:
-    """Validate the fixed number, footer furniture, and safe-area padding."""
+    """Validate body numbering, footer furniture, and safe-area padding."""
     try:
         part = await tool_context.load_artifact(artifact)
     except Exception as exc:
@@ -383,7 +383,8 @@ async def _verify_brand_padding(
                 f"artifact '{artifact}' returned no inline bytes."
             ),
         )
-    errors = validate_footer_padding(data, kind, slide_index)
+    display_slide_no = slide_index - 1 if kind == "body" else None
+    errors = validate_footer_padding(data, kind, display_slide_no)
     if not errors:
         return None
     owner = AGENT_CTA if kind == "cta" else AGENT_TEMPLATE_DESIGN

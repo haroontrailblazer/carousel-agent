@@ -16,8 +16,8 @@ a review mail.
      duration within the configured window, per-slide line budget from the
      plan, that every
      referenced artifact actually exists, a copy-vs-rendered size check,
-     and deterministic slide-number/footer safe-area validation on every
-     body/CTA slide so
+     and deterministic body-slide-number/footer safe-area validation, with
+     the cover and CTA intentionally unnumbered, so
      every body-slide PNG is a real, full-size render actually able to
      carry its approved text);
    - stores the QAReport, and on CRITICAL failures also stores a ReworkPlan

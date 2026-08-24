@@ -67,7 +67,7 @@ _DEFAULT_INSTRUCTION = """\
 You render the BODY slides of an Instagram carousel - every slide between the
 cover and the final CTA - as 1080x1350 (4:5) PNG images that follow the design
 system in skills/design-skill.md (ink/paper rhythm, one lime-accent element,
-content-aware layout archetype, deterministic slide-number tag, and swipe-cue
+content-aware layout archetype, deterministic body-only slide-number tag, and swipe-cue
 arrow). When a lower-half image or illustration occupies most of the content
 area, bottom-anchor it so its visible edge meets the divider above the swipe
 rail. A compact centered visual may float above the divider with only a tight
@@ -229,6 +229,14 @@ def _layout_hint(slide: SlideCopy) -> str:
     return "editorial explainer" if slide.index % 2 == 0 else "statement pause"
 
 
+def _body_display_numbers(slides: list[SlideCopy]) -> dict[int, int]:
+    """Map carousel-wide body indexes to their visible 01..0N sequence."""
+    ordered = sorted(slides, key=lambda slide: slide.index)
+    return {
+        slide.index: position for position, slide in enumerate(ordered, start=1)
+    }
+
+
 def _visual_context(
     news: NewsItem | None,
     research: ResearchBrief | None,
@@ -350,7 +358,13 @@ async def render_body_slides(
     research = get_model(state, K_RESEARCH, ResearchBrief)
     cover = get_model(state, K_COVER, CoverSpec)
 
-    slides = sorted(copy_set.slides, key=lambda s: s.index)
+    all_slides = sorted(copy_set.slides, key=lambda s: s.index)
+    # Planner/copy indexes remain carousel-wide (cover=1, body starts at 2),
+    # but the visible counter belongs only to the body sequence. Keep those
+    # concerns separate so the first inside slide is always 01 and the final
+    # inside slide is the number of body slides, even during a partial rerender.
+    display_numbers = _body_display_numbers(all_slides)
+    slides = all_slides
     wanted = {int(i) for i in indices} if indices else None
     if wanted is not None:
         slides = [s for s in slides if s.index in wanted]
@@ -410,7 +424,7 @@ async def render_body_slides(
                 template_ref,
                 body_lines,
                 headline,
-                slide.index,
+                display_numbers[slide.index],
                 str(out_path),
                 layout_hint,
                 _visual_context(news, research, plan_slide),

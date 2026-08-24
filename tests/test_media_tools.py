@@ -164,6 +164,18 @@ class ImageQualityTests(unittest.TestCase):
 
 
 class CoverTypographyTests(unittest.TestCase):
+    def test_cover_overlay_leaves_counter_zone_empty(self) -> None:
+        transparent = Image.new("RGBA", (1080, 1350), (0, 0, 0, 0))
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.object(media_tools, "_load_scrubbed_template", return_value=None),
+            patch.object(media_tools, "_render_title_block", return_value=transparent),
+        ):
+            path = media_tools._build_overlay_png("TITLE", "", Path(temp_dir))
+            with Image.open(path) as overlay:
+                counter_zone = overlay.crop((88, 76, 160, 124))
+                self.assertIsNone(counter_zone.getbbox())
+
     def test_template_example_title_reservation_is_fully_scrubbed(self) -> None:
         with Image.open(media_tools.settings.cover_overlay_template) as source:
             scrubbed = media_tools._scrub_template_text(source.convert("RGBA"))

@@ -107,9 +107,11 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
 
 ## Persistent furniture
 
-- Every slide uses the same deterministic two-digit number: x=88, y=76,
-  32 px semibold, with fixed weight and line height. The image model must leave
-  this zone blank and must never draw its own number.
+- Body slides use one deterministic two-digit sequence at x=88, y=76,
+  32 px semibold, with fixed weight and line height. The first body slide is
+  `01` and the last body slide is the body-slide count. The cover image/video
+  and the final CTA are unnumbered. The image model must leave this zone blank
+  on body slides and must never draw its own number.
 - Body-slide bottom rail uses the official Baskaran Builds favicon from
   `skills/references/baskaranbuilds-favicon.png`, followed by the exact
   configured Instagram handle and an icon-only right arrow. Never redraw,
@@ -125,7 +127,7 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
 ## Illustration, charts, and proof
 
 - The image model generates only the lower visual layer. Headline, body copy,
-  slide number, and footer are composited deterministically after generation.
+  body-slide number, and footer are composited deterministically after generation.
   Generated artwork must contain no text, letters, digits, labels, watermarks,
   pseudo-writing, or green accent.
 - When a slide introduces the exact news subject, use the sourced cover media
@@ -176,12 +178,12 @@ or invented links.
 
 ## Padding contract
 
-- Editorial content: x=88..992 and y=140..1110. The number alone occupies the
-  reserved x=88..200, y=76..130 zone.
+- Editorial content: x=88..992 and y=140..1110. On body slides only, the number
+  occupies the reserved x=88..200, y=76..130 zone.
 - The entire upper field y=0..620 is repainted as one coherent ink or paper
-  surface before text and the number are added. Body slides use paper and the
-  CTA uses ink. Never leave a mismatched top strip or a different-color tile
-  behind the slide number.
+  surface before text and any body-slide number are added. Body slides use
+  paper and the CTA uses ink. Never leave a mismatched top strip or a
+  different-color tile behind the body-slide number.
 - Footer reservation: y=1161..1350; generated content never enters it. A
   dominant lower visual may extend through y=1160 so it meets the divider.
 - Divider: x=88..992 at y=1160.

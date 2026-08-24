@@ -49,8 +49,6 @@ from app.text_rules import require_no_em_dash
 from app.tools.brand_layout import (
     ACCENT_GREEN,
     HEADLINE_MAX_LINES,
-    WARM_WHITE,
-    draw_slide_number,
     headline_font,
 )
 
@@ -1168,7 +1166,6 @@ def _build_overlay_png(title: str, highlight: str, wd: Path) -> Path:
             for x in range(width):
                 px[x, y] = (0, 0, 0, alpha)
     canvas.alpha_composite(_render_title_block(title, highlight))
-    draw_slide_number(canvas, 1, fill=WARM_WHITE)
     out = wd / "overlay-composite.png"
     canvas.save(out)
     return out
