@@ -9,7 +9,7 @@
 # miserable thing to debug. Keep this one on a paid instance.
 
 envVarGroups:
-  # Entered once in the Render dashboard, shared by all three services.
+  # Entered once in the Render dashboard, shared by all four services.
   # sync: false = Render prompts for the value and never stores it in git.
   - name: carousel-shared
     envVars:
@@ -105,7 +105,7 @@ services:
     healthCheckPath: /healthz
     envVars:
       - fromGroup: carousel-shared
-    startCommand: uvicorn review_api.main:app --host 0.0.0.0 --port $PORT
+    dockerCommand: uvicorn review_api.main:app --host 0.0.0.0 --port $PORT
 
   # ---------------------------------------------------------------------------
   # 2. Fetcher - polls RSS/YouTube into news_queue. Cheap and idempotent:
@@ -159,4 +159,4 @@ services:
         sync: false
       - key: ADK_WEB_PASSWORD
         sync: false
-    startCommand: uvicorn web_app:app --host 0.0.0.0 --port $PORT
+    dockerCommand: uvicorn web_app:app --host 0.0.0.0 --port $PORT
