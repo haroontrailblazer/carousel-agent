@@ -1,4 +1,4 @@
-# Render Blueprint - deploys the Carousel Factory as three services from one
+# Render Blueprint - deploys the Carousel Factory as four services from one
 # Docker image. Point Render at this repo (New -> Blueprint) and it reads this.
 #
 # WHY NOT THE FREE PLAN for the review API: free web services spin down after
@@ -55,8 +55,14 @@ envVarGroups:
         sync: false
 
       # --- App ---
+      # MUST be "app", not "carousel_factory". ADK derives the app name from
+      # the agent DIRECTORY (agents_dir/app), so the web UI addresses sessions
+      # as app_name="app". Sessions and artifacts are keyed on
+      # (app_name, user_id, session_id) - if the pipeline used a different name
+      # the review API could not resume a run started in the UI, and artifacts
+      # would land under a second S3 prefix. Keep every service on one value.
       - key: APP_NAME
-        value: carousel_factory
+        value: app
       - key: MAX_REWORK_ROUNDS
         value: "5"
       - key: MAX_CAROUSEL_SLIDES
@@ -130,3 +136,27 @@ services:
     envVars:
       - fromGroup: carousel-shared
     dockerCommand: python -m fetcher.fetch_news --run-one
+
+  # ---------------------------------------------------------------------------
+  # 4. ADK web UI - agent graph, live event stream, session-state inspector.
+  #    The hosted equivalent of `adk web` (see web_app.py).
+  #
+  #    BASIC AUTH IS NOT OPTIONAL HERE. ADK's UI ships no authentication: anyone
+  #    who reaches this URL can start runs that spend OpenAI credits, read every
+  #    session's state and watch the event stream. web_app.py applies basic auth
+  #    when ADK_WEB_USER/ADK_WEB_PASSWORD are set and logs a loud warning when
+  #    they are not - set them.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: carousel-adk-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /healthz
+    envVars:
+      - fromGroup: carousel-shared
+      - key: ADK_WEB_USER
+        sync: false
+      - key: ADK_WEB_PASSWORD
+        sync: false
+    startCommand: uvicorn web_app:app --host 0.0.0.0 --port $PORT
