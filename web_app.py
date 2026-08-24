@@ -53,9 +53,20 @@ logger = logging.getLogger(__name__)
 SERVICE_SCHEME = "supabase"
 SERVICE_URI = f"{SERVICE_SCHEME}://carousel"
 
-#: Paths that must stay reachable without credentials, or the platform's health
-#: probe would fail and Render would restart the service forever.
-_OPEN_PATHS = ("/healthz", "/health")
+#: Where the review API is mounted inside this app. Serving both from one
+#: process is what makes a single (free-tier) web service viable: the ADK UI
+#: and the approve/reject endpoints share a URL and a container.
+#:
+#: Set REVIEW_API_BASE_URL to "<this service's URL>" + this prefix, e.g.
+#: https://carousel-agent.onrender.com/review-api - the channel tools build
+#: "{base}/review/{run_id}/approve" on top of it.
+REVIEW_API_MOUNT = "/review-api"
+
+#: Path prefixes that must stay reachable WITHOUT credentials:
+#: - the health probe, or Render would restart the service forever;
+#: - the review endpoints, because approve/reject links are opened from a
+#:   Telegram message where there is nobody to type a password.
+_OPEN_PATHS = ("/healthz", "/health", REVIEW_API_MOUNT)
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +131,9 @@ class BasicAuthMiddleware:
         ).decode("ascii")
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope.get("path") in _OPEN_PATHS:
+        path = scope.get("path") or ""
+        is_open = any(path == p or path.startswith(p + "/") for p in _OPEN_PATHS)
+        if scope["type"] != "http" or is_open:
             await self.app(scope, receive, send)
             return
 
@@ -170,6 +183,26 @@ def build_app() -> Any:
     @adk_app.get("/healthz", include_in_schema=False)
     async def _healthz() -> dict:
         return {"status": "ok"}
+
+    # Mount the review API so one web service serves both the UI and the
+    # approve/reject endpoints. Without this, deploying the UI in place of the
+    # review API would silently break every Telegram review link.
+    #
+    # Caveat: Starlette does not run a mounted sub-app's lifespan, so
+    # review_api's startup/shutdown hooks do not fire here. Startup is covered -
+    # init_observability() runs above - but the shutdown grace period that waits
+    # for in-flight resume tasks does not, so a redeploy can cut a resume short.
+    # The pending_reviews row is restored on failure, so the reviewer can simply
+    # click again.
+    from review_api.main import app as review_app
+
+    adk_app.mount(REVIEW_API_MOUNT, review_app)
+    logger.info(
+        "Review API mounted at %s - set REVIEW_API_BASE_URL to "
+        "<this service's public URL>%s",
+        REVIEW_API_MOUNT,
+        REVIEW_API_MOUNT,
+    )
 
     username = os.getenv("ADK_WEB_USER", "")
     password = os.getenv("ADK_WEB_PASSWORD", "")
