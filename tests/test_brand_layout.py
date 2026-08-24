@@ -8,12 +8,17 @@ from pydantic import ValidationError
 from app.schemas import CopySet
 from app.agents.template_design import _body_display_numbers
 from app.tools.brand_layout import (
+    BODY_FONT_SIZE,
+    BODY_MIN_FONT_SIZE,
+    HEADLINE_FONT_SIZE,
+    HEADLINE_MIN_FONT_SIZE,
     INK,
     PAPER,
     RAIL_DIVIDER_Y,
     SLIDE_NUMBER_LEFT,
     SLIDE_NUMBER_TOP,
     TEXT_PANEL_BOTTOM,
+    _fit_typography_layout,
     anchor_dominant_visual_to_divider,
     apply_cta_brand_rail,
     apply_slide_typography,
@@ -21,6 +26,38 @@ from app.tools.brand_layout import (
 
 
 class BrandLayoutTests(unittest.TestCase):
+    def test_typography_uses_preferred_sizes_when_copy_is_compact(self) -> None:
+        layout = _fit_typography_layout(
+            "A SHORT HEADLINE",
+            ["One short supporting line."],
+            904,
+        )
+        self.assertEqual(layout.headline_size, HEADLINE_FONT_SIZE)
+        self.assertEqual(layout.body_size, BODY_FONT_SIZE)
+
+    def test_typography_scales_within_readable_limits_instead_of_failing(self) -> None:
+        headline = (
+            "THIS POWERFUL MODEL LOOKS SMART UNTIL REAL PRODUCTION REALITY "
+            "PUSHES BACK"
+        )
+        body = [
+            "Benchmarks reward the cleanest possible operating conditions.",
+            "Production adds latency, ambiguity, failures, and changing context.",
+            "That gap is where impressive autonomous agent demos break.",
+        ]
+        layout = _fit_typography_layout(headline, body, 904)
+        self.assertTrue(
+            layout.headline_size < HEADLINE_FONT_SIZE
+            or layout.body_size < BODY_FONT_SIZE
+        )
+        self.assertGreaterEqual(layout.headline_size, HEADLINE_MIN_FONT_SIZE)
+        self.assertGreaterEqual(layout.body_size, BODY_MIN_FONT_SIZE)
+        self.assertLessEqual(layout.total_height, 620 - 140)
+
+        image = Image.new("RGB", (1080, 1350), PAPER)
+        rendered = apply_slide_typography(image, headline, body)
+        self.assertEqual(rendered.size, (1080, 1350))
+
     def test_body_counter_starts_at_one_and_ignores_cover_index(self) -> None:
         copy = CopySet.model_validate(
             {

@@ -41,10 +41,12 @@ inside the lower explanatory visual. The CTA uses an ink frame.
 - Editorial emphasis: Instrument Serif or a close high-contrast serif, used
   sparingly for one phrase rather than whole paragraphs.
 - Labels/data: Instrument Sans or a compact clean grotesk.
-- Minimum body size: visually equivalent to 36 px at 1080 px width. Never
-  shrink copy to make it fit.
-- Headline: normally <= 8 words. Body: at most 3 short lines or one compact
-  paragraph. One thought per line.
+- Preferred body size: visually equivalent to 36 px at 1080 px width. When
+  approved copy needs more room, the compositor may step down to the shared
+  readable minimum of 30 px, never smaller.
+- Headline: normally <= 7 words. Prefer 76 px and step down only as far as the
+  shared 60 px minimum when necessary. Body: at most 3 short lines or one
+  compact paragraph. One thought per line.
 
 ## Carousel rhythm
 
@@ -203,8 +205,9 @@ or invented links.
   or random symbols that resemble language. When an illustration would
   normally need an unapproved label, leave that element unlabeled.
 - Never render an em dash in any cover, body, CTA, or caption text.
-- No text may be clipped, warped, illegible, or smaller than the minimum body
-  size. If copy does not fit, simplify the visual-not the copy.
+- No text may be clipped, warped, illegible, or smaller than the 30 px minimum
+  body size. If copy still does not fit at the readable minimums, shorten it
+  upstream without changing facts.
 - Do not add fake metrics, sources, quotes, handles, labels, or watermarks.
 - No default card grids, nested cards, glossy 3D icons, stock AI brains, robots
   as decoration, or generic circuit-board backgrounds.

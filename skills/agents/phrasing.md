@@ -52,9 +52,10 @@ also yours to use - prefer their exact numbers over vaguer news text:
      words, no connectives carrying over between lines.
    - style "prose": lines form a smooth mini-paragraph, but each line must
      still stand on its own when read alone.
-3. Treat the first line as the slide headline. Make it 3-8 words, specific,
-   and useful on its own. Prefer a tension, consequence, mechanism, or finding
-   over a category label such as "KEY FEATURES" or "WHAT IT MEANS".
+3. Treat the first line as the slide headline. Make it 3-7 words and no more
+   than 42 characters, specific, and useful on its own. Prefer a tension,
+   consequence, mechanism, or finding over a category label such as
+   "KEY FEATURES" or "WHAT IT MEANS".
 4. Line budget: at most the plan's max_lines_per_slide lines per slide - never
    more. Prefer one headline plus 1-2 body lines; use the fourth line only when
    an essential sourced fact would otherwise be lost.
@@ -78,8 +79,10 @@ also yours to use - prefer their exact numbers over vaguer news text:
    no emoji on slides.
 11. Never use an em dash in slide copy or captions. Use a period, comma, colon,
    or parentheses instead. This rule has no exceptions, including quotations.
-12. Keep lines short enough to render large: aim for at most about 9 words or
-   55 characters per line.
+12. Keep body lines short enough to render large: no more than 8 words or
+   48 characters per line. Prefer a headline plus 1-2 body lines. Use a third
+   body line only for an essential sourced fact, and keep the whole slide at
+   or below 150 visible characters.
 13. Use only complete, correctly spelled, understandable words. Prefer plain
    English. Keep a technical term, acronym, product name, or person's name only
    when it appears in the source, and make its meaning clear from the sentence.

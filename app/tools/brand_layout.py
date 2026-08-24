@@ -7,6 +7,7 @@ identical geometry and exact text.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from itertools import combinations
 from io import BytesIO
 from pathlib import Path
@@ -36,6 +37,7 @@ HEADLINE_MIN_FONT_SIZE = 60
 HEADLINE_MAX_LINES = 3
 HEADLINE_STYLE = "condensed bold grotesk"
 BODY_FONT_SIZE = 36
+BODY_MIN_FONT_SIZE = 30
 TEXT_PANEL_TOP = 140
 TEXT_PANEL_BOTTOM = 620
 TEXT_CONTENT_LEFT = SAFE_LEFT
@@ -62,6 +64,25 @@ WARM_WHITE = (232, 228, 214)
 TEXT_DARK = (26, 26, 24)
 MUTED_DARK = (113, 122, 95)
 MUTED_LIGHT = (185, 197, 170)
+
+
+@dataclass(frozen=True)
+class _TypographyLayout:
+    """One measured, readable typography layout that fits the top panel."""
+
+    head_font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    body_font: ImageFont.FreeTypeFont | ImageFont.ImageFont
+    headline_lines: list[str]
+    wrapped_body: list[list[str]]
+    headline_size: int
+    body_size: int
+    head_line_height: int
+    body_line_height: int
+    head_gap: int
+    body_gap: int
+    thought_gap: int
+    section_gap: int
+    total_height: int
 
 # Windows paths first (the dev machine), then the Linux equivalents installed
 # by the Dockerfile. Without the Linux entries every lookup falls through to
@@ -225,6 +246,89 @@ def _headline_highlight(headline: str) -> str:
     return " ".join(words[-2:]) if len(words) >= 2 else words[0]
 
 
+def _fit_typography_layout(
+    headline_text: str,
+    clean_body: list[str],
+    max_width: int,
+) -> _TypographyLayout:
+    """Choose the largest balanced type pair that fits without changing copy."""
+    head_sizes = range(HEADLINE_FONT_SIZE, HEADLINE_MIN_FONT_SIZE - 1, -2)
+    body_sizes = range(BODY_FONT_SIZE, BODY_MIN_FONT_SIZE - 1, -1)
+    candidates = [
+        (head_size, body_size)
+        for head_size in head_sizes
+        for body_size in body_sizes
+    ]
+    head_span = max(HEADLINE_FONT_SIZE - HEADLINE_MIN_FONT_SIZE, 1)
+    body_span = max(BODY_FONT_SIZE - BODY_MIN_FONT_SIZE, 1)
+    candidates.sort(
+        key=lambda sizes: (
+            max(
+                (HEADLINE_FONT_SIZE - sizes[0]) / head_span,
+                (BODY_FONT_SIZE - sizes[1]) / body_span,
+            ),
+            (HEADLINE_FONT_SIZE - sizes[0]) / head_span
+            + (BODY_FONT_SIZE - sizes[1]) / body_span,
+        )
+    )
+
+    for headline_size, body_size in candidates:
+        head_font = headline_font(headline_size)
+        body_font = _font(body_size)
+        try:
+            headline_lines = _balanced_wrap(
+                headline_text,
+                head_font,
+                max_width,
+                HEADLINE_MAX_LINES,
+            )
+            wrapped_body = [
+                _greedy_wrap(line, body_font, max_width) for line in clean_body
+            ]
+        except ValueError:
+            continue
+
+        head_ascent, head_descent = head_font.getmetrics()
+        body_ascent, body_descent = body_font.getmetrics()
+        head_line_height = head_ascent + head_descent
+        body_line_height = body_ascent + body_descent
+        head_gap = max(4, round(head_line_height * 0.06))
+        body_gap = max(5, round(body_line_height * 0.14))
+        thought_gap = 10
+        headline_height = (
+            len(headline_lines) * head_line_height
+            + max(0, len(headline_lines) - 1) * head_gap
+        )
+        body_height = sum(
+            len(lines) * body_line_height + max(0, len(lines) - 1) * body_gap
+            for lines in wrapped_body
+        ) + max(0, len(wrapped_body) - 1) * thought_gap
+        section_gap = 28 if wrapped_body else 0
+        total_height = headline_height + section_gap + body_height
+        if TEXT_PANEL_TOP + total_height <= TEXT_PANEL_BOTTOM:
+            return _TypographyLayout(
+                head_font=head_font,
+                body_font=body_font,
+                headline_lines=headline_lines,
+                wrapped_body=wrapped_body,
+                headline_size=headline_size,
+                body_size=body_size,
+                head_line_height=head_line_height,
+                body_line_height=body_line_height,
+                head_gap=head_gap,
+                body_gap=body_gap,
+                thought_gap=thought_gap,
+                section_gap=section_gap,
+                total_height=total_height,
+            )
+
+    raise ValueError(
+        "approved slide copy does not fit the typography reservation even at "
+        f"the readable minimums ({HEADLINE_MIN_FONT_SIZE}px headline and "
+        f"{BODY_MIN_FONT_SIZE}px body); shorten the copy upstream"
+    )
+
+
 def apply_slide_typography(
     image: Image.Image,
     headline: str,
@@ -233,11 +337,11 @@ def apply_slide_typography(
     uppercase_headline: bool = False,
     theme: Literal["auto", "paper", "ink"] = "auto",
 ) -> Image.Image:
-    """Composite fixed Baskaran Builds typography over a text-free visual.
+    """Composite readable Baskaran Builds typography over a text-free visual.
 
-    Headline and body sizes never change between slides. If approved copy does
-    not fit the shared reservation, rendering fails visibly instead of silently
-    switching to a smaller or different type treatment.
+    The preferred 76px/36px sizes are used whenever they fit. Longer approved
+    copy steps down proportionally within the explicit 60px/30px readable
+    limits, preserving every word and the shared type treatment.
     """
     result = image.convert("RGB")
     if theme == "paper":
@@ -252,38 +356,11 @@ def apply_slide_typography(
     clean_body = [" ".join(str(line).split()) for line in body_lines if str(line).strip()]
 
     max_width = TEXT_CONTENT_RIGHT - TEXT_CONTENT_LEFT
-    head_font = headline_font(HEADLINE_FONT_SIZE)
-    body_font = _font(BODY_FONT_SIZE)
-    headline_lines = _balanced_wrap(
-        headline_text,
-        head_font,
-        max_width,
-        HEADLINE_MAX_LINES,
-    )
-    wrapped_body = [_greedy_wrap(line, body_font, max_width) for line in clean_body]
-
-    head_ascent, head_descent = head_font.getmetrics()
-    body_ascent, body_descent = body_font.getmetrics()
-    head_line_height = head_ascent + head_descent
-    body_line_height = body_ascent + body_descent
-    head_gap = max(4, round(head_line_height * 0.06))
-    body_gap = max(5, round(body_line_height * 0.14))
-    thought_gap = 10
-    headline_height = (
-        len(headline_lines) * head_line_height
-        + max(0, len(headline_lines) - 1) * head_gap
-    )
-    body_height = sum(
-        len(lines) * body_line_height + max(0, len(lines) - 1) * body_gap
-        for lines in wrapped_body
-    ) + max(0, len(wrapped_body) - 1) * thought_gap
-    section_gap = 28 if wrapped_body else 0
-    total_height = headline_height + section_gap + body_height
-    if TEXT_PANEL_TOP + total_height > TEXT_PANEL_BOTTOM:
-        raise ValueError(
-            "approved slide copy does not fit the fixed 76px headline and "
-            "36px body typography reservation"
-        )
+    layout = _fit_typography_layout(headline_text, clean_body, max_width)
+    head_font = layout.head_font
+    body_font = layout.body_font
+    headline_lines = layout.headline_lines
+    wrapped_body = layout.wrapped_body
 
     draw = ImageDraw.Draw(result)
     draw.rectangle((0, 0, SLIDE_WIDTH, TEXT_PANEL_BOTTOM), fill=background)
@@ -300,10 +377,10 @@ def apply_slide_typography(
             x += head_font.getlength(char)
             global_index += 1
         global_index += 1
-        y += head_line_height + head_gap
+        y += layout.head_line_height + layout.head_gap
     if headline_lines:
-        y -= head_gap
-    y += section_gap
+        y -= layout.head_gap
+    y += layout.section_gap
     for thought_index, lines in enumerate(wrapped_body):
         for line_index, line in enumerate(lines):
             draw.text(
@@ -312,11 +389,11 @@ def apply_slide_typography(
                 font=body_font,
                 fill=text_color,
             )
-            y += body_line_height
+            y += layout.body_line_height
             if line_index < len(lines) - 1:
-                y += body_gap
+                y += layout.body_gap
         if thought_index < len(wrapped_body) - 1:
-            y += thought_gap
+            y += layout.thought_gap
     return result
 
 
@@ -631,6 +708,7 @@ def validate_footer_padding(
 __all__ = [
     "ACCENT_GREEN",
     "BODY_FONT_SIZE",
+    "BODY_MIN_FONT_SIZE",
     "HEADLINE_FONT_SIZE",
     "HEADLINE_MAX_LINES",
     "HEADLINE_MIN_FONT_SIZE",

@@ -87,31 +87,35 @@ also yours to use - prefer their exact numbers over vaguer news text:
      words, no connectives carrying over between lines.
    - style "prose": lines form a smooth mini-paragraph, but each line must
      still stand on its own when read alone.
-3. Line budget: at most the plan's max_lines_per_slide lines per slide - never
-   more. Fewer lines are fine when the content is covered.
-4. One thought per line. Never split a single thought across two lines and
+3. Treat the first line as the headline. Make it 3-7 words and no more than
+   42 characters, specific, and useful on its own.
+4. Line budget: at most the plan's max_lines_per_slide lines per slide - never
+   more. Prefer a headline plus 1-2 body lines. Use a third body line only for
+   an essential sourced fact. Fewer lines are fine when the content is covered.
+5. One thought per line. Never split a single thought across two lines and
    never cram two facts into one line.
-5. Finalize every sentence: complete, publish-ready wording. No placeholders,
+6. Finalize every sentence: complete, publish-ready wording. No placeholders,
    no trailing ellipses used as teasers, no "TBD", no notes to other agents.
-6. Punchy but factual: short, concrete, confident wording. Use only facts from
+7. Punchy but factual: short, concrete, confident wording. Use only facts from
    the news item and research brief above. Keep names, product names, versions and numbers exactly
    as the source states them. Never invent statistics, quotes or dates. No
    hype adjectives ("insane", "mind-blowing"), no clickbait.
-7. Cover the plan's key_points for each slide in the plan's given intent -
+8. Cover the plan's key_points for each slide in the plan's given intent -
    rephrase for punch, but do not drop or add facts.
-8. Plain text only: no markdown syntax, no leading bullet characters or dashes
+9. Plain text only: no markdown syntax, no leading bullet characters or dashes
    (the slide template adds visual bullets), no hashtags inside slide lines,
    no emoji on slides.
-9. Never use an em dash in slide copy or captions. Use a period, comma, colon,
+10. Never use an em dash in slide copy or captions. Use a period, comma, colon,
    or parentheses instead. This rule has no exceptions, including quotations.
-10. Keep lines short enough to render large: aim for at most about 9 words or
-   55 characters per line.
-11. Use only complete, correctly spelled, understandable words. Prefer plain
+11. Keep body lines short enough to render large: no more than 8 words or
+   48 characters per line, and keep the whole slide at or below 150 visible
+   characters.
+12. Use only complete, correctly spelled, understandable words. Prefer plain
    English. Never output invented words, keyboard mash, pseudo-Latin,
    placeholder text, corrupted characters, or decorative pseudo-writing.
-12. Slide copy must use Latin-script English transliterations only. Do not add
+13. Slide copy must use Latin-script English transliterations only. Do not add
    Chinese characters or alternate-script names in parentheses.
-13. Proofread every line before returning it. Readers must never have to guess
+14. Proofread every line before returning it. Readers must never have to guess
    what a malformed or shortened word was meant to say.
 
 ## Caption rules
