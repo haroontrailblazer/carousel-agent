@@ -65,6 +65,14 @@ class Settings:
     )
     reviewer_emails: list[str] = field(default_factory=lambda: _csv("REVIEWER_EMAILS"))
 
+    # --- telegram (the review channel) ---
+    # Carries the same review request the mail path did: slide previews plus
+    # Approve/Reject links back to the review API. Chosen over Gmail because it
+    # needs no Google Cloud project, no OAuth consent screen and no 7-day token
+    # expiry - a bot token and a chat id are the whole setup.
+    telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
+
     # --- instagram ---
     ig_user_id: str = os.getenv("IG_USER_ID", "")
     ig_access_token: str = os.getenv("IG_ACCESS_TOKEN", "")

@@ -10,8 +10,8 @@ A tool-using ``LlmAgent`` (``settings.utility_model``). Because google-adk
    :meth:`app.services.artifact_service.SupabaseArtifactService.public_url`
    (cover video first - its aspect ratio governs the carousel);
 3. calls :func:`app.tools.instagram_tools.publish_carousel`;
-4. sends the confirmation mail via
-   :func:`app.tools.gmail_tools.send_confirmation_email`;
+4. sends the confirmation via
+   :func:`app.tools.telegram_tools.send_confirmation_message`;
 5. writes the outcome into ``state["publish_result"]`` (via
    ``tool_context.state``) and records the run's completion in the ``runs``
    table via :func:`app.services.db.update_run_phase`.
@@ -36,7 +36,7 @@ from app.schemas import Bundle
 from app.services import db
 from app.services.artifact_service import SupabaseArtifactService
 from app.state import AGENT_PUBLISHER, K_BUNDLE, K_RUN_ID, PHASE_DONE, get_model
-from app.tools import gmail_tools, instagram_tools
+from app.tools import instagram_tools, telegram_tools
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,7 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
     mail_error = ""
     try:
         mail_result = await asyncio.to_thread(
-            gmail_tools.send_confirmation_email, run_id, permalink
+            telegram_tools.send_confirmation_message, run_id, permalink
         )
         confirmation_message_id = str(mail_result.get("message_id", ""))
     except Exception as exc:  # noqa: BLE001

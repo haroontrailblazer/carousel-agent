@@ -2,9 +2,10 @@
 
 The two-sided human-in-the-loop gate of the Carousel Factory:
 
-- **Outbound** (phase ``review``): the ``send_review_mail`` tool pulls local
-  preview files out of the artifact store, mails the reviewers via
-  :func:`app.tools.gmail_tools.send_review_email` (Approve/Reject links), and
+- **Outbound** (phase ``review``): the ``send_review_request`` tool pulls local
+  preview files out of the artifact store, sends them to the reviewers via
+  :func:`app.tools.telegram_tools.send_review_message` (Approve/Reject
+  buttons), and
   increments ``K_REVIEW_ROUND``. The LLM then calls ``await_human_review`` - a
   :class:`google.adk.tools.LongRunningFunctionTool` that returns ``None``.
   Verified against installed google-adk 2.7.0
@@ -69,7 +70,7 @@ from app.state import (
     K_VERDICT,
     set_model,
 )
-from app.tools import gmail_tools
+from app.tools import telegram_tools
 
 logger = logging.getLogger(__name__)
 
@@ -94,14 +95,14 @@ directive is appended to this instruction on every run - obey it literally.
 
 ## Mode SEND_MAIL - request a review and pause
 
-1. Call `send_review_mail` (no arguments). It mails the reviewers a preview
-   (cover poster + slide thumbnails + caption) with Approve/Reject links and
+1. Call `send_review_request` (no arguments). It sends the reviewers a preview
+   (cover poster + slide thumbnails + caption) with Approve/Reject buttons and
    increments the review round counter.
 2. If (and ONLY if) the tool result has status "sent", immediately call
    `await_human_review` (no arguments). This is a long-running operation: the
    pipeline PAUSES on it until the human clicks a link. Never call it twice,
-   and never call it when the mail failed.
-3. If `send_review_mail` returned an error, do NOT call `await_human_review`.
+   and never call it when the send failed.
+3. If `send_review_request` returned an error, do NOT call `await_human_review`.
    Reply with one short sentence describing the failure so the operator can
    fix it.
 
@@ -113,7 +114,7 @@ response from `await_human_review` with their status and feedback.
 1. Call `set_verdict` with that exact status ("approved" or "rejected") and
    the exact feedback text - verbatim, never paraphrased. The tool itself
    re-reads the authoritative reviewer response, so honesty is enforced.
-2. Do NOT call `send_review_mail` or `await_human_review` in this mode.
+2. Do NOT call `send_review_request` or `await_human_review` in this mode.
 3. After the tool succeeds, reply with one short sentence stating the verdict
    (and the feedback, if any) so the orchestrator log reads cleanly.
 
@@ -121,7 +122,7 @@ response from `await_human_review` with their status and feedback.
 
 - Never invent, soften or reinterpret reviewer feedback: it is recorded
   verbatim and later routed to the responsible agents.
-- One review mail per run, maximum. Rounds are counted automatically.
+- One review request per run, maximum. Rounds are counted automatically.
 - You never publish and never edit content - you only dispatch the review
   and record the verdict.
 """
@@ -268,13 +269,14 @@ async def capture_verdict_on_resume(
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
-async def send_review_mail(tool_context: ToolContext) -> dict:
-    """Mail the reviewers the assembled carousel with Approve/Reject links.
+async def send_review_request(tool_context: ToolContext) -> dict:
+    """Send the reviewers the assembled carousel with Approve/Reject buttons.
 
     Loads the preview artifacts (cover poster, body slides, CTA slide) from
     the artifact store, writes them to local files under the workdir, and
-    sends the review email via the Gmail API. Increments the review round in
-    session state - but only after the mail was actually sent.
+    sends them to Telegram as a photo album plus a message carrying the
+    Approve/Reject links. Increments the review round in session state -
+    but only after the message was actually sent.
 
     Returns:
         ``{"status": "sent", "message_id": ..., "round": ...}`` on success or
@@ -326,18 +328,18 @@ async def send_review_mail(tool_context: ToolContext) -> dict:
     )
 
     try:
-        # gmail_tools.send_review_email is synchronous (googleapiclient with an
-        # explicit 60 s HTTP timeout); run it off the event loop.
+        # telegram_tools.send_review_message is synchronous (httpx with an
+        # explicit 60 s timeout); run it off the event loop.
         result = await asyncio.to_thread(
-            gmail_tools.send_review_email, run_id, payload, round_no
+            telegram_tools.send_review_message, run_id, payload, round_no
         )
     except Exception as exc:
-        logger.exception("Review mail failed for run %s round %s.", run_id, round_no)
-        return {"status": "error", "error": f"Review mail failed: {exc}"}
+        logger.exception("Review message failed for run %s round %s.", run_id, round_no)
+        return {"status": "error", "error": f"Review message failed: {exc}"}
 
     state[K_REVIEW_ROUND] = round_no  # count the round only after a real send
     logger.info(
-        "Review mail sent for run %s (round %s, %d preview file(s)).",
+        "Review message sent for run %s (round %s, %d preview file(s)).",
         run_id,
         round_no,
         len(slide_paths) + (1 if poster_path else 0),
@@ -560,13 +562,13 @@ def _instruction_provider(ctx: ReadonlyContext) -> str:
             f"status='{status}', feedback='{feedback}'.\n"
             "Call `set_verdict` NOW with exactly this status and feedback "
             "(the tool re-checks the reviewer response itself). Do NOT call "
-            "`send_review_mail` or `await_human_review`. Then reply with one "
+            "`send_review_request` or `await_human_review`. Then reply with one "
             "short sentence stating the verdict."
         )
     else:
         parts.append(
             "## CURRENT MODE: SEND_MAIL\n\n"
-            "No fresh human verdict is pending. Call `send_review_mail` now; "
+            "No fresh human verdict is pending. Call `send_review_request` now; "
             "if its result status is 'sent', call `await_human_review` to "
             "pause for the reviewer. If the mail failed, call nothing else "
             "and report the error in one short sentence."
@@ -580,7 +582,7 @@ def build_review_dispatcher_agent() -> LlmAgent:
     Returns:
         An :class:`~google.adk.agents.LlmAgent` named
         :data:`app.state.AGENT_REVIEW_DISPATCHER` running
-        ``settings.utility_model`` with three tools - ``send_review_mail``,
+        ``settings.utility_model`` with three tools - ``send_review_request``,
         ``await_human_review`` (LongRunningFunctionTool: pauses the
         invocation) and ``set_verdict`` - plus a ``before_agent_callback``
         that deterministically records the resumed verdict in ``K_VERDICT``.
@@ -592,14 +594,15 @@ def build_review_dispatcher_agent() -> LlmAgent:
         name=AGENT_REVIEW_DISPATCHER,
         model=resolve_model(settings.utility_model),
         description=(
-            "Review Dispatcher: mails the reviewers the assembled carousel "
-            "with Approve/Reject links, pauses the pipeline on a long-running "
+            "Review Dispatcher: sends the reviewers the assembled carousel on "
+            "Telegram with Approve/Reject buttons, pauses the pipeline on a "
+            "long-running "
             "await_human_review call, and records the human verdict in state "
             "when the run resumes."
         ),
         instruction=_instruction_provider,
         tools=[
-            FunctionTool(send_review_mail),
+            FunctionTool(send_review_request),
             LongRunningFunctionTool(await_human_review),
             FunctionTool(set_verdict),
         ],
@@ -615,6 +618,6 @@ __all__ = [
     "await_human_review",
     "build_review_dispatcher_agent",
     "capture_verdict_on_resume",
-    "send_review_mail",
+    "send_review_request",
     "set_verdict",
 ]
