@@ -63,18 +63,31 @@ TEXT_DARK = (26, 26, 24)
 MUTED_DARK = (113, 122, 95)
 MUTED_LIGHT = (185, 197, 170)
 
+# Windows paths first (the dev machine), then the Linux equivalents installed
+# by the Dockerfile. Without the Linux entries every lookup falls through to
+# ImageFont.load_default() - a tiny bitmap face - and slide typography silently
+# collapses in a container instead of failing loudly. DejaVu ships with
+# fonts-dejavu-core; Liberation is metrically compatible with Arial.
 _FONT_CANDIDATES = (
     Path("C:/Windows/Fonts/segoeui.ttf"),
     Path("C:/Windows/Fonts/arial.ttf"),
+    Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
 )
 _BOLD_FONT_CANDIDATES = (
     Path("C:/Windows/Fonts/seguisb.ttf"),
     Path("C:/Windows/Fonts/arialbd.ttf"),
+    Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
 )
 _HEADLINE_FONT_CANDIDATES = (
     Path("C:/Windows/Fonts/bahnschrift.ttf"),
     Path("C:/Windows/Fonts/impact.ttf"),
     Path("C:/Windows/Fonts/arialbd.ttf"),
+    # Condensed first - closest to Bahnschrift/Impact for headline weight.
+    Path("/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"),
+    Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
 )
 _OFFICIAL_FAVICON = (
     Path(__file__).resolve().parents[2]
