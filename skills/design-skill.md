@@ -148,7 +148,7 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
   code block, portrait, and decorative texture.
 - Keep illustrations away from body copy and preserve breathing room.
 - Generate every explanatory visual directly as the exact 2:1 lower panel
-  (1088x544 generation, merged into slide coordinates x=0..1080 and
+  (generated at a 2:1 divisible-by-16 canvas, merged into slide coordinates x=0..1080 and
   y=620..1160). Compose for that wide frame from the start. Keep important
   subjects fully visible and use the complete panel so no post-generation
   stretching or cropping is needed.

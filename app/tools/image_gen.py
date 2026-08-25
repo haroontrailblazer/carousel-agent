@@ -17,9 +17,10 @@ Rendering contract (see docs/CONTRACTS.md + skills/design-skill.md):
 - Without a reference, ``images.generate`` is used with a detailed style
   prompt built from skills/design-skill.md.
 - The visual slot is exactly 1080x540 (2:1), from y=620 through y=1160.
-  gpt-image-2 generation happens at the matching divisible-by-16 size
-  1088x544, then the complete visual is merged into that slot without
-  stretching or cropping before deterministic typography and rails are added.
+  gpt-image-2 generation happens at a divisible-by-16 canvas of the same
+  exact 2:1 ratio (see ``_GEN_SIZES``), then the complete visual is merged
+  into that slot without stretching or cropping before deterministic
+  typography and rails are added.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from __future__ import annotations
 import base64
 import logging
 import mimetypes
+import threading
 import time
 from io import BytesIO
 from pathlib import Path
@@ -59,14 +61,87 @@ from app.tools.brand_layout import (
 
 logger = logging.getLogger(__name__)
 
-# The lower visual slot is 1080x540 (exact 2:1). gpt-image-2 requires dimensions
-# divisible by 16, so request the matching 1088x544 canvas and downscale both
-# axes proportionally by the same ratio before merging it into the slide.
-_GEN_WIDTH: int = 1088
-_GEN_HEIGHT: int = 544
-_GEN_SIZE: str = f"{_GEN_WIDTH}x{_GEN_HEIGHT}"
+# The lower visual slot is 1080x540 (exact 2:1). gpt-image-2 takes arbitrary
+# WIDTHxHEIGHT sizes as long as both axes divide by 16, so every rung below is
+# exactly 2:1 and divisible by 16; the result is downscaled proportionally on
+# both axes before it is merged into the slide, so which rung was used never
+# changes the output.
+#
+# It is a LADDER rather than one constant because the API also enforces a
+# minimum pixel budget that is not part of the published size contract - it is
+# described as "current", and it moved. 1088x544 (0.59 MP) rendered every
+# carousel until the floor rose above it, and then every body slide and CTA
+# failed with:
+#
+#   Invalid size '1088x544'. Requested resolution is below the current
+#   minimum pixel budget.
+#
+# Hardcoding a bigger number just moves the same breakage into the future. So
+# the first rung clears a 1 MP floor (1024x1024 is a documented supported
+# size, so the floor cannot be above it), and if the API rejects a rung for
+# being too small, _call_images_api climbs to the next one and the process
+# remembers it. A rejected size costs nothing: the API refuses it before
+# generating, so no image is billed.
+_GEN_SIZES: tuple[tuple[int, int], ...] = (
+    (1536, 768),    # 1.18 MP
+    (2048, 1024),   # 2.10 MP
+    (2560, 1280),   # 3.28 MP - the last rung before "experimental" resolutions
+)
+_gen_size_index: int = 0
+_gen_size_lock = threading.Lock()
+
 _VISUAL_WIDTH: int = SLIDE_WIDTH
 _VISUAL_HEIGHT: int = RAIL_DIVIDER_Y - TEXT_PANEL_BOTTOM
+
+
+def _gen_size() -> str:
+    """The size string for the rung this process is currently using."""
+    with _gen_size_lock:
+        width, height = _GEN_SIZES[_gen_size_index]
+    return f"{width}x{height}"
+
+
+def _climb_size_ladder(current: str) -> bool:
+    """Step up one rung. False when there is nothing bigger left to try.
+
+    Takes the size that failed so two threads racing on the same rejection
+    advance the ladder once between them rather than once each.
+    """
+    global _gen_size_index
+    with _gen_size_lock:
+        # Read the index directly rather than calling _gen_size(): the lock is
+        # a plain Lock, not an RLock, so taking it again here would deadlock
+        # the render thread the moment a size was ever refused.
+        width, height = _GEN_SIZES[_gen_size_index]
+        if f"{width}x{height}" != current:
+            return True  # another caller already climbed; retry on their rung
+        if _gen_size_index + 1 >= len(_GEN_SIZES):
+            return False
+        _gen_size_index += 1
+        width, height = _GEN_SIZES[_gen_size_index]
+    logger.warning(
+        "Image size %s was refused as below the API's minimum pixel budget; "
+        "retrying at %dx%d.",
+        current,
+        width,
+        height,
+    )
+    return True
+
+
+def _is_size_too_small(exc: Exception) -> bool:
+    """True for the 400 that means "this resolution is under the floor".
+
+    Matched on the size-related wording rather than the status code alone: a
+    400 can also mean a rejected prompt, and climbing the ladder for that would
+    burn every rung on an error more pixels cannot fix.
+    """
+    if not isinstance(exc, APIStatusError) or exc.status_code != 400:
+        return False
+    message = str(exc).lower()
+    return "size" in message and (
+        "pixel budget" in message or "minimum" in message or "too small" in message
+    )
 
 # Image generation is slow; give the API a generous but explicit budget.
 _REQUEST_TIMEOUT_S: float = 300.0
@@ -174,14 +249,20 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
     """
     client = _client()
     last_exc: Optional[Exception] = None
-    for attempt in range(2):
+    # One retry for transient faults, plus one attempt per remaining ladder
+    # rung. A size rejection is not transient - the same request will be
+    # refused forever - so it consumes a ladder step instead of the retry.
+    attempts = 2 + len(_GEN_SIZES)
+    transient_retry_used = False
+    for attempt in range(attempts):
+        size = _gen_size()
         try:
             if template is not None:
                 response = client.images.edit(
                     model=settings.image_model,
                     image=template,
                     prompt=prompt,
-                    size=_GEN_SIZE,
+                    size=size,
                     n=1,
                     quality="high",
                     output_format="png",
@@ -191,7 +272,7 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
                 response = client.images.generate(
                     model=settings.image_model,
                     prompt=prompt,
-                    size=_GEN_SIZE,
+                    size=size,
                     n=1,
                     quality="high",
                     output_format="png",
@@ -215,7 +296,10 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
             raise RuntimeError("OpenAI Images API returned neither b64_json nor url.")
         except (OpenAIError, httpx.HTTPError, RuntimeError) as exc:
             last_exc = exc
-            if attempt == 0 and _is_transient(exc):
+            if _is_size_too_small(exc) and _climb_size_ladder(size):
+                continue
+            if not transient_retry_used and _is_transient(exc):
+                transient_retry_used = True
                 logger.warning(
                     "Transient image API failure (%s); retrying once in %.0fs.",
                     exc,

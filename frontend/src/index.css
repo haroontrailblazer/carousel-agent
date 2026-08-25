@@ -309,7 +309,9 @@
    narrow rail instead of pushing the current agent step below the fold.
 --------------------------------------------------------------------------- */
 .agent-main {
-  height: calc(100dvh - 3.5rem);
+  /* Full viewport height on every screen: the 3.5rem that used to be
+     subtracted here was the mobile top bar, which no longer exists. */
+  height: 100dvh;
   min-height: 38rem;
   overflow: hidden;
 }
@@ -354,7 +356,11 @@
   justify-content: space-between;
   gap: 1rem;
   border-bottom: 1px solid var(--border);
-  padding: 1.65rem 1.25rem 1rem;
+  /* Extra left padding on phones so the run title clears the floating
+     drawer button, which sits at 0.5rem/0.5rem and is 2.25rem square. The
+     md rule below resets padding-inline once the sidebar is permanent and
+     the button is gone. */
+  padding: 1.65rem 1.25rem 1rem 3.25rem;
 }
 
 .agent-conversation-scroll {
@@ -435,7 +441,6 @@
 
 @media (min-width: 768px) {
   .agent-main {
-    height: 100dvh;
     min-height: 42rem;
   }
 

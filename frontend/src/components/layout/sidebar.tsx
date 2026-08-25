@@ -46,11 +46,11 @@ function useTheme() {
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      {/* 2.5875rem = 41.4px: the previous size-9 (36px) plus 15%. An
-          arbitrary value rather than the next step on Tailwind's 4px scale,
-          because size-10 would be +11% and size-11 +22% - neither is what was
-          asked for. */}
-      <BrandLogo className="size-[2.5875rem]" />
+      {/* 2.84625rem = 45.54px. Two deliberate steps up from the original
+          size-9 (36px): +15%, then +10% on that. Arbitrary values rather than
+          Tailwind's 4px scale, whose steps here would be +11% and +22% - the
+          scale simply has no rung at the sizes that were asked for. */}
+      <BrandLogo className="size-[2.84625rem]" />
       {!compact && (
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold leading-tight">
@@ -119,14 +119,38 @@ function QueueBadge() {
   )
 }
 
-export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+export function SidebarContent({
+  onNavigate,
+  onClose,
+}: {
+  onNavigate?: () => void
+  /** Drawer only. When given, the close control sits in the brand row. */
+  onClose?: () => void
+}) {
   const { identity, signOut } = useAuth()
   const { dark, toggle } = useTheme()
 
   return (
     <div className="flex h-full flex-col gap-1 p-3">
-      <div className="px-2 py-3">
-        <BrandMark />
+      {/* Brand row, ruled off from the navigation below it - the same rule
+          the footer uses above the theme switch. On the phone the drawer's
+          close control lives on this row rather than on a row of its own,
+          so the mark and the name occupy the space that row was wasting. */}
+      <div className="mb-2 flex items-center gap-2 border-b border-[var(--border)] px-2 py-3">
+        <span className="flex min-w-0 flex-1">
+          <BrandMark />
+        </span>
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            onClick={onClose}
+          >
+            <PanelLeftClose className="size-4" />
+            <span className="sr-only">Close menu</span>
+          </Button>
+        )}
       </div>
 
       <nav className="flex flex-col gap-0.5">
@@ -231,13 +255,7 @@ export function SidebarDrawer({
         className="absolute inset-0 bg-black/40"
       />
       <div className="absolute inset-y-0 left-0 w-64 border-r border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-lift)]">
-        <div className="flex justify-end p-2">
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <PanelLeftClose className="size-4" />
-            <span className="sr-only">Close menu</span>
-          </Button>
-        </div>
-        <SidebarContent onNavigate={onClose} />
+        <SidebarContent onNavigate={onClose} onClose={onClose} />
       </div>
     </div>
   )

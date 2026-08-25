@@ -3,7 +3,6 @@ import { PanelLeft } from "lucide-react"
 import { useLocation } from "react-router"
 
 import { SidebarContent, SidebarDrawer } from "@/components/layout/sidebar"
-import { BrandLogo } from "@/components/layout/brand-logo"
 import { Button } from "@/components/ui/button"
 
 /**
@@ -29,21 +28,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SidebarDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       <div className="md:pl-[17rem]">
-        {/* Slim bar that exists only to hold the menu button on small screens. */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-[var(--border)] bg-[var(--background)]/85 px-4 backdrop-blur md:hidden">
-          <Button variant="ghost" size="icon" onClick={() => setMenuOpen(true)}>
-            <PanelLeft className="size-4" />
-            <span className="sr-only">Open menu</span>
-          </Button>
-          <BrandLogo className="size-8" />
-          <span className="text-sm font-semibold">Carousel Factory</span>
-        </header>
+        {/* No top bar on small screens - just the control that opens the
+            drawer, floating over the page. The bar was spending 56px of a
+            phone's height restating the app's name and mark, which the drawer
+            it opens already shows. Fixed rather than sticky so it stays
+            reachable once the page is scrolled. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setMenuOpen(true)}
+          className="fixed left-2 top-2 z-30 bg-[var(--background)]/80 backdrop-blur md:hidden"
+        >
+          <PanelLeft className="size-4" />
+          <span className="sr-only">Open menu</span>
+        </Button>
 
         <main
           className={
             isAgentWorkspace
               ? "agent-main"
-              : "mx-auto max-w-5xl px-4 py-8 md:px-8"
+              : "mx-auto max-w-5xl px-4 pb-8 pt-14 md:px-8 md:py-8"
           }
         >
           {children}
