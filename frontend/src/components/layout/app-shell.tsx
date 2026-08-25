@@ -3,6 +3,7 @@ import { PanelLeft } from "lucide-react"
 import { useLocation } from "react-router"
 
 import { SidebarContent, SidebarDrawer } from "@/components/layout/sidebar"
+import { BrandLogo } from "@/components/layout/brand-logo"
 import { Button } from "@/components/ui/button"
 
 /**
@@ -34,13 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <PanelLeft className="size-4" />
             <span className="sr-only">Open menu</span>
           </Button>
-          <span
-            aria-hidden
-            className="grid size-7 place-items-center rounded-[9px] text-[12px] font-bold"
-            style={{ background: "var(--brand)", color: "var(--brand-foreground)" }}
-          >
-            CF
-          </span>
+          <BrandLogo className="size-8" />
           <span className="text-sm font-semibold">Carousel Factory</span>
         </header>
 

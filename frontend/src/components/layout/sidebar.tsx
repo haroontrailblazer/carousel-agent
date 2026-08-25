@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { BrandLogo } from "@/components/layout/brand-logo"
 import { useAuth } from "@/hooks/use-auth"
 import { get } from "@/lib/api"
 import { useRuns } from "@/routes/history"
@@ -45,13 +46,7 @@ function useTheme() {
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span
-        aria-hidden
-        className="grid size-8 shrink-0 place-items-center rounded-[10px] text-[13px] font-bold"
-        style={{ background: "var(--brand)", color: "var(--brand-foreground)" }}
-      >
-        CF
-      </span>
+      <BrandLogo className="size-9" />
       {!compact && (
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold leading-tight">

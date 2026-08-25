@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useNavigate } from "react-router"
 
+import { BrandLogo } from "@/components/layout/brand-logo"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input, Label } from "@/components/ui/input"
@@ -48,14 +49,22 @@ export function ResetPasswordRoute() {
   return (
     <div className="grid min-h-dvh place-items-center px-4">
       <Card className="w-full max-w-sm p-7">
-        <h1 className="text-base font-semibold">Choose a new password</h1>
+        <div className="mb-6 flex items-center gap-2">
+          <BrandLogo className="size-10" />
+          <div>
+            <p className="text-base font-semibold leading-tight">Carousel Factory</p>
+            <h1 className="text-xs text-[var(--muted-foreground)]">
+              Choose a new password
+            </h1>
+          </div>
+        </div>
 
         {done ? (
-          <p className="mt-3 text-sm text-[var(--muted-foreground)]">
+          <p className="text-sm text-[var(--muted-foreground)]">
             Password updated. Taking you to sign in…
           </p>
         ) : (
-          <form onSubmit={onSubmit} className="mt-5 space-y-4">
+          <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="password">New password</Label>
               <Input

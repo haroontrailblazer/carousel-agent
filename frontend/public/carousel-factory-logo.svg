@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="title desc">
+  <title id="title">Carousel Factory</title>
+  <desc id="desc">An angular letter C assembled from layered carousel panels with an AI spark.</desc>
+  <defs>
+    <linearGradient id="lime" x1="11" y1="8" x2="52" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E6FF89"/>
+      <stop offset="0.38" stop-color="#B8EF43"/>
+      <stop offset="1" stop-color="#82BD1C"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="18" y1="8" x2="51" y2="59" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B5145"/>
+      <stop offset="0.5" stop-color="#161811"/>
+      <stop offset="1" stop-color="#070907"/>
+    </linearGradient>
+    <filter id="shadow" x="-18%" y="-16%" width="148%" height="158%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.1" flood-color="#080A07" flood-opacity=".28"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)" stroke-linejoin="round">
+    <!-- Offset graphite layer gives the angular C a compact 3D extrusion. -->
+    <path fill="url(#edge)" d="M54 8H23L8 20v24l15 12h31V42H28l-7-5.5v-9L28 22h26V8Z" transform="translate(2.4 2.8)"/>
+    <!-- The front face is deliberately angular so it cannot read as a ring. -->
+    <path fill="url(#lime)" d="M54 8H23L8 20v24l15 12h31V42H28l-7-5.5v-9L28 22h26V8Z"/>
+
+    <!-- Three panel seams turn the C into a carousel stack without a picture icon. -->
+    <path fill="#F7F7F5" d="M23 8h31v4H24.4L12 21.9V43l12.4 9H54v4H23L8 44V20L23 8Z" opacity=".32"/>
+    <path fill="none" stroke="#F0FFB8" stroke-width="1.15" stroke-linecap="round" d="M24 10h27M11 21.5v20.8M24 53.5h27" opacity=".9"/>
+    <path fill="none" stroke="#6D9F19" stroke-width="1" d="m22.6 22.3-7.2-5.8M22.6 41.7l-7.2 5.8" opacity=".72"/>
+
+    <!-- Restrained agent signal; this is the only secondary symbol. -->
+    <path fill="#F7F7F5" stroke="#161811" stroke-width="1" d="M34 32c4.1-.8 5.8-2.5 6.6-6.6.8 4.1 2.5 5.8 6.6 6.6-4.1.8-5.8 2.5-6.6 6.6-.8-4.1-2.5-5.8-6.6-6.6Z"/>
+    <circle cx="49.8" cy="25.3" r="1.55" fill="#161811"/>
+  </g>
+</svg>

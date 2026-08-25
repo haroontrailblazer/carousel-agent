@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from "react-router"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { BrandLogo } from "@/components/layout/brand-logo"
 import { Input, Label } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
 import { loadAuthConfig } from "@/lib/supabase"
@@ -72,13 +73,7 @@ export function LoginRoute() {
     <div className="grid min-h-dvh place-items-center bg-[var(--background)] px-4">
       <Card className="w-full max-w-sm p-7">
         <div className="mb-6 flex items-center gap-2">
-          <span
-            aria-hidden
-            className="grid size-8 place-items-center rounded-[10px] text-sm font-bold"
-            style={{ background: "var(--brand)", color: "var(--brand-foreground)" }}
-          >
-            CF
-          </span>
+          <BrandLogo className="size-10" />
           <div>
             <h1 className="text-base font-semibold leading-tight">Carousel Factory</h1>
             <p className="text-xs text-[var(--muted-foreground)]">
