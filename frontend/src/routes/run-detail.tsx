@@ -1,18 +1,35 @@
 import * as React from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link, useParams } from "react-router"
-import { ExternalLink, RotateCcw, WifiOff } from "lucide-react"
-import { toast } from "sonner"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { Link, useParams, useSearchParams } from "react-router"
+import { ExternalLink, Images, ListTree, WifiOff } from "lucide-react"
 
+import { ReviewPanel } from "@/components/review/review-panel"
+import { TaskActions } from "@/components/run/task-actions"
 import { AgentTrace, PhaseRail } from "@/components/run/trace"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
+import { TabPanel, Tabs } from "@/components/ui/tabs"
 import { useRunStream } from "@/hooks/use-run-stream"
-import { get, post } from "@/lib/api"
-import { compactNumber, elapsed, relativeTime } from "@/lib/format"
+import { get } from "@/lib/api"
+import { elapsed, relativeTime } from "@/lib/format"
 import { PHASE_LABELS, STATUS_LABELS, STATUS_TOKEN } from "@/lib/pipeline"
-import type { RunDetail } from "@/lib/types"
+import type { RunDetail, RunStatus } from "@/lib/types"
+
+type TaskTab = "trace" | "review"
+
+/**
+ * Which view a task opens on.
+ *
+ * A task that is still working is a process to watch, so it opens on the
+ * trace. A task that is waiting for a decision, or already published, is a
+ * carousel to look at, so it opens on the review. Everything else - failed,
+ * cancelled, interrupted - opens on the trace, because that is where the
+ * explanation is.
+ */
+function defaultTab(status: RunStatus): TaskTab {
+  return status === "awaiting_review" || status === "done" ? "review" : "trace"
+}
 
 export function RunDetailRoute() {
   const { runId = "" } = useParams()
@@ -25,28 +42,75 @@ export function RunDetailRoute() {
     // authoritative snapshot (bundle, pending_review, publish result) lives
     // here - and pending_review is not monotonic, so a one-time read is not
     // enough.
-    refetchInterval: (query) =>
-      query.state.data && ["running", "awaiting_review"].includes(query.state.data.status)
-        ? 10_000
-        : false,
+    // Phase, pending_review and the publish result all change under the
+    // user's feet while a run works; 10s was slow enough that the trace moved
+    // on before the header caught up.
+    // awaiting_review polls harder than it used to because the decision card
+    // now lives on this screen: the same task can be decided from Telegram,
+    // and this snapshot is what notices.
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (status === "running") return 4_000
+      if (status === "awaiting_review") return 8_000
+      return false
+    },
+    refetchIntervalInBackground: false,
   })
 
+  // Derived here rather than after the loading guard: the trace hook needs it
+  // to decide how hard to poll, and a finished task must not be polled at all.
+  const isLive = run.data?.status === "running"
+
   const stream = useRunStream(runId, {
-    onPhase: () => void queryClient.invalidateQueries({ queryKey: ["run", runId] }),
+    live: isLive,
+    onPhase: () => {
+      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
+      // The bundle is written at a phase boundary, and rework rewrites it.
+      // Without this the Review tab keeps showing the previous round.
+      void queryClient.invalidateQueries({ queryKey: ["artifacts", runId] })
+    },
     onEnd: () => {
       void queryClient.invalidateQueries({ queryKey: ["run", runId] })
       void queryClient.invalidateQueries({ queryKey: ["runs"] })
     },
   })
 
-  const resume = useMutation({
-    mutationFn: () => post(`/api/runs/${runId}/resume`),
-    onSuccess: () => {
-      toast.success("Resuming from where it stopped")
-      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
+  // --- which tab ----------------------------------------------------------
+  // Resolved once, on arrival, then pinned. The status moves under the user -
+  // a task reaches review while they are reading the trace - and yanking the
+  // screen out from under someone mid-read is not helpful. The Review tab
+  // pulses instead, and they switch when they are ready.
+  const [params, setParams] = useSearchParams()
+  const urlTab = params.get("tab")
+  const [tab, setTab] = React.useState<TaskTab | null>(
+    urlTab === "review" || urlTab === "trace" ? urlTab : null,
+  )
+  const status = run.data?.status
+
+  React.useEffect(() => {
+    if (tab || !status) return
+    setTab(defaultTab(status))
+  }, [tab, status])
+
+  const active: TaskTab = tab ?? "trace"
+
+  const selectTab = React.useCallback(
+    (next: TaskTab) => {
+      setTab(next)
+      // Kept in the query string rather than the path: changing the path
+      // remounts this route, which would tear down and rebuild the event
+      // stream on every tab click.
+      setParams(
+        (prev) => {
+          const copy = new URLSearchParams(prev)
+          copy.set("tab", next)
+          return copy
+        },
+        { replace: true },
+      )
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not resume"),
-  })
+    [setParams],
+  )
 
   // A gap means the browser fell behind and lost events; the database still
   // has them, so refetch rather than showing an incomplete trace.
@@ -62,19 +126,19 @@ export function RunDetailRoute() {
   if (run.isError || !run.data) {
     return (
       <Card className="p-6">
-        <p className="font-medium">Run not found</p>
+        <p className="font-medium">Task not found</p>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           It may have been removed, or the id is wrong.
         </p>
         <Button className="mt-4" variant="ghost" asChild>
-          <Link to="/runs">Back to runs</Link>
+          <Link to="/tasks">Back to tasks</Link>
         </Button>
       </Card>
     )
   }
 
   const data = run.data
-  const live = data.status === "running"
+  const live = isLive
   const tokens = data.token_usage ?? {}
 
   return (
@@ -93,9 +157,12 @@ export function RunDetailRoute() {
           )}
         </div>
 
-        <h1 className="text-xl font-semibold tracking-tight">
-          {data.title || data.news.title || data.run_id}
-        </h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-xl font-semibold tracking-tight">
+            {data.title || data.news.title || data.run_id}
+          </h1>
+          <TaskActions runId={data.run_id} status={data.status} title={data.title} />
+        </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
           <span className="font-mono">{data.run_id}</span>
@@ -120,19 +187,18 @@ export function RunDetailRoute() {
       {data.status === "interrupted" && (
         <Card className="flex flex-wrap items-center gap-4 p-4">
           <div className="min-w-0 flex-1">
-            <p className="font-medium">This run was interrupted</p>
+            <p className="font-medium">This task was interrupted</p>
             <p className="text-sm text-[var(--muted-foreground)]">
               The service restarted while it was working. It can pick up from
               the start of the “{PHASE_LABELS[data.phase] ?? data.phase}” phase.
             </p>
           </div>
-          <Button onClick={() => resume.mutate()} disabled={resume.isPending}>
-            <RotateCcw /> {resume.isPending ? "Resuming…" : "Resume"}
-          </Button>
         </Card>
       )}
 
-      {data.pending_review && (
+      {/* Only on the trace tab: on the review tab the decision card below is
+          already saying this, louder. */}
+      {data.pending_review && active === "trace" && (
         <Card className="flex flex-wrap items-center gap-4 p-4">
           <div className="min-w-0 flex-1">
             <p className="font-medium">Ready for review</p>
@@ -140,8 +206,8 @@ export function RunDetailRoute() {
               {data.slide_count} slides and a cover are waiting for a decision.
             </p>
           </div>
-          <Button variant="brand" asChild>
-            <Link to={`/runs/${data.run_id}/review`}>Review it</Link>
+          <Button variant="brand" onClick={() => selectTab("review")}>
+            Review it
           </Button>
         </Card>
       )}
@@ -167,18 +233,51 @@ export function RunDetailRoute() {
         </Card>
       )}
 
-      <section className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-base font-semibold tracking-tight">Trace</h2>
-          <div className="flex gap-2 text-xs text-[var(--muted-foreground)]">
-            {tokens.llm_calls != null && <span>{tokens.llm_calls} LLM calls</span>}
-            {tokens.image_calls != null && <span>· {tokens.image_calls} images</span>}
-            {tokens.total_tokens != null && (
-              <span>· {compactNumber(tokens.total_tokens)} tokens</span>
-            )}
-          </div>
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Tabs
+            label="Task views"
+            value={active}
+            onChange={selectTab}
+            items={[
+              { value: "trace", label: "Trace", icon: <ListTree /> },
+              {
+                value: "review",
+                label: "Review",
+                icon: <Images />,
+                // The dot is the only reason a person would switch tabs
+                // unprompted, so it appears when - and only when - a decision
+                // is actually wanted.
+                badge: data.pending_review ? (
+                  <span
+                    aria-label="waiting for your decision"
+                    className="size-1.5 rounded-full animate-pip-pulse"
+                    style={{ backgroundColor: "var(--phase-review)" }}
+                  />
+                ) : null,
+              },
+            ]}
+          />
+          {active === "trace" && (
+            <div className="flex gap-2 text-xs text-[var(--muted-foreground)]">
+              {tokens.llm_calls != null && <span>{tokens.llm_calls} LLM calls</span>}
+              {tokens.image_calls != null && <span>· {tokens.image_calls} images</span>}
+            </div>
+          )}
         </div>
-        <AgentTrace events={stream.events} live={live} synced={stream.synced} />
+
+        <TabPanel value="trace" selected={active === "trace"}>
+          <AgentTrace
+            events={stream.events}
+            summary={stream.summary}
+            live={live}
+            synced={stream.synced}
+          />
+        </TabPanel>
+
+        <TabPanel value="review" selected={active === "review"}>
+          <ReviewPanel run={data} />
+        </TabPanel>
       </section>
     </div>
   )

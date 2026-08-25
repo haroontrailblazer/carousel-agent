@@ -1,13 +1,19 @@
-import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router"
+import {
+  createBrowserRouter,
+  Navigate,
+  Outlet,
+  useLocation,
+  useParams,
+} from "react-router"
 
 import { AppShell } from "@/components/layout/app-shell"
 import { useAuth } from "@/hooks/use-auth"
 import { HistoryRoute } from "@/routes/history"
 import { LoginRoute } from "@/routes/login"
 import { NewRunRoute } from "@/routes/new-run"
+import { NewsroomRoute } from "@/routes/newsroom"
 import { NotFoundRoute } from "@/routes/not-found"
 import { ResetPasswordRoute } from "@/routes/reset-password"
-import { ReviewRoute } from "@/routes/review"
 import { RunDetailRoute } from "@/routes/run-detail"
 
 /**
@@ -43,6 +49,21 @@ function RequireAuth() {
   )
 }
 
+
+/**
+ * Send an old link to its current equivalent.
+ *
+ * Two moves happened here: the screens were called "runs" before "tasks", and
+ * the review stopped being its own screen - it is a tab on the task now. Both
+ * shapes are still out there in bookmarks and in anything already shared, so
+ * both land where they should instead of on a 404 that looks like the app is
+ * broken.
+ */
+function LegacyRunRedirect({ review = false }: { review?: boolean }) {
+  const { runId } = useParams()
+  return <Navigate to={`/tasks/${runId}${review ? "?tab=review" : ""}`} replace />
+}
+
 export const router = createBrowserRouter([
   // PUBLIC. Every landing page named in an auth email must be listed here -
   // Oreag's proxy.ts documents what happens otherwise: the links in every
@@ -55,9 +76,17 @@ export const router = createBrowserRouter([
     children: [
       { path: "/", element: <Navigate to="/new" replace /> },
       { path: "/new", element: <NewRunRoute /> },
-      { path: "/runs", element: <HistoryRoute /> },
-      { path: "/runs/:runId", element: <RunDetailRoute /> },
-      { path: "/runs/:runId/review", element: <ReviewRoute /> },
+      { path: "/newsroom", element: <NewsroomRoute /> },
+      { path: "/tasks", element: <HistoryRoute /> },
+      // Legacy paths. These screens were called "runs" before, and links to
+      // them exist in browser history and in anything already shared. Keeping
+      // the redirects costs three lines and means an old bookmark lands where
+      // it should instead of on a 404 that looks like the app is broken.
+      { path: "/runs", element: <Navigate to="/tasks" replace /> },
+      { path: "/runs/:runId", element: <LegacyRunRedirect /> },
+      { path: "/runs/:runId/review", element: <LegacyRunRedirect review /> },
+      { path: "/tasks/:runId", element: <RunDetailRoute /> },
+      { path: "/tasks/:runId/review", element: <LegacyRunRedirect review /> },
     ],
   },
   { path: "*", element: <NotFoundRoute /> },

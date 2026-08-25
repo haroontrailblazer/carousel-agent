@@ -1,61 +1,80 @@
 /**
- * Live run trace over Server-Sent Events.
+ * A run's trace: full history over plain JSON, live updates over SSE.
  *
- * The principle that makes reload, reconnect and the Telegram race all fall
- * out for free: **the server owns the log, the client owns a projection.** The
- * stream never becomes the source of truth for the carousel itself - that
- * always comes from the REST snapshot.
+ * **History does not come from the stream.** SSE is lovely when the network
+ * cooperates and invisible when it does not: Cloudflare quick tunnels buffer
+ * the response body, and because an event stream never ends, the browser holds
+ * an open connection that delivers nothing - measured as zero bytes in sixty
+ * seconds while the identical request returned all 34 frames locally. Plenty
+ * of corporate proxies behave the same way.
  *
- * EventSource is used rather than a fetch reader specifically because it
- * reconnects on its own and replays Last-Event-ID, and because the session is
- * a cookie it can send. A fetch reader would need a manual backoff loop, and a
- * bearer token would have to go in the query string, which writes the
- * credential into every access log on the way.
+ * So the trace is fetched like any other resource, and the stream is used only
+ * to append what happens next. Where SSE works you get live updates; where it
+ * does not you still get the whole trace. The alternative - streaming as the
+ * only source - fails silently and looks exactly like "the app is broken".
  *
- * The server emits `id: <seq>` on every frame and replays anything after the
- * cursor, so a dropped connection loses nothing and duplicates nothing.
+ * Frames come from ADK's own transcript, so every task has a trace no matter
+ * which surface started it, and what is shown matches the /dev inspector.
  */
 
 import * as React from "react"
+import { useQuery } from "@tanstack/react-query"
 
-import type { RunEvent } from "@/lib/types"
+import { get } from "@/lib/api"
+import type { RunEvent, Trace, TraceSummary } from "@/lib/types"
 
 export type TraceState = {
   events: RunEvent[]
-  /** True once history has been replayed and the stream is live. */
+  /** True once the history has loaded (whether or not the stream connected). */
   synced: boolean
-  /** Latest phase seen on the stream, if any. */
+  /** Latest phase seen, if any. */
   phase: string | null
-  /** Set when the client was told it missed events and should refetch. */
+  /** The client was told it missed events and should refetch. */
   gapped: boolean
+  /** Whether the live stream is currently connected. */
   connected: boolean
+  /** True while the history request is in flight. */
+  loading: boolean
+  /** Per-agent timing and token totals for the run. */
+  summary: TraceSummary | null
 }
 
-const EMPTY: TraceState = {
-  events: [],
-  synced: false,
-  phase: null,
-  gapped: false,
-  connected: false,
-}
-
-/**
- * Subscribe to a run's timeline.
- *
- * @param runId    the run to watch, or null to watch nothing
- * @param onPhase  called when the phase changes, so the caller can refetch the
- *                 authoritative snapshot (bundle, pending_review, artifacts)
- * @param onEnd    called when the run reaches a terminal state
- */
 export function useRunStream(
   runId: string | null,
-  { onPhase, onEnd }: { onPhase?: (phase: string) => void; onEnd?: () => void } = {},
+  {
+    onPhase,
+    onEnd,
+    live = true,
+  }: { onPhase?: (phase: string) => void; onEnd?: () => void; live?: boolean } = {},
 ): TraceState {
-  const [state, setState] = React.useState<TraceState>(EMPTY)
+  const [tail, setTail] = React.useState<RunEvent[]>([])
+  const [connected, setConnected] = React.useState(false)
+  const [gapped, setGapped] = React.useState(false)
 
-  // Kept in refs so changing callbacks never tears down the connection - a
-  // reconnect on every parent render would hammer the server and reset the
-  // trace.
+  // The whole trace, as an ordinary request.
+  const history = useQuery({
+    queryKey: ["trace", runId],
+    queryFn: () => get<Trace>(`/api/runs/${runId}/trace`),
+    enabled: !!runId,
+    // No stale window while a run is going: every poll should ask.
+    staleTime: live ? 0 : 30_000,
+    // Poll HARD while the agents are working.
+    //
+    // The live stream is an optimisation, not the mechanism - Cloudflare and
+    // many corporate proxies buffer SSE and deliver nothing until a stream
+    // ends, which for an event stream is never. Polling is what actually keeps
+    // the trace in sync, so it has to be fast enough that nobody reaches for
+    // reload.
+    //
+    // 3s is chosen against the endpoint's measured cost (~0.6-1.2s locally,
+    // ~2s over a tunnel): quick enough to feel live, slow enough that requests
+    // never overlap. Once the run is finished the transcript is immutable, so
+    // polling stops entirely.
+    refetchInterval: live ? 3_000 : false,
+    // A backgrounded tab does not need a 3s heartbeat.
+    refetchIntervalInBackground: false,
+  })
+
   const onPhaseRef = React.useRef(onPhase)
   const onEndRef = React.useRef(onEnd)
   React.useEffect(() => {
@@ -64,67 +83,74 @@ export function useRunStream(
   })
 
   React.useEffect(() => {
-    if (!runId) {
-      setState(EMPTY)
-      return
-    }
-    setState(EMPTY)
+    setTail([])
+    setGapped(false)
+    setConnected(false)
+  }, [runId])
+
+  React.useEffect(() => {
+    if (!runId || !live) return
 
     const source = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`, {
       withCredentials: true,
     })
 
-    source.onopen = () => {
-      setState((s) => ({ ...s, connected: true }))
-    }
-
-    source.addEventListener("synced", () => {
-      setState((s) => ({ ...s, synced: true, connected: true }))
-    })
+    source.onopen = () => setConnected(true)
+    source.addEventListener("synced", () => setConnected(true))
 
     source.addEventListener("run", (message) => {
       let event: RunEvent
       try {
         event = JSON.parse((message as MessageEvent).data)
       } catch {
-        // Ignore one malformed frame rather than tearing down the stream over
-        // it - the next frame is very likely fine.
+        // Ignore a malformed frame rather than tearing down the stream; the
+        // next one is very likely fine.
         return
       }
-
-      setState((s) => {
-        // The server already dedupes against the replay cursor, but a
-        // reconnect can overlap by one; keep it idempotent here too.
-        if (s.events.some((e) => e.seq === event.seq && event.kind !== "gap")) {
-          return s
-        }
-        const phase =
-          typeof event.data?.phase === "string" ? (event.data.phase as string) : s.phase
-        return {
-          ...s,
-          events: [...s.events, event],
-          phase,
-          gapped: s.gapped || event.kind === "gap",
-          connected: true,
-        }
-      })
-
+      if (event.kind === "gap") {
+        setGapped(true)
+        return
+      }
+      setTail((current) =>
+        current.some((e) => e.seq === event.seq) ? current : [...current, event],
+      )
       const phase = event.data?.phase
       if (typeof phase === "string") onPhaseRef.current?.(phase)
       if (event.kind === "terminal") onEndRef.current?.()
     })
 
-    source.onerror = () => {
-      // EventSource retries on its own and replays Last-Event-ID; surface the
-      // state so the UI can show "reconnecting" rather than pretending all is
-      // well or, worse, showing an error the user cannot act on.
-      setState((s) => ({ ...s, connected: false }))
-    }
+    source.onerror = () => setConnected(false)
 
     return () => source.close()
-  }, [runId])
+  }, [runId, live])
 
-  return state
+  const events = React.useMemo(() => {
+    const base = history.data?.items ?? []
+    if (!tail.length) return base
+    // The stream renumbers live frames onto the end of the replayed history,
+    // and a poll may have already picked the same events up from ADK. Dedupe
+    // on sequence so a frame never appears twice.
+    const seen = new Set(base.map((e) => e.seq))
+    return [...base, ...tail.filter((e) => !seen.has(e.seq))]
+  }, [history.data, tail])
+
+  const phase = React.useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const p = events[i].data?.phase
+      if (typeof p === "string") return p
+    }
+    return null
+  }, [events])
+
+  return {
+    events,
+    synced: !history.isLoading,
+    phase,
+    gapped,
+    connected,
+    loading: history.isLoading,
+    summary: history.data?.summary ?? null,
+  }
 }
 
 /** Group a flat event list by the agent that produced it, preserving order. */

@@ -1,14 +1,9 @@
 """Authentication for the console, the API, and the mounted ADK dev UI.
 
-**Why a cookie and not just a bearer token.** Our own SPA could attach an
-Authorization header to every call. Two things it serves cannot:
-
-* The ADK dev UI at ``/dev`` is a vendored Angular app. It issues its own
-  XMLHttpRequest, fetch, EventSource and WebSocket calls, and there is no hook
-  to inject a header into them. Same-origin requests do send cookies, though.
-* ``EventSource`` cannot set headers at all. The alternative is a token in the
-  query string, which writes the credential into every access log and proxy
-  trace along the way.
+**Why a cookie and not just a bearer token.** ``EventSource`` cannot set
+headers at all, and the live run stream needs authenticating. The alternative
+is a token in the query string, which writes the credential into every access
+log and proxy trace along the way.
 
 So the browser authenticates with Supabase directly, posts that token ONCE to
 ``/api/auth/session``, and receives our own short-lived httpOnly cookie. Every
@@ -22,11 +17,8 @@ authorisation needs no database round trip per request; and verifying our own
 HS256 token is local work rather than a JWKS fetch on the hot path.
 
 **Why raw ASGI and not BaseHTTPMiddleware.** BaseHTTPMiddleware pulls the
-response body through a memory stream, which defeats incremental flushing -
-every SSE stream, ours and ADK's, would only appear once the run finished. It
-also does not handle websocket scopes, which would break ADK's ``/run_live``.
-``web_app.BasicAuthMiddleware`` was written raw for exactly this reason; this
-replaces it and keeps the property.
+response body through a memory stream, which defeats incremental flushing - the
+live run stream would only appear once the run had already finished.
 """
 
 from __future__ import annotations
@@ -70,7 +62,7 @@ ALWAYS_OPEN = (
 #: Prefixes that require an identity. Everything else falls through to the
 #: static SPA bundle, which must load unauthenticated - otherwise the browser
 #: can never render a login screen to get a credential in the first place.
-PROTECTED = ("/api/", "/dev")
+PROTECTED = ("/api/",)
 
 
 #: Minimum session-secret length. PyJWT warns below 32 bytes for HS256, and a
@@ -372,9 +364,8 @@ class AuthMiddleware:
         """Does this path require an identity?
 
         A prefix ending in "/" matches by prefix ("/api/" covers "/api/runs").
-        One without matches the path itself or anything beneath it, so "/dev"
-        covers "/dev" and "/dev/dev-ui/" but not a route merely starting with
-        those letters.
+        One without matches the path itself or anything beneath it, so "/admin"
+        would cover "/admin" and "/admin/users" but not "/administrator".
         """
         for prefix in self._protected:
             if prefix.endswith("/"):

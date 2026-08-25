@@ -81,10 +81,15 @@ async def get_pool() -> asyncpg.Pool:
     dsn = _dsn()  # raise early, before taking the lock
     async with _pool_lock:
         if _pool is None:
+            # min_size=3 rather than 1: Supabase is a remote host, so opening
+            # a connection costs a TCP and TLS handshake - roughly a third of a
+            # second, which showed up as every first API call after an idle
+            # moment being slow. Keeping a few warm removes that from the path
+            # a user actually waits on.
             _pool = await asyncpg.create_pool(
                 dsn,
-                min_size=1,
-                max_size=5,
+                min_size=3,
+                max_size=10,
                 init=_init_connection,
                 timeout=_ACQUIRE_TIMEOUT_S,
                 command_timeout=_COMMAND_TIMEOUT_S,
@@ -895,3 +900,184 @@ async def seed_app_users(emails: list[str], role: str = "admin") -> int:
         [(e, role) for e in cleaned],
     )
     return len(cleaned)
+
+
+# ---------------------------------------------------------------------------
+# ADK's own event log - the authoritative transcript
+# ---------------------------------------------------------------------------
+async def count_adk_events(app_name: str, user_id: str, session_id: str) -> int:
+    """How many events ADK recorded for a session."""
+    pool = await get_pool()
+    return int(
+        await pool.fetchval(
+            "SELECT count(*) FROM public.events "
+            "WHERE app_name = $1 AND user_id = $2 AND session_id = $3",
+            app_name,
+            user_id,
+            session_id,
+        )
+        or 0
+    )
+
+
+async def load_adk_events(
+    app_name: str,
+    user_id: str,
+    session_id: str,
+    after: int = 0,
+    limit: int = 2000,
+) -> list[dict]:
+    """Read a session's raw ADK events, oldest first.
+
+    This is the same log the /dev inspector renders, so a trace built from it
+    matches what ADK shows rather than approximating it. It also means EVERY
+    run has a trace - including ones started from the CLI or the dev UI, which
+    never write to our own ``run_events`` table.
+
+    Read with one query rather than through ``DatabaseSessionService``, whose
+    ORM path measured at ~1.7 s PER EVENT over this link (58 s for 34 events).
+
+    Args:
+        after: how many leading events the caller already has. Events are
+            append-only and ordered by timestamp, so an offset is a stable
+            cursor.
+
+    Returns:
+        ``[{"seq", "event_data", "created_at"}]`` with seq starting at
+        ``after + 1``.
+    """
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT id, timestamp, event_data
+        FROM public.events
+        WHERE app_name = $1 AND user_id = $2 AND session_id = $3
+        ORDER BY timestamp ASC, id ASC
+        OFFSET $4 LIMIT $5
+        """,
+        app_name,
+        user_id,
+        session_id,
+        max(0, int(after)),
+        max(1, min(int(limit), 5000)),
+    )
+    out: list[dict] = []
+    for index, row in enumerate(rows, start=max(0, int(after)) + 1):
+        data = row["event_data"]
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except Exception:
+                data = {}
+        out.append(
+            {
+                "seq": index,
+                "event_data": data or {},
+                "created_at": row["timestamp"].isoformat() if row["timestamp"] else None,
+            }
+        )
+    return out
+
+
+async def delete_run(app_name: str, user_id: str, run_id: str) -> dict:
+    """Erase a run and everything attached to it.
+
+    Deletes across five tables plus ADK's own session and transcript, because a
+    half-deleted run is worse than no delete: an orphaned ``pending_reviews``
+    row keeps a dead run "waiting for review" forever, and an orphaned session
+    keeps its artifacts addressable. (That exact orphan already exists in this
+    database, from a session deleted through the ADK inspector while its runs
+    row stayed behind.)
+
+    A news item still marked ``processing`` is returned to the queue - the
+    story was never turned into anything, so it should be pickable again rather
+    than silently lost.
+
+    Callers must refuse to delete a RUNNING run; this function does not check,
+    because it is also the cleanup path for runs whose process is already gone.
+
+    Returns:
+        Row counts per table, for the caller to report.
+    """
+    pool = await get_pool()
+    counts: dict[str, int] = {}
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT news_id FROM runs WHERE run_id = $1", str(run_id)
+            )
+            news_id = row["news_id"] if row else None
+
+            for table, sql in (
+                ("run_events", "DELETE FROM run_events WHERE run_id = $1"),
+                ("pending_reviews", "DELETE FROM pending_reviews WHERE run_id = $1"),
+                ("feedback", "DELETE FROM feedback WHERE run_id = $1"),
+                ("runs", "DELETE FROM runs WHERE run_id = $1"),
+            ):
+                result = await conn.execute(sql, str(run_id))
+                counts[table] = int(result.rsplit(" ", 1)[-1] or 0)
+
+            # Keyed on session_id rather than run_id, which is exactly how it
+            # got missed the first time: an audit of every column named
+            # run_id/session_id is what surfaced it.
+            try:
+                result = await conn.execute(
+                    "DELETE FROM memory_entries "
+                    "WHERE app_name = $1 AND user_id = $2 AND session_id = $3",
+                    app_name,
+                    user_id,
+                    str(run_id),
+                )
+                counts["memory_entries"] = int(result.rsplit(" ", 1)[-1] or 0)
+            except Exception:
+                counts["memory_entries"] = 0
+
+            # ADK's own tables, addressed the way it addresses them.
+            for table, sql in (
+                (
+                    "events",
+                    "DELETE FROM public.events "
+                    "WHERE app_name = $1 AND user_id = $2 AND session_id = $3",
+                ),
+                (
+                    "sessions",
+                    "DELETE FROM public.sessions "
+                    "WHERE app_name = $1 AND user_id = $2 AND id = $3",
+                ),
+            ):
+                try:
+                    result = await conn.execute(sql, app_name, user_id, str(run_id))
+                    counts[table] = int(result.rsplit(" ", 1)[-1] or 0)
+                except Exception:
+                    counts[table] = 0
+
+            if news_id:
+                result = await conn.execute(
+                    "UPDATE news_queue SET status = $2 "
+                    "WHERE id = $1 AND status = $3",
+                    str(news_id),
+                    STATUS_QUEUED,
+                    STATUS_PROCESSING,
+                )
+                counts["requeued"] = int(result.rsplit(" ", 1)[-1] or 0)
+
+    return counts
+
+
+async def news_payload(news_id: str) -> Optional[dict]:
+    """The stored NewsItem for a queue id, whatever its status.
+
+    Used to re-run a task from the same story - unlike ``next_queued_news_by_id``
+    this does not claim the row, because a re-run of a failed task should work
+    even though that row is already marked processing or done.
+    """
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT id, payload FROM news_queue WHERE id = $1", str(news_id)
+    )
+    if row is None:
+        return None
+    payload = dict(row["payload"] or {})
+    payload["id"] = row["id"]
+    return payload

@@ -28,6 +28,7 @@ from app import runtime
 from app.config import settings
 from app.review.verdict import REJECT_QUESTION, submit_verdict
 from app.runs.bus import BUS
+from app.runs.stream import load_trace, load_trace_with_summary
 from app.runs.service import (
     RunRefused,
     active_run_ids,
@@ -92,6 +93,11 @@ ARTIFACT_URL_TTL_S = 3600
 #: kept alive explicitly.
 SSE_KEEPALIVE_S = 15.0
 
+#: A no-op SSE comment. Sent first to establish the response before any
+#: slow work, and again as the keepalive.
+_SSE_COMMENT = ": connected" + chr(10) + chr(10)
+_SSE_KEEPALIVE = ": keepalive" + chr(10) + chr(10)
+
 
 # ---------------------------------------------------------------------------
 # Request models
@@ -106,6 +112,8 @@ class StartRunRequest(BaseModel):
 class VerdictRequest(BaseModel):
     status: str = Field(..., pattern="^(approved|rejected)$")
     feedback: str = ""
+    #: Which cover to publish when the run produced both a clip and a still.
+    cover: Optional[str] = Field(None, pattern="^(video|image)$")
 
 
 class EnqueueRequest(BaseModel):
@@ -116,17 +124,75 @@ class EnqueueRequest(BaseModel):
 # Session reading
 # ---------------------------------------------------------------------------
 async def _session_state(run_id: str) -> dict:
-    """Read a run's ADK session state, or ``{}`` when there is none."""
+    """Read a run's ADK session state in a single query.
+
+    ``DatabaseSessionService.get_session`` is the supported way to do this and
+    it is far too slow here. It loads the event transcript unless told not to
+    (measured: 58 SECONDS for a run with 34 events), and even with
+    ``num_recent_events=0`` it still costs about three seconds, because it also
+    reads app-level and user-level state and merges them.
+
+    Every one of those is a separate round trip, and from here a round trip to
+    Supabase is 0.5-1.5 s. The console only needs the run's own state - the
+    bundle, the QA report, the verdict - which is one row and one column.
+
+    Falls back to the supported API if the direct read fails for any reason,
+    so an ADK schema change degrades performance rather than breaking the page.
+    """
+    try:
+        pool = await db.get_pool()
+        row = await pool.fetchrow(
+            "SELECT state FROM public.sessions "
+            "WHERE app_name = $1 AND user_id = $2 AND id = $3",
+            settings.app_name,
+            PIPELINE_USER_ID,
+            run_id,
+        )
+        if row is not None:
+            state = row["state"]
+            if isinstance(state, str):
+                state = json.loads(state)
+            return dict(state or {})
+        return {}
+    except Exception as exc:
+        logger.warning(
+            "Direct session-state read failed for %s (%s); falling back to "
+            "the ADK session service.",
+            run_id,
+            exc,
+        )
+
+    from google.adk.sessions.base_session_service import GetSessionConfig
+
     try:
         session = await runtime.session_service().get_session(
             app_name=settings.app_name,
             user_id=PIPELINE_USER_ID,
             session_id=run_id,
+            config=GetSessionConfig(num_recent_events=0),
         )
     except Exception as exc:
         logger.warning("Could not load session for run %s: %s", run_id, exc)
         return {}
     return dict(session.state) if session is not None else {}
+
+
+async def _trace_length(run_id: str) -> int:
+    """How many timeline frames a run has, matching what the stream replays.
+
+    Read from ADK's transcript so the client's cursor lines up with the
+    history the events endpoint will send.
+    """
+    try:
+        count = await db.count_adk_events(settings.app_name, PIPELINE_USER_ID, run_id)
+        if count:
+            return count
+    except Exception:
+        pass
+    try:
+        return await db.max_run_seq(run_id)
+    except Exception:
+        return 0
 
 
 def _news_summary(state: dict) -> dict:
@@ -221,20 +287,30 @@ async def get_run(
     run_id: str, _identity: Identity = Depends(current_identity)
 ) -> dict:
     """Everything the run detail screen needs, in one request."""
-    run = await db.get_run(run_id)
-    if run is None:
+    # Four independent lookups, each a round trip to a database ~600 ms away.
+    # Sequentially that is the whole page's latency; concurrently it is one
+    # round trip. return_exceptions so one failing lookup degrades a field
+    # rather than the response.
+    run, state, pending, last_seq = await asyncio.gather(
+        db.get_run(run_id),
+        _session_state(run_id),
+        db.load_pending_review(run_id),
+        _trace_length(run_id),
+        return_exceptions=True,
+    )
+    if isinstance(run, BaseException) or run is None:
         raise HTTPException(404, {"code": "no_such_run", "message": "Unknown run."})
-
-    state = await _session_state(run_id)
+    if isinstance(state, BaseException):
+        logger.warning("Session state unavailable for %s: %s", run_id, state)
+        state = {}
+    if isinstance(pending, BaseException):
+        pending = None
+    if isinstance(last_seq, BaseException):
+        last_seq = 0
     bundle = state.get(K_BUNDLE) or {}
     qa = state.get(K_QA_REPORT) or {}
     verdict = state.get(K_VERDICT) or {}
     publish = state.get(K_PUBLISH_RESULT) or {}
-
-    try:
-        pending = await db.load_pending_review(run_id)
-    except Exception:
-        pending = None
 
     return {
         **run,
@@ -253,7 +329,7 @@ async def get_run(
             "error": publish.get("message") if publish.get("status") == "error" else None,
         },
         "token_usage": state.get(K_TOKEN_USAGE, {}),
-        "last_seq": await db.max_run_seq(run_id),
+        "last_seq": last_seq,
         # The authoritative "is a decision still wanted?" flag. NOT monotonic:
         # a failed resume restores the pending row, so a run can go pending ->
         # not pending -> pending again. Any UI that reads this once will get
@@ -272,7 +348,21 @@ async def run_artifacts(
     reviewed the morning after would otherwise show a grid of broken images
     with no explanation.
     """
-    state = await _session_state(run_id)
+    # Independent round trips, so overlap them: one to Postgres for the
+    # bundle, one to object storage for the version map.
+    state, versions = await asyncio.gather(
+        _session_state(run_id),
+        runtime.artifact_service().latest_versions_async(
+            settings.app_name, PIPELINE_USER_ID, run_id
+        ),
+        return_exceptions=True,
+    )
+    if isinstance(state, BaseException):
+        state = {}
+    if isinstance(versions, BaseException):
+        logger.warning("Could not list artifact versions for %s: %s", run_id, versions)
+        versions = {}
+
     bundle = state.get(K_BUNDLE)
     if not bundle:
         raise HTTPException(
@@ -285,6 +375,9 @@ async def run_artifacts(
 
     service = runtime.artifact_service()
 
+    # Discover every artifact's newest version in ONE listing, then sign from
+    # that. Letting public_url() resolve the version itself costs a separate
+    # round trip to object storage per file - eight of them for one carousel.
     async def sign(filename: str) -> Optional[dict]:
         if not filename:
             return None
@@ -294,6 +387,7 @@ async def run_artifacts(
                 user_id=PIPELINE_USER_ID,
                 session_id=run_id,
                 filename=filename,
+                version=versions.get(filename),
                 expires_in=ARTIFACT_URL_TTL_S,
             )
         except Exception as exc:
@@ -354,6 +448,34 @@ def _sse(event: str, data: dict, seq: Optional[int] = None) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+@router.get("/runs/{run_id}/trace")
+async def run_trace(
+    run_id: str,
+    after: int = Query(0, ge=0),
+    limit: int = Query(2000, ge=1, le=5000),
+    _identity: Identity = Depends(current_identity),
+) -> dict:
+    """A run's timeline as plain JSON, with no streaming involved.
+
+    The events endpoint is nicer when it works, but SSE does not survive every
+    network path: Cloudflare quick tunnels buffer the response body, and since
+    an event stream never ends, nothing is ever delivered - the browser holds
+    an open connection that produces no bytes while the same request returns
+    all its frames locally. Corporate proxies do the same thing.
+
+    So history comes from here, which is an ordinary request that any proxy
+    handles, and the stream is used only to append live events on top. A trace
+    that renders everywhere beats a trace that renders elegantly on some
+    networks and not at all on others.
+    """
+    try:
+        frames, summary = await load_trace_with_summary(run_id, after=after, limit=limit)
+    except Exception as exc:
+        logger.warning("Could not load the trace for %s: %s", run_id, exc)
+        frames, summary = [], {"tokens": None, "ms": None, "agents": []}
+    return {"run_id": run_id, "after": after, "items": frames, "summary": summary}
+
+
 @router.get("/runs/{run_id}/events")
 async def run_events(
     run_id: str,
@@ -375,15 +497,33 @@ async def run_events(
 
     async def stream() -> AsyncIterator[str]:
         async with BUS.subscribe(run_id) as queue:
+            # Flush a comment frame BEFORE any database work.
+            #
+            # Reading the transcript takes seconds against a distant database,
+            # and until the first byte arrives a proxy sees a connection that
+            # has produced nothing - Cloudflare gives up and the browser gets
+            # an empty stream rather than a slow one. One comment establishes
+            # the response so the rest can take its time.
+            yield _SSE_COMMENT
+
             emitted = cursor
             try:
-                history = await db.load_run_events(run_id, after=cursor)
+                # ADK's own transcript, not just our distilled table: it
+                # records every run whichever surface started it, so a task
+                # begun from the CLI or the dev UI still has a trace, and what
+                # is shown matches the /dev inspector rather than
+                # approximating it.
+                history = await load_trace(run_id, after=cursor)
             except Exception as exc:
                 logger.warning("Could not replay run %s: %s", run_id, exc)
                 history = []
-            for row in history:
+            for index, row in enumerate(history):
                 emitted = max(emitted, int(row["seq"]))
                 yield _sse("run", dict(row), seq=row["seq"])
+                # Hand control back periodically so a long replay streams into
+                # the page instead of arriving as one block at the end.
+                if index % 10 == 9:
+                    await asyncio.sleep(0)
 
             # The client now has everything the database knows about.
             yield _sse("synced", {"last_seq": emitted})
@@ -401,12 +541,21 @@ async def run_events(
                     yield ": keepalive\n\n"
                     continue
 
-                # Skip anything the replay already covered - a live event can
-                # arrive while history is still being read.
-                if event.seq <= emitted and event.kind != "gap":
+                # Renumber live events onto the end of the replayed history.
+                #
+                # History is numbered by position in ADK's transcript, while
+                # the bus numbers from our own run_events counter, and the two
+                # do not line up. Appending keeps the stream monotonic, which
+                # is what the client's cursor depends on. Nothing is lost by
+                # renumbering: ADK persists these events too, so a reconnect
+                # re-derives them from the transcript with stable positions.
+                if event.kind == "gap":
+                    yield _sse("run", event.to_dict(), seq=emitted)
                     continue
-                emitted = max(emitted, event.seq)
-                yield _sse("run", event.to_dict(), seq=event.seq)
+                emitted += 1
+                frame = event.to_dict()
+                frame["seq"] = emitted
+                yield _sse("run", frame, seq=emitted)
 
     return StreamingResponse(
         stream(),
@@ -424,6 +573,55 @@ async def run_events(
 # ---------------------------------------------------------------------------
 # Decisions and recovery
 # ---------------------------------------------------------------------------
+async def _apply_cover_choice(run_id: str, choice: Optional[str]) -> Optional[str]:
+    """Put the reviewer's cover choice into the bundle the publisher reads.
+
+    The publisher signs ``bundle.ordered_artifacts`` in order and Instagram
+    takes the first entry as the cover, so choosing between the clip and the
+    still means rewriting that first entry - there is no separate "cover"
+    field for it to consult.
+
+    Written straight to the session row rather than through an ADK event: this
+    happens between the verdict and the resume, when no invocation is running,
+    and appending an event to a session mid-resume is how you get two writers
+    racing on the same state.
+
+    Returns:
+        The filename that will be published as the cover, or None when the run
+        offered no choice.
+    """
+    if choice not in ("video", "image"):
+        return None
+
+    state = await _session_state(run_id)
+    bundle = dict(state.get(K_BUNDLE) or {})
+    cover = dict(bundle.get("cover") or {})
+    video = str(cover.get("video_artifact") or "")
+    poster = str(cover.get("poster_artifact") or "")
+    wanted = video if choice == "video" else poster
+    if not wanted:
+        return None
+
+    ordered = list(bundle.get("ordered_artifacts") or [])
+    # Drop whichever cover is currently first, then put the chosen one there.
+    ordered = [f for f in ordered if f not in (video, poster)]
+    bundle["ordered_artifacts"] = [wanted, *ordered]
+    bundle["cover"] = {**cover, "published_artifact": wanted}
+    state[K_BUNDLE] = bundle
+
+    pool = await db.get_pool()
+    await pool.execute(
+        "UPDATE public.sessions SET state = $4, update_time = now() "
+        "WHERE app_name = $1 AND user_id = $2 AND id = $3",
+        settings.app_name,
+        PIPELINE_USER_ID,
+        run_id,
+        json.dumps(state, default=str),
+    )
+    logger.info("Run %s will publish %r as its cover.", run_id, wanted)
+    return wanted
+
+
 @router.post("/runs/{run_id}/verdict")
 async def post_verdict(
     run_id: str,
@@ -436,6 +634,23 @@ async def post_verdict(
     first - almost always the same person, from their phone. It is a normal
     outcome, not an error, and the UI shows the decision rather than a failure.
     """
+    # The choice has to land BEFORE the verdict, because submitting the
+    # verdict resumes the pipeline immediately - write it afterwards and the
+    # publisher may already have read the old bundle.
+    chosen_cover = None
+    if payload.status == "approved":
+        try:
+            chosen_cover = await _apply_cover_choice(run_id, payload.cover)
+        except Exception as exc:
+            logger.exception("Could not apply the cover choice for %s.", run_id)
+            raise HTTPException(
+                500,
+                {
+                    "code": "cover_choice_failed",
+                    "message": f"Could not record which cover to publish ({exc}).",
+                },
+            ) from exc
+
     outcome = await submit_verdict(
         run_id,
         payload.status,
@@ -444,7 +659,12 @@ async def post_verdict(
         source="web",
     )
     if outcome.ok:
-        return {"result": "accepted", "run_id": run_id, "status": outcome.status}
+        return {
+            "result": "accepted",
+            "run_id": run_id,
+            "status": outcome.status,
+            "cover": chosen_cover,
+        }
 
     codes = {
         "not_pending": 409,
@@ -481,6 +701,125 @@ async def resume_run(
             },
         )
     return {"result": "resuming", "run_id": run_id}
+
+
+@router.post("/runs/{run_id}/rerun", status_code=status.HTTP_202_ACCEPTED)
+async def rerun(
+    run_id: str, identity: Identity = Depends(current_identity)
+) -> dict:
+    """Start a NEW task from the same input as an existing one.
+
+    A new run rather than a reset of the old one: the failed attempt and its
+    trace are evidence worth keeping, and re-entering a run that failed
+    halfway would resume from wherever it broke rather than starting clean.
+    Resume already exists for the case where continuing IS what you want.
+
+    The original input is recovered in the order it is most likely to be
+    faithful: the old session's stored NewsItem first, then the queued story it
+    came from, then - for a typed topic - the run's title.
+    """
+    run = await db.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, {"code": "no_such_run", "message": "Unknown task."})
+
+    news: Optional[dict] = None
+    state = await _session_state(run_id)
+    if state.get(K_NEWS_ITEM):
+        news = dict(state[K_NEWS_ITEM])
+    elif run.get("news_id"):
+        news = await db.news_payload(str(run["news_id"]))
+
+    source = str(run.get("source") or "") or ("queue" if news else "topic")
+    topic = "" if news else str(run.get("title") or "")
+    if not news and len(topic.strip()) < 3:
+        raise HTTPException(
+            422,
+            {
+                "code": "nothing_to_rerun",
+                "message": "The original input for this task is gone, so there "
+                           "is nothing to re-run. Start a new one instead.",
+            },
+        )
+
+    try:
+        started = await start_run(
+            source="queue" if news else "topic",  # type: ignore[arg-type]
+            topic=topic,
+            news=news,
+            requested_by=identity.email,
+        )
+    except RunRefused as exc:
+        code = 409 if exc.code in ("too_many_active_runs", "daily_limit_reached") else 400
+        raise HTTPException(code, {"code": exc.code, "message": exc.detail}) from exc
+
+    logger.info(
+        "Re-ran %s as %s (source %s) for %s.",
+        run_id,
+        started.run_id,
+        source,
+        identity.email,
+    )
+    return {"run_id": started.run_id, "title": started.title, "from": run_id}
+
+
+@router.delete("/runs/{run_id}")
+async def delete_run(
+    run_id: str, identity: Identity = Depends(current_identity)
+) -> dict:
+    """Delete a finished task and everything belonging to it.
+
+    Refused while a task is running, in this process or by phase. Deleting a
+    live run would strand its asyncio task writing into rows that no longer
+    exist, and the artifacts it is midway through uploading would be
+    unreachable but still billed for.
+    """
+    run = await db.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, {"code": "no_such_run", "message": "Unknown task."})
+
+    if run_id in active_run_ids():
+        raise HTTPException(
+            409,
+            {
+                "code": "run_is_active",
+                "message": "That task is running right now. Cancel it first.",
+            },
+        )
+    if run.get("status") in (db.RUN_STATUS_RUNNING, db.RUN_STATUS_AWAITING_REVIEW):
+        raise HTTPException(
+            409,
+            {
+                "code": "run_not_finished",
+                "message": "Only finished tasks can be deleted. This one is "
+                           f"{run.get('status')}.",
+            },
+        )
+
+    # Storage FIRST, then the rows.
+    #
+    # If the object purge fails we still have the rows, so the task remains
+    # visible and deletable - the user can try again. Doing it the other way
+    # round and failing leaves media in the bucket with nothing left in the
+    # database pointing at it: unreferenced, unreachable, and still billed for.
+    try:
+        removed_files = await runtime.artifact_service().delete_session_artifacts_async(
+            settings.app_name, PIPELINE_USER_ID, run_id
+        )
+    except Exception as exc:
+        logger.exception("Could not delete stored artifacts for %s.", run_id)
+        raise HTTPException(
+            502,
+            {
+                "code": "storage_delete_failed",
+                "message": f"The task's media could not be deleted ({exc}). "
+                           "Nothing was removed; try again.",
+            },
+        ) from exc
+
+    counts = await db.delete_run(settings.app_name, PIPELINE_USER_ID, run_id)
+    counts["artifacts"] = removed_files
+    logger.warning("Task %s deleted by %s: %s", run_id, identity.email, counts)
+    return {"result": "deleted", "run_id": run_id, "removed": counts}
 
 
 @router.post("/runs/{run_id}/cancel")
@@ -549,6 +888,91 @@ async def meta(_identity: Identity = Depends(current_identity)) -> dict:
         "max_slides": settings.max_carousel_slides,
         "publish_configured": bool(settings.ig_user_id and settings.ig_access_token),
     }
+
+
+# ---------------------------------------------------------------------------
+# Schedule
+# ---------------------------------------------------------------------------
+class ScheduleRequest(BaseModel):
+    enabled: bool = True
+    fetch_cron: str = Field("0 * * * *", min_length=9, max_length=100)
+
+
+@router.get("/schedule")
+async def get_schedule(_identity: Identity = Depends(current_identity)) -> dict:
+    """The automatic news-fetch cadence.
+
+    Fetching only - the scheduler never starts a run. Polling feeds is free;
+    turning a story into a carousel costs credits, so that stays a human
+    decision.
+    """
+    from app.scheduler import load_schedule, scheduler_state
+
+    schedule = await load_schedule()
+    # scheduler_state() reports what is RUNNING; the config reports what was
+    # asked for. They disagree when APScheduler is missing or the cron failed
+    # to parse, and that disagreement is exactly what an operator needs to see.
+    return {**schedule, **scheduler_state(), "starts_runs": False}
+
+
+@router.put("/schedule")
+async def put_schedule(
+    payload: ScheduleRequest, identity: Identity = Depends(current_identity)
+) -> dict:
+    """Change the cadence, applied immediately without a restart.
+
+    Stored in ``app_config`` rather than an env var precisely so this works:
+    ``settings`` is a frozen dataclass read once at import, so anything kept
+    there would need a redeploy to change.
+    """
+    from app.scheduler import save_schedule
+
+    try:
+        from apscheduler.triggers.cron import CronTrigger
+
+        CronTrigger.from_crontab(payload.fetch_cron)
+    except ImportError:
+        pass  # validated again when the scheduler starts
+    except Exception as exc:
+        raise HTTPException(
+            400,
+            {
+                "code": "invalid_cron",
+                "message": f"{payload.fetch_cron!r} is not a valid cron expression: {exc}",
+            },
+        ) from exc
+
+    saved = await save_schedule(payload.model_dump())
+    logger.info("Schedule updated by %s: %s", identity.email, saved)
+    return saved
+
+
+#: Strong references to manual fetch tasks (asyncio keeps only weak ones).
+_fetch_tasks: set = set()
+
+
+@router.post("/schedule/run-now", status_code=status.HTTP_202_ACCEPTED)
+async def fetch_now(_identity: Identity = Depends(current_identity)) -> dict:
+    """Poll the sources now, in the background.
+
+    202 and not the result, because polling every feed and deduping the
+    results against the queue takes a couple of minutes against a remote
+    database - far longer than any proxy will hold a request open. Awaiting it
+    here returned a 502 from Cloudflare even though the fetch itself had
+    succeeded, which is the worst of both worlds: the work happened and the
+    user was told it failed.
+
+    The caller refreshes the queue afterwards to see what arrived.
+    """
+    from app.scheduler import run_fetch_once
+
+    if any(not t.done() for t in _fetch_tasks):
+        return {"status": "already_running"}
+
+    task = asyncio.get_running_loop().create_task(run_fetch_once(), name="fetch-now")
+    _fetch_tasks.add(task)
+    task.add_done_callback(_fetch_tasks.discard)
+    return {"status": "started"}
 
 
 __all__ = ["router"]

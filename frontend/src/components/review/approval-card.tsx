@@ -1,11 +1,11 @@
 import * as React from "react"
-import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react"
+import { CheckCircle2, ExternalLink, Hourglass, Loader2, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
 import { Textarea } from "@/components/ui/input"
-import { REJECT_CATEGORIES, AGENT_LABELS, predictRework } from "@/lib/pipeline"
+import { REJECT_CATEGORIES, AGENT_LABELS, PHASE_LABELS, predictRework } from "@/lib/pipeline"
 import type { RunDetail } from "@/lib/types"
 
 /**
@@ -17,8 +17,10 @@ import type { RunDetail } from "@/lib/types"
  * GET, and the console should not be laxer than the email.
  *
  * The same run can be decided from Telegram, so this component has to handle
- * THREE states, not two:
+ * FOUR states, not two:
  *
+ *   0. too early        - the pipeline has not reached review; there is
+ *                         nothing to decide and nothing has been decided.
  *   1. pending          - a decision is wanted; show the buttons.
  *   2. decided          - a verdict is recorded; show what it was.
  *   3. being processed  - no pending row and no verdict yet, because a resume
@@ -31,12 +33,15 @@ import type { RunDetail } from "@/lib/types"
 export function ApprovalCard({
   run,
   publishConfigured,
+  coverChoiceNeeded,
   onApprove,
   onReject,
   busy,
 }: {
   run: RunDetail
   publishConfigured: boolean
+  /** True when the task has both covers and none has been picked yet. */
+  coverChoiceNeeded: boolean
   onApprove: () => void
   onReject: (feedback: string) => void
   busy: boolean
@@ -98,6 +103,42 @@ export function ApprovalCard({
     )
   }
 
+  // --- state 0: the pipeline has not asked for a decision yet -------------
+  // The review lives beside the trace now, so this card renders from the very
+  // first phase. Falling through to state 3 in "generate" would claim a
+  // decision is being processed, which is simply untrue.
+  const reachedReview =
+    run.phase === "review" || run.phase === "publish" || run.phase === "done"
+  if (!run.pending_review && !reachedReview) {
+    const stopped =
+      run.status === "failed" ||
+      run.status === "cancelled" ||
+      run.status === "interrupted"
+    return (
+      <Card className="p-5">
+        <div className="flex items-start gap-3">
+          {stopped ? (
+            <Hourglass className="mt-0.5 size-5 text-[var(--muted-foreground)]" />
+          ) : (
+            <Loader2 className="mt-0.5 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">
+              {stopped ? "No decision to make" : "Not ready for review yet"}
+            </p>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              {stopped
+                ? "This task stopped before it reached review, so there is nothing to approve."
+                : `Still ${(PHASE_LABELS[run.phase] ?? run.phase).toLowerCase()}. ` +
+                  "Approve and reject appear here the moment the carousel is " +
+                  "assembled and sent for review."}
+            </p>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
   // --- state 3: a decision is being processed right now -------------------
   if (!run.pending_review) {
     return (
@@ -107,7 +148,7 @@ export function ApprovalCard({
           <div>
             <p className="font-medium">A decision is being processed</p>
             <p className="text-sm text-[var(--muted-foreground)]">
-              This run was just decided — possibly from Telegram. The pipeline
+              This task was just decided — possibly from Telegram. The pipeline
               is picking it up now.
             </p>
           </div>
@@ -140,9 +181,29 @@ export function ApprovalCard({
         </p>
       )}
 
+      {coverChoiceNeeded && (
+        <p
+          className="mb-4 rounded-[var(--radius-md)] px-3 py-2 text-sm"
+          style={{
+            background: "var(--phase-review-soft)",
+            color: "var(--phase-review-fg)",
+          }}
+        >
+          Choose a cover first — this task has both a video and an image, and
+          only one can be the opening slide.
+        </p>
+      )}
+
       {!rejecting && !confirming && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="brand" onClick={() => setConfirming(true)} disabled={busy}>
+          <Button
+            variant="brand"
+            onClick={() => setConfirming(true)}
+            disabled={busy || coverChoiceNeeded}
+            title={
+              coverChoiceNeeded ? "Pick a video or image cover first" : undefined
+            }
+          >
             <CheckCircle2 /> Approve &amp; publish
           </Button>
           <Button variant="ghost" onClick={() => setRejecting(true)} disabled={busy}>

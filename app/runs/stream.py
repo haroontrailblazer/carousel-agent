@@ -24,6 +24,7 @@ Two rules about what gets recorded:
 from __future__ import annotations
 
 import itertools
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -255,3 +256,401 @@ __all__ = [
     "record_event",
     "summarize_event",
 ]
+
+
+# ---------------------------------------------------------------------------
+# ADK's raw events -> the console's timeline
+# ---------------------------------------------------------------------------
+#: ADK serialises events with snake_case keys, but google-genai types round-trip
+#: as camelCase in some versions. Reading both means the trace does not silently
+#: go blank after an ADK upgrade.
+def _pick(data: dict, *names: str) -> Any:
+    for name in names:
+        if name in data:
+            return data[name]
+    return None
+
+
+def _summarize_parts(parts: list) -> tuple[str, list[str], list[str], list[str]]:
+    """Render one event's parts, and name the tools it used.
+
+    Returns ``(text, tool_calls, tool_responses, thoughts)``.
+    """
+    fragments: list[str] = []
+    calls: list[str] = []
+    responses: list[str] = []
+    thoughts: list[str] = []
+
+    for part in parts or []:
+        if not isinstance(part, dict):
+            continue
+        text = part.get("text")
+        call = _pick(part, "function_call", "functionCall")
+        resp = _pick(part, "function_response", "functionResponse")
+
+        if text and str(text).strip():
+            # A "thought" part is the model reasoning, which the dev UI shows
+            # separately from its answer.
+            if part.get("thought"):
+                thoughts.append(str(text).strip())
+            else:
+                fragments.append(str(text).strip())
+        elif isinstance(call, dict):
+            name = str(call.get("name") or "tool")
+            calls.append(name)
+            args = call.get("args") or {}
+            # One short line per call, the way the dev UI previews arguments.
+            preview = ", ".join(
+                f"{k}={json.dumps(v, default=str)[:60]}" for k, v in list(args.items())[:3]
+            )
+            fragments.append(f"-> {name}({preview})" if preview else f"-> {name}()")
+        elif isinstance(resp, dict):
+            name = str(resp.get("name") or "tool")
+            responses.append(name)
+            payload = resp.get("response")
+            preview = json.dumps(payload, default=str)[:140] if payload is not None else ""
+            fragments.append(f"<- {name}: {preview}" if preview else f"<- {name}")
+
+    return " | ".join(fragments), calls, responses, thoughts
+
+
+def adk_event_to_frame(row: dict) -> dict:
+    """Convert one stored ADK event into a timeline frame.
+
+    Deliberately faithful to what /dev shows - author, tool calls with their
+    arguments, tool responses, model thoughts, token usage - because a trace
+    that quietly says less than the inspector is worse than no trace: it looks
+    complete while hiding the thing you are looking for.
+    """
+    data = row.get("event_data") or {}
+    author = str(data.get("author") or "")
+    content = data.get("content") or {}
+    parts = content.get("parts") or []
+
+    text, calls, responses, thoughts = _summarize_parts(parts)
+
+    actions = data.get("actions") or {}
+    delta = _pick(actions, "state_delta", "stateDelta") or {}
+    payload: dict = {}
+    for key in _FORWARDED_STATE_KEYS:
+        if key in delta:
+            payload[key] = delta[key]
+
+    if calls:
+        payload["tool_calls"] = calls
+    if responses:
+        payload["tool_responses"] = responses
+    if thoughts:
+        payload["thoughts"] = thoughts
+
+    usage = _pick(data, "usage_metadata", "usageMetadata") or {}
+    if usage:
+        payload["tokens"] = {
+            "prompt": _pick(usage, "prompt_token_count", "promptTokenCount"),
+            "output": _pick(usage, "candidates_token_count", "candidatesTokenCount"),
+            "total": _pick(usage, "total_token_count", "totalTokenCount"),
+        }
+    model = _pick(data, "model_version", "modelVersion")
+    if model:
+        payload["model"] = model
+
+    error = _pick(data, "error_message", "errorMessage")
+    if _pick(data, "long_running_tool_ids", "longRunningToolIds"):
+        payload["awaiting_review"] = True
+
+    if error:
+        kind = KIND_ERROR
+        payload["error"] = str(error)
+    elif K_PHASE in payload:
+        kind = KIND_PHASE
+    elif calls or responses:
+        kind = KIND_TOOL
+    else:
+        kind = KIND_PROGRESS
+
+    return {
+        "seq": row.get("seq", 0),
+        "kind": kind,
+        "author": author,
+        "text": text,
+        "data": payload,
+        "created_at": row.get("created_at"),
+    }
+
+
+async def load_trace(run_id: str, after: int = 0, limit: int = 2000) -> list[dict]:
+    """A run's timeline, preferring ADK's own transcript.
+
+    ADK records every run it drives, whichever surface started it - the
+    console, the CLI, or the dev UI - so reading from there means every task
+    has a trace and it matches the inspector. Our ``run_events`` table only
+    covers console-started runs, so it is the fallback rather than the source.
+    """
+    from app.config import settings
+
+    try:
+        from app.runs.service import PIPELINE_USER_ID
+    except Exception:  # pragma: no cover - import wiring
+        PIPELINE_USER_ID = "pipeline"
+
+    try:
+        rows = await db.load_adk_events(
+            settings.app_name, PIPELINE_USER_ID, run_id, after=after, limit=limit
+        )
+        if rows:
+            return [adk_event_to_frame(r) for r in rows]
+    except Exception as exc:
+        logger.warning("Could not read the ADK transcript for %s: %s", run_id, exc)
+
+    return await db.load_run_events(run_id, after=after, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# Trace assembly: latency, tokens, and tool detail
+# ---------------------------------------------------------------------------
+def _parse_ts(value: Any) -> Optional[datetime]:
+    """Parse an ISO timestamp, tolerating a trailing Z and None."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _tool_parts(parts: list) -> tuple[list[dict], list[dict]]:
+    """Extract structured tool calls and responses from an event's parts."""
+    calls: list[dict] = []
+    responses: list[dict] = []
+    for part in parts or []:
+        if not isinstance(part, dict):
+            continue
+        call = _pick(part, "function_call", "functionCall")
+        resp = _pick(part, "function_response", "functionResponse")
+        if isinstance(call, dict):
+            calls.append(
+                {
+                    "id": str(call.get("id") or ""),
+                    "name": str(call.get("name") or "tool"),
+                    "args": call.get("args") or {},
+                }
+            )
+        elif isinstance(resp, dict):
+            responses.append(
+                {
+                    "id": str(resp.get("id") or ""),
+                    "name": str(resp.get("name") or "tool"),
+                    "response": resp.get("response"),
+                }
+            )
+    return calls, responses
+
+
+def _truncate(value: Any, limit: int = 1200) -> str:
+    """Render a value for display, bounded so one huge payload cannot bloat
+    the whole trace response."""
+    if value is None:
+        return ""
+    text = value if isinstance(value, str) else json.dumps(value, default=str, indent=1)
+    return text if len(text) <= limit else text[:limit] + f"\n… (+{len(text) - limit} chars)"
+
+
+def build_trace(rows: list[dict]) -> tuple[list[dict], dict]:
+    """Turn stored ADK events into display frames plus a summary.
+
+    Two things here are worth more than the raw log:
+
+    * **Tool latency.** A call and its response are separate events, linked by
+      the call id. Pairing them gives the wall-clock cost of each individual
+      tool - which search took nine seconds, which image render took ninety -
+      and that is usually the first question anyone asks of a slow run.
+    * **Per-agent cost.** ADK reports token usage per event; rolling it up by
+      author answers "what did this run actually spend, and where".
+
+    Returns:
+        ``(frames, summary)``.
+    """
+    frames: list[dict] = []
+    pending: dict[str, dict] = {}          # call id -> {frame, tool, started}
+    agents: dict[str, dict] = {}
+    order: list[str] = []
+    totals = {"prompt": 0, "output": 0, "total": 0}
+    first_ts: Optional[datetime] = None
+    last_ts: Optional[datetime] = None
+
+    # Time is accumulated PER INVOCATION, not measured first-event-to-last.
+    #
+    # A run pauses for a human at review and only continues when someone
+    # decides, so the wall clock between its first and last event includes
+    # every hour it sat waiting. Measured on a real task: 1,393 seconds of
+    # actual work reported as 84,634 seconds - a run that took 23 minutes
+    # displayed as 23 hours.
+    #
+    # Each stretch of work is one ADK invocation: the initial run is one, and
+    # every resume starts another. Summing their spans gives the time agents
+    # actually ran, and makes a resumed task add to its earlier total rather
+    # than absorbing the gap. A re-run is a different run id entirely, so it
+    # starts from zero without any special handling.
+    spans: dict[str, list[datetime]] = {}
+    agent_spans: dict[tuple[str, str], list[datetime]] = {}
+
+    for row in rows:
+        data = row.get("event_data") or {}
+        author = str(data.get("author") or "")
+        ts = _parse_ts(row.get("created_at"))
+        if ts:
+            first_ts = first_ts or ts
+            last_ts = ts
+
+        invocation = str(
+            _pick(data, "invocation_id", "invocationId") or "single"
+        )
+        if ts:
+            spans.setdefault(invocation, []).append(ts)
+            if author and author != "user":
+                agent_spans.setdefault((author, invocation), []).append(ts)
+
+        frame = adk_event_to_frame(row)
+        content = data.get("content") or {}
+        calls, responses = _tool_parts(content.get("parts") or [])
+
+        tools: list[dict] = []
+        for call in calls:
+            tool = {
+                "id": call["id"],
+                "name": call["name"],
+                "args": _truncate(call["args"], 600),
+                "status": "running",
+                "ms": None,
+                "result": None,
+            }
+            tools.append(tool)
+            if call["id"]:
+                pending[call["id"]] = {"tool": tool, "started": ts}
+
+        # A response completes the call recorded earlier, wherever it was.
+        for resp in responses:
+            started = pending.pop(resp["id"], None) if resp["id"] else None
+            payload = resp.get("response")
+            failed = isinstance(payload, dict) and str(
+                payload.get("status", "")
+            ).lower() in ("error", "failed")
+            if started:
+                tool = started["tool"]
+                tool["result"] = _truncate(payload)
+                tool["status"] = "error" if failed else "ok"
+                if started["started"] and ts:
+                    tool["ms"] = int((ts - started["started"]).total_seconds() * 1000)
+            else:
+                # A response with no matching call (resumed leg, trimmed log).
+                tools.append(
+                    {
+                        "id": resp["id"],
+                        "name": resp["name"],
+                        "args": "",
+                        "status": "error" if failed else "ok",
+                        "ms": None,
+                        "result": _truncate(payload),
+                    }
+                )
+
+        if tools:
+            frame["tools"] = tools
+
+        usage = _pick(data, "usage_metadata", "usageMetadata") or {}
+        prompt = int(_pick(usage, "prompt_token_count", "promptTokenCount") or 0)
+        output = int(_pick(usage, "candidates_token_count", "candidatesTokenCount") or 0)
+        total = int(_pick(usage, "total_token_count", "totalTokenCount") or 0) or (
+            prompt + output
+        )
+        totals["prompt"] += prompt
+        totals["output"] += output
+        totals["total"] += total
+
+        if author and author != "user":
+            if author not in agents:
+                agents[author] = {
+                    "name": author,
+                    "tokens": {"prompt": 0, "output": 0, "total": 0},
+                    "tool_calls": 0,
+                    "events": 0,
+                    "errors": 0,
+                }
+                order.append(author)
+            entry = agents[author]
+            entry["events"] += 1
+            entry["tool_calls"] += len(calls)
+            entry["tokens"]["prompt"] += prompt
+            entry["tokens"]["output"] += output
+            entry["tokens"]["total"] += total
+            if frame["kind"] == KIND_ERROR:
+                entry["errors"] += 1
+
+        frame["ts"] = row.get("created_at")
+        frames.append(frame)
+
+    def _sum_spans(groups: list[list[datetime]]) -> Optional[int]:
+        """Total milliseconds across independent stretches of work."""
+        total = 0
+        seen = False
+        for stamps in groups:
+            if len(stamps) < 2:
+                continue
+            seen = True
+            total += int((max(stamps) - min(stamps)).total_seconds() * 1000)
+        return total if seen else (0 if groups else None)
+
+    agent_summary = []
+    for name in order:
+        entry = agents[name]
+        entry["ms"] = _sum_spans(
+            [s for (a, _inv), s in agent_spans.items() if a == name]
+        )
+        agent_summary.append(entry)
+
+    summary = {
+        "tokens": totals,
+        # Time the agents actually ran, excluding waits for a human.
+        "ms": _sum_spans(list(spans.values())),
+        # Wall clock from first event to last, kept separate so "started 2
+        # days ago" and "took 23 minutes" can both be told truthfully.
+        "span_ms": int((last_ts - first_ts).total_seconds() * 1000)
+        if first_ts and last_ts
+        else None,
+        # One per stretch of work: the initial run, plus one per resume.
+        "invocations": len(spans),
+        "agents": agent_summary,
+        "event_count": len(frames),
+        "tool_calls": sum(a["tool_calls"] for a in agent_summary),
+    }
+    return frames, summary
+
+
+async def load_trace_with_summary(
+    run_id: str, after: int = 0, limit: int = 2000
+) -> tuple[list[dict], dict]:
+    """A run's timeline plus its cost and timing summary."""
+    from app.config import settings
+
+    try:
+        from app.runs.service import PIPELINE_USER_ID
+    except Exception:  # pragma: no cover - import wiring
+        PIPELINE_USER_ID = "pipeline"
+
+    try:
+        rows = await db.load_adk_events(
+            settings.app_name, PIPELINE_USER_ID, run_id, after=after, limit=limit
+        )
+        if rows:
+            return build_trace(rows)
+    except Exception as exc:
+        logger.warning("Could not read the ADK transcript for %s: %s", run_id, exc)
+
+    frames = await db.load_run_events(run_id, after=after, limit=limit)
+    return frames, {"tokens": None, "ms": None, "agents": [], "event_count": len(frames)}

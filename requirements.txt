@@ -24,3 +24,5 @@ openinference-instrumentation-google-adk>=0.1   # exports ADK agent/LLM spans to
 opentelemetry-api>=1.39,<=1.43    # cap required by google-adk 2.7 (langfuse would pull 1.44+)
 opentelemetry-sdk>=1.39,<=1.43
 opentelemetry-exporter-otlp>=1.39,<=1.43
+apscheduler>=3.10,<4   # in-process news fetch schedule (app/scheduler.py)
+pyjwt[crypto]>=2.9     # Supabase token verification + our session cookie

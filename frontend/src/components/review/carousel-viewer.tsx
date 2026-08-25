@@ -1,12 +1,12 @@
 import * as React from "react"
-import { Copy, ImageOff, Play } from "lucide-react"
+import { Check, Copy, ImageOff, Play } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { MutedChip } from "@/components/ui/chip"
 import { IG_CAPTION_LIMIT } from "@/lib/format"
-import type { RunArtifacts, SignedArtifact } from "@/lib/types"
+import type { CoverChoice, RunArtifacts, SignedArtifact } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 /**
@@ -79,27 +79,36 @@ function SlideFrame({
   )
 }
 
-/** The cover: a 1080x1350 MP4, or a still when no clip could be sourced. */
+/**
+ * The cover, which may be a clip, a still, or a choice between the two.
+ *
+ * When the run produced both, the reviewer decides which one Instagram gets
+ * as the first slide - and that decision is required, not defaulted. A silent
+ * default would mean posting a video when someone wanted the still, and the
+ * post is public before anyone notices.
+ */
 function Cover({
   cover,
+  choice,
+  onChoose,
   onExpired,
 }: {
   cover: RunArtifacts["cover"]
+  choice: CoverChoice
+  onChoose: (choice: CoverChoice) => void
   onExpired?: () => void
 }) {
-  if (cover.is_still || !cover.video?.url) {
-    return (
-      <div className="space-y-2">
-        <SlideFrame artifact={cover.poster} alt="Cover" onExpired={onExpired} />
-        <p className="text-xs text-[var(--muted-foreground)]">
-          No source clip was found for this story, so the cover is a still
-          image rather than a video.
-        </p>
-      </div>
-    )
-  }
+  // Both are offered whenever both FILES exist.
+  //
+  // `is_still` does not mean "there is no video" - it means no source clip
+  // could be found for the story, so the pipeline built a slow-zoom video from
+  // the still instead. That mp4 is real and publishable, so gating the choice
+  // on is_still hid a genuine option: measured on a live task reporting
+  // is_still=true, both cover.mp4 and cover-poster.png were present.
+  const hasVideo = !!cover.video?.url
+  const hasImage = !!cover.poster?.url
 
-  return (
+  const video = (
     <video
       // muted + playsInline are not optional: iOS Safari refuses to autoplay
       // or inline-play without them, and the poster is what the reviewer sees
@@ -112,16 +121,109 @@ function Cover({
       poster={cover.poster?.url ?? undefined}
       className="slide-frame w-full rounded-[var(--radius-md)] border border-[var(--border)]"
     >
-      <source src={cover.video.url} type="video/mp4" />
+      <source src={cover.video?.url ?? undefined} type="video/mp4" />
     </video>
+  )
+
+  if (!hasVideo) {
+    return (
+      <div className="space-y-2">
+        <SlideFrame artifact={cover.poster} alt="Cover" onExpired={onExpired} />
+        <p className="text-xs text-[var(--muted-foreground)]">
+          No source clip was found for this story, so the cover is a still
+          image rather than a video.
+        </p>
+      </div>
+    )
+  }
+
+  if (!hasImage) return video
+
+  // Both exist: present them as a deliberate either/or.
+  const option = (
+    key: Exclude<CoverChoice, null>,
+    label: string,
+    hint: string,
+    preview: React.ReactNode,
+  ) => {
+    const picked = choice === key
+    return (
+      <button
+        type="button"
+        onClick={() => onChoose(key)}
+        aria-pressed={picked}
+        className={cn(
+          "group rounded-[var(--radius-md)] border-2 p-1.5 text-left transition-colors",
+          picked
+            ? "border-[var(--brand)] bg-[var(--brand-soft)]"
+            : "border-[var(--border)] hover:border-[var(--muted-foreground)]",
+        )}
+      >
+        <span className="pointer-events-none block">{preview}</span>
+        <span className="mt-1.5 flex items-center gap-1.5 px-1">
+          <span
+            aria-hidden
+            className={cn(
+              "grid size-3.5 shrink-0 place-items-center rounded-full border",
+              picked
+                ? "border-[var(--brand)] bg-[var(--brand)]"
+                : "border-[var(--muted-foreground)]",
+            )}
+          >
+            {picked && <Check className="size-2.5 text-[var(--brand-foreground)]" />}
+          </span>
+          <span className="text-xs font-medium">{label}</span>
+        </span>
+        <span className="mt-0.5 block px-1 text-[11px] text-[var(--muted-foreground)]">
+          {hint}
+        </span>
+      </button>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        {option(
+          "video",
+          "Video cover",
+          cover.is_still
+            ? `${Math.round(cover.duration_s)}s slow zoom on the still`
+            : `${Math.round(cover.duration_s)}s clip from the story`,
+          <span className="pointer-events-auto block">{video}</span>,
+        )}
+        {option(
+          "image",
+          "Image cover",
+          "Still frame",
+          <SlideFrame artifact={cover.poster} alt="Cover still" onExpired={onExpired} />,
+        )}
+      </div>
+      {!choice && (
+        <p
+          className="rounded-[var(--radius-md)] px-3 py-2 text-xs"
+          style={{
+            background: "var(--phase-review-soft)",
+            color: "var(--phase-review-fg)",
+          }}
+        >
+          This task has both a video and an image cover. Pick which one goes out
+          as the first slide before approving.
+        </p>
+      )}
+    </div>
   )
 }
 
 export function CarouselViewer({
   artifacts,
+  coverChoice,
+  onCoverChoice,
   onExpired,
 }: {
   artifacts: RunArtifacts
+  coverChoice: CoverChoice
+  onCoverChoice: (choice: CoverChoice) => void
   onExpired?: () => void
 }) {
   const [index, setIndex] = React.useState(0)
@@ -142,7 +244,14 @@ export function CarouselViewer({
     <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
       <div className="space-y-3">
         <div>
-          {index === 0 && <Cover cover={artifacts.cover} onExpired={onExpired} />}
+          {index === 0 && (
+            <Cover
+              cover={artifacts.cover}
+              choice={coverChoice}
+              onChoose={onCoverChoice}
+              onExpired={onExpired}
+            />
+          )}
           {index > 0 && index <= artifacts.slides.length && (
             <SlideFrame
               artifact={artifacts.slides[index - 1]}

@@ -1,7 +1,8 @@
 import * as React from "react"
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 
+import { TaskActions } from "@/components/run/task-actions"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
@@ -20,52 +21,95 @@ const FILTERS: { label: string; value: RunStatus | "all" }[] = [
   { label: "Failed", value: "failed" },
 ]
 
-export function HistoryRoute() {
-  const [filter, setFilter] = React.useState<RunStatus | "all">("all")
+/**
+ * Task history.
+ *
+ * The list is fetched ONCE and filtered in the browser.
+ *
+ * Filtering on the server looked tidier but was the wrong trade at this size:
+ * every chip click became a new React Query key, which means no cached data,
+ * which means a full loading skeleton and another round trip. Against a remote
+ * database that is ~0.6s locally and up to 2s over a tunnel - so clicking
+ * through six filters cost six waits to re-render at most fifty rows the
+ * browser already had.
+ *
+ * One query, one cache entry, instant chips. It also means the sidebar's
+ * "needs review" badge can read the SAME cache entry instead of issuing its
+ * own request on every page.
+ */
+export const RUNS_QUERY_KEY = ["runs", "recent"] as const
 
-  const runs = useQuery({
-    queryKey: ["runs", filter],
-    queryFn: () =>
-      get<{ items: RunSummary[] }>(
-        `/api/runs?limit=50${filter === "all" ? "" : `&status=${filter}`}`,
-      ),
-    // Keep the list moving while anything is live, and stop when nothing is.
+export function useRuns() {
+  return useQuery({
+    queryKey: RUNS_QUERY_KEY,
+    queryFn: () => get<{ items: RunSummary[] }>("/api/runs?limit=50"),
+    // Keep showing the previous list while refetching, so a background poll
+    // never blanks the page the user is reading.
+    placeholderData: keepPreviousData,
+    staleTime: 10_000,
     refetchInterval: (query) =>
       query.state.data?.items.some((r) =>
         ["running", "awaiting_review"].includes(r.status),
       )
         ? 15_000
-        : false,
+        : 60_000,
   })
+}
+
+
+export function HistoryRoute() {
+  const [filter, setFilter] = React.useState<RunStatus | "all">("all")
+  const runs = useRuns()
+
+  const all = runs.data?.items ?? []
+  const items = React.useMemo(
+    () => (filter === "all" ? all : all.filter((r) => r.status === filter)),
+    [all, filter],
+  )
+
+  // Counts come from the same data, so each chip can show its own tally
+  // without a single extra request.
+  const counts = React.useMemo(() => {
+    const map: Record<string, number> = { all: all.length }
+    for (const run of all) map[run.status] = (map[run.status] ?? 0) + 1
+    return map
+  }, [all])
+
+  const firstLoad = runs.isLoading && !runs.data
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">Runs</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Tasks</h1>
         <Button variant="brand" size="sm" asChild>
           <Link to="/new">New carousel</Link>
         </Button>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {FILTERS.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            onClick={() => setFilter(f.value)}
-            className={cn(
-              "rounded-[var(--radius-pill)] border px-3 py-1 text-xs font-medium transition-colors",
-              filter === f.value
-                ? "border-transparent bg-[var(--foreground)] text-[var(--background)]"
-                : "border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]",
-            )}
-          >
-            {f.label}
-          </button>
-        ))}
+        {FILTERS.map((f) => {
+          const count = counts[f.value] ?? 0
+          return (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setFilter(f.value)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] border px-3 py-1 text-xs font-medium transition-colors",
+                filter === f.value
+                  ? "border-transparent bg-[var(--foreground)] text-[var(--background)]"
+                  : "border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]",
+                !count && f.value !== "all" && "opacity-45",
+              )}
+            >
+              {f.label}
+              {count > 0 && <span className="opacity-70">{count}</span>}
+            </button>
+          )
+        })}
       </div>
 
-      {runs.isLoading && (
+      {firstLoad && (
         <div className="space-y-2">
           {[0, 1, 2, 3].map((i) => (
             <div
@@ -76,13 +120,13 @@ export function HistoryRoute() {
         </div>
       )}
 
-      {runs.data?.items.length === 0 && (
+      {!firstLoad && items.length === 0 && (
         <Card className="p-10 text-center">
           <p className="font-medium">Nothing here yet</p>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
             {filter === "all"
-              ? "Start a run and it will show up here."
-              : "No runs match that filter."}
+              ? "Start a task and it will show up here."
+              : "No tasks match that filter."}
           </p>
           {filter === "all" && (
             <Button variant="brand" className="mt-4" asChild>
@@ -93,9 +137,9 @@ export function HistoryRoute() {
       )}
 
       <div className="space-y-2">
-        {runs.data?.items.map((run) => (
+        {items.map((run) => (
           <Card key={run.run_id} glide className="p-4">
-            <Link to={`/runs/${run.run_id}`} className="block">
+            <Link to={`/tasks/${run.run_id}`} className="block">
               <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
@@ -117,15 +161,21 @@ export function HistoryRoute() {
                   </div>
                 </div>
 
-                {run.status === "awaiting_review" && (
+                {run.status === "awaiting_review" ? (
                   <Button
                     variant="brand"
                     size="sm"
                     asChild
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Link to={`/runs/${run.run_id}/review`}>Review</Link>
+                    <Link to={`/tasks/${run.run_id}?tab=review`}>Review</Link>
                   </Button>
+                ) : (
+                  <TaskActions
+                    runId={run.run_id}
+                    status={run.status}
+                    title={run.title}
+                  />
                 )}
               </div>
             </Link>

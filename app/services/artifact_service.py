@@ -673,6 +673,39 @@ class SupabaseArtifactService(BaseArtifactService):
 
         return sorted(filenames)
 
+    def _delete_keys(self, keys: list[str]) -> int:
+        """Delete objects, batching where the backend actually supports it.
+
+        Supabase's S3-compatible gateway does NOT implement the DeleteObjects
+        batch operation - it answers with an empty ClientError, which is as
+        unhelpful as it sounds. Real S3 does implement it and batching there is
+        worth having, so this attempts the batch and falls back to one call per
+        key rather than assuming either behaviour.
+
+        A key that is already gone counts as deleted: the caller only cares
+        that nothing is left.
+
+        Returns:
+            How many keys were removed.
+        """
+        if not keys:
+            return 0
+
+        for start in range(0, len(keys), _DELETE_BATCH_SIZE):
+            batch = keys[start:start + _DELETE_BATCH_SIZE]
+            try:
+                self._client.delete_objects(
+                    Bucket=self.bucket_name,
+                    Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+                )
+            except Exception:
+                for key in batch:
+                    try:
+                        self._client.delete_object(Bucket=self.bucket_name, Key=key)
+                    except Exception:
+                        logger.debug("Could not delete %s (already gone?).", key)
+        return len(keys)
+
     def _delete_artifact(
         self,
         app_name: str,
@@ -686,12 +719,86 @@ class SupabaseArtifactService(BaseArtifactService):
             self._object_key(app_name, user_id, filename, v, session_id)
             for v in versions
         ]
-        for start in range(0, len(keys), _DELETE_BATCH_SIZE):
-            batch = keys[start:start + _DELETE_BATCH_SIZE]
-            self._client.delete_objects(
-                Bucket=self.bucket_name,
-                Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
-            )
+        self._delete_keys(keys)
+
+
+    def delete_session_artifacts(
+        self,
+        app_name: str,
+        user_id: str,
+        session_id: str,
+    ) -> int:
+        """Delete EVERY stored object for a session, in batches.
+
+        Deleting a task has to take its media with it. Without this the rows
+        vanish while the cover video and every slide stay in the bucket -
+        unreferenced, unreachable through the console, and still billed for.
+
+        Deliberately prefix-based rather than looping over the bundle's
+        filenames: a run that failed midway, or one reworked several times,
+        leaves objects the final bundle never mentioned. The prefix is the only
+        description of "everything this session wrote".
+
+        Returns:
+            How many objects were removed.
+        """
+        prefix = f"{app_name}/{user_id}/{session_id}/"
+        keys = [obj["Key"] for obj in self._iter_keys(prefix) if obj.get("Key")]
+        return self._delete_keys(keys)
+
+    async def delete_session_artifacts_async(
+        self,
+        app_name: str,
+        user_id: str,
+        session_id: str,
+    ) -> int:
+        """Async wrapper around :meth:`delete_session_artifacts`."""
+        return await asyncio.to_thread(
+            lambda: self.delete_session_artifacts(app_name, user_id, session_id)
+        )
+
+    def latest_versions(
+        self,
+        app_name: str,
+        user_id: str,
+        session_id: Optional[str] = None,
+    ) -> dict[str, int]:
+        """Newest version of every artifact in a session, in ONE listing.
+
+        ``public_url(version=None)`` has to discover the newest version, and it
+        does that with its own listing per file. Signing a whole carousel -
+        cover video, poster, five slides, CTA - therefore made eight separate
+        round trips to object storage, each around two and a half seconds from
+        here. Listing the session prefix once and signing from the result turns
+        that into one.
+
+        Returns:
+            ``{filename: newest_version}``; empty when nothing is stored yet.
+        """
+        prefix = f"{app_name}/{user_id}/{session_id or 'user'}/"
+        newest: dict[str, int] = {}
+        for obj in self._iter_keys(prefix):
+            key = obj.get("Key", "")
+            rest = key[len(prefix):]
+            # Keys look like "<filename>/<version>".
+            filename, _, version_text = rest.rpartition("/")
+            if not filename or not version_text.isdigit():
+                continue
+            version = int(version_text)
+            if version > newest.get(filename, -1):
+                newest[filename] = version
+        return newest
+
+    async def latest_versions_async(
+        self,
+        app_name: str,
+        user_id: str,
+        session_id: Optional[str] = None,
+    ) -> dict[str, int]:
+        """Async wrapper around :meth:`latest_versions`."""
+        return await asyncio.to_thread(
+            lambda: self.latest_versions(app_name, user_id, session_id)
+        )
 
     def _list_versions(
         self,

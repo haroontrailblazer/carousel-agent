@@ -7,8 +7,8 @@ The rules encoded here are the ones that would be expensive to get wrong:
   accident would silently strand every paused run.
 * The SPA bundle must load unauthenticated, or the browser can never render the
   login screen that would obtain a credential.
-* ``/api`` and ``/dev`` must NOT be reachable without one. ADK's dev UI can run
-  agents and read every session's state.
+* ``/api`` must NOT be reachable without one: it can start runs that spend
+  real image and reasoning credits.
 * An unauthenticated websocket has to be refused with a close frame; returning
   an HTTP response into a websocket scope raises inside the server.
 """
@@ -55,9 +55,13 @@ def _app(secret: str = SECRET) -> TestClient:
     async def runs():
         return {"runs": []}
 
-    @inner.get("/dev/list-apps")
-    async def dev():
-        return ["app"]
+    @inner.get("/api/queue")
+    async def queue():
+        return {"items": []}
+
+    @inner.get("/api/meta")
+    async def meta():
+        return {"agents": []}
 
     @inner.get("/")
     async def spa():
@@ -113,16 +117,19 @@ class ProtectedPathTests(unittest.TestCase):
         self.assertEqual(r.status_code, 401)
         self.assertEqual(r.json()["code"], "unauthenticated")
 
-    def test_the_adk_dev_ui_is_closed_when_signed_out(self) -> None:
-        """It can run agents and read every session - it must never be open."""
-        self.assertEqual(_app().get("/dev/list-apps").status_code, 401)
+    def test_every_api_route_is_closed_when_signed_out(self) -> None:
+        """The API can start runs that spend real money - never leave it open."""
+        client = _app()
+        for path in ("/api/runs", "/api/queue", "/api/meta"):
+            self.assertEqual(
+                client.get(path, headers={"Accept": "application/json"}).status_code,
+                401,
+                f"{path} answered without a session",
+            )
 
-    def test_a_valid_cookie_opens_both(self) -> None:
+    def test_a_valid_cookie_opens_the_api(self) -> None:
         client = _app()
         self.assertEqual(client.get("/api/runs", cookies=_cookie()).status_code, 200)
-        self.assertEqual(
-            client.get("/dev/list-apps", cookies=_cookie()).status_code, 200
-        )
 
     def test_an_expired_cookie_is_refused(self) -> None:
         stale = issue_session_token(ALLOWED, ttl_s=-10, secret=SECRET)
@@ -151,7 +158,7 @@ class FailureShapeTests(unittest.TestCase):
     def test_a_browser_navigation_is_redirected_to_login(self) -> None:
         """Sending raw JSON to someone who clicked a bookmark is a dead end."""
         r = _app().get(
-            "/dev/list-apps",
+            "/api/runs",
             headers={"Sec-Fetch-Mode": "navigate", "Accept": "text/html"},
             follow_redirects=False,
         )

@@ -114,6 +114,23 @@ def _graph_request(
     return payload
 
 
+#: Extensions Instagram treats as video in a carousel child container.
+_VIDEO_SUFFIXES = (".mp4", ".mov", ".m4v")
+
+
+def _is_video_url(public_url: str) -> bool:
+    """Whether a signed URL points at a video.
+
+    Presigned URLs carry a query string, so the extension has to be read from
+    the path alone - ``...cover.mp4?X-Amz-Signature=...`` must still register
+    as a video.
+    """
+    from urllib.parse import urlparse
+
+    path = urlparse(public_url).path.lower()
+    return path.endswith(_VIDEO_SUFFIXES)
+
+
 def _create_child_container(
     client: httpx.Client, public_url: str, *, is_video: bool
 ) -> str:
@@ -239,11 +256,17 @@ def publish_carousel(bundle: dict, public_urls: list[str]) -> dict:
     caption = str(bundle.get("caption", "") or "")
 
     with httpx.Client(timeout=_TIMEOUT) as client:
-        # (1) Child containers - first is the cover video, rest are images.
+        # (1) Child containers, typed by what each URL actually is.
+        #
+        # This used to assume the first item was always a video, because the
+        # cover always was. It no longer is: a reviewer can choose to publish
+        # the cover STILL instead of the clip. Sending a PNG with
+        # media_type=VIDEO makes Instagram reject the whole carousel, so the
+        # decision has to come from the file rather than its position.
         child_ids: list[str] = []
-        for index, url in enumerate(public_urls):
+        for url in public_urls:
             child_ids.append(
-                _create_child_container(client, url, is_video=(index == 0))
+                _create_child_container(client, url, is_video=_is_video_url(url))
             )
 
         # (2) Wait for every child (video transcode is asynchronous).

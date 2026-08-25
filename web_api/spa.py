@@ -57,6 +57,22 @@ _PLACEHOLDER = """<!doctype html>
 """
 
 
+def _is_navigation(scope: Scope) -> bool:
+    """Is this a browser navigating to a page, rather than code fetching data?
+
+    ``Sec-Fetch-Mode: navigate`` is sent by every current browser on a
+    top-level navigation and never on fetch/XHR. The Accept header is the
+    fallback for anything that does not send fetch metadata: a navigation asks
+    for text/html, while fetch defaults to */*.
+    """
+    headers = {k.lower(): v for k, v in (scope.get("headers") or [])}
+    mode = headers.get(b"sec-fetch-mode", b"").decode("latin-1")
+    if mode:
+        return mode == "navigate"
+    accept = headers.get(b"accept", b"").decode("latin-1")
+    return "text/html" in accept
+
+
 class SPAStaticFiles(StaticFiles):
     """Static files with an SPA history fallback and a missing-build page."""
 
@@ -104,6 +120,18 @@ class SPAStaticFiles(StaticFiles):
         # the resulting "Unexpected token '<'" tells the reader nothing about
         # what actually went wrong.
         if "." in PurePosixPath(path).name:
+            raise not_found
+
+        # Only a BROWSER NAVIGATION gets the SPA shell. A fetch() or XHR must
+        # get a clean 404 instead.
+        #
+        # Without this, the catch-all answers every unknown path with HTML and
+        # a 200 - so any request that misses its API prefix (say
+        # /config/telemetry instead of /dev/config/telemetry) receives a web
+        # page where it expected JSON. The caller's .json() then throws inside
+        # a promise chain, and an app that is merely misrouted looks like an
+        # app that has hung, with nothing in the network tab but 200s.
+        if not _is_navigation(scope):
             raise not_found
 
         # Anything else is a client-side route (/runs/run-1a2b3c): the SPA

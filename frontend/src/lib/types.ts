@@ -96,6 +96,20 @@ export type RunArtifacts = {
   ordered: string[]
 }
 
+/** Which cover goes out as the first slide. null = not yet chosen. */
+export type CoverChoice = "video" | "image" | null
+
+export type ToolCall = {
+  id: string
+  name: string
+  /** Pre-rendered and length-capped by the server. */
+  args: string
+  status: "running" | "ok" | "error"
+  /** Wall clock from the call to its response, paired by call id. */
+  ms: number | null
+  result: string | null
+}
+
 export type RunEvent = {
   seq: number
   kind: EventKind
@@ -103,6 +117,40 @@ export type RunEvent = {
   text: string
   data: Record<string, unknown>
   created_at: string | null
+  ts?: string | null
+  tools?: ToolCall[]
+}
+
+export type TokenCount = { prompt: number; output: number; total: number }
+
+export type AgentStat = {
+  name: string
+  /** First to last event for this agent. */
+  ms: number | null
+  tokens: TokenCount
+  tool_calls: number
+  events: number
+  errors: number
+}
+
+export type TraceSummary = {
+  tokens: TokenCount | null
+  /** Time the agents actually ran, summed per invocation - excludes waits. */
+  ms: number | null
+  /** Wall clock from the first event to the last, including idle waits. */
+  span_ms?: number | null
+  /** One per stretch of work: the first run, plus one per resume. */
+  invocations?: number
+  agents: AgentStat[]
+  event_count: number
+  tool_calls?: number
+}
+
+export type Trace = {
+  run_id: string
+  after: number
+  items: RunEvent[]
+  summary: TraceSummary
 }
 
 export type QueueItem = {

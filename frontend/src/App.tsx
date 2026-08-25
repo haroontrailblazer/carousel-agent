@@ -28,8 +28,11 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <RouterProvider router={router} />
+        {/* Top-centre: a carousel takes ~15 minutes, so the confirmation
+            that one started is worth putting where the eye already is
+            rather than in a corner. */}
         <Toaster
-          position="bottom-right"
+          position="top-center"
           toastOptions={{
             style: {
               background: "var(--card)",
