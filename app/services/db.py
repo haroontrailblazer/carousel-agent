@@ -342,7 +342,10 @@ _PHASE_STATUS = {
 
 
 async def update_run_phase(
-    run_id: str, phase: str, review_round: Optional[int] = None
+    run_id: str,
+    phase: str,
+    review_round: Optional[int] = None,
+    status: Optional[str] = None,
 ) -> None:
     """Record a phase transition for a run (and optionally its review round).
 
@@ -356,9 +359,13 @@ async def update_run_phase(
         run_id: the run to update.
         phase: one of the ``PHASE_*`` constants from ``app.state``.
         review_round: when given, also updates ``runs.review_round``.
+        status: overrides the status derived from *phase*. Needed because
+            reaching the ``done`` phase does not always mean success: the
+            orchestrator also lands there when it gives up, and a run that
+            gave up must not be recorded as finished.
     """
     pool = await get_pool()
-    status = _PHASE_STATUS.get(phase, RUN_STATUS_RUNNING)
+    status = status or _PHASE_STATUS.get(phase, RUN_STATUS_RUNNING)
     if review_round is None:
         await pool.execute(
             """

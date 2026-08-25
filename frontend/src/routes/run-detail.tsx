@@ -1,8 +1,12 @@
 import * as React from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useParams, useSearchParams } from "react-router"
-import { ExternalLink, Images, ListTree, WifiOff } from "lucide-react"
+import { ExternalLink, Images, ListTree, MessagesSquare, WifiOff } from "lucide-react"
 
+import {
+  AgentConversation,
+  startedFromComposer,
+} from "@/components/agent/agent-conversation"
 import { ReviewPanel } from "@/components/review/review-panel"
 import { TaskActions } from "@/components/run/task-actions"
 import { AgentTrace, PhaseRail } from "@/components/run/trace"
@@ -14,9 +18,9 @@ import { useRunStream } from "@/hooks/use-run-stream"
 import { get } from "@/lib/api"
 import { elapsed, relativeTime } from "@/lib/format"
 import { PHASE_LABELS, STATUS_LABELS, STATUS_TOKEN } from "@/lib/pipeline"
-import type { RunDetail, RunStatus } from "@/lib/types"
+import type { RunArtifacts, RunDetail, RunStatus } from "@/lib/types"
 
-type TaskTab = "trace" | "review"
+type TaskTab = "trace" | "chat" | "review"
 
 /**
  * Which view a task opens on.
@@ -61,6 +65,15 @@ export function RunDetailRoute() {
   // to decide how hard to poll, and a finished task must not be polled at all.
   const isLive = run.data?.status === "running"
 
+  // Same query key the Review tab uses, so opening Chat costs no extra
+  // request - React Query serves both from one cache entry.
+  const artifacts = useQuery({
+    queryKey: ["artifacts", runId],
+    queryFn: () => get<RunArtifacts>(`/api/runs/${runId}/artifacts`),
+    enabled: !!runId,
+    staleTime: 60_000,
+  })
+
   const stream = useRunStream(runId, {
     live: isLive,
     onPhase: () => {
@@ -83,7 +96,9 @@ export function RunDetailRoute() {
   const [params, setParams] = useSearchParams()
   const urlTab = params.get("tab")
   const [tab, setTab] = React.useState<TaskTab | null>(
-    urlTab === "review" || urlTab === "trace" ? urlTab : null,
+    urlTab === "review" || urlTab === "trace" || urlTab === "chat"
+      ? urlTab
+      : null,
   )
   const status = run.data?.status
 
@@ -241,6 +256,18 @@ export function RunDetailRoute() {
             onChange={selectTab}
             items={[
               { value: "trace", label: "Trace", icon: <ListTree /> },
+              // Only for tasks that were actually typed into the composer.
+              // A queue or scheduled run had no conversation, and an empty
+              // "Chat" tab would be a promise the task cannot keep.
+              ...(startedFromComposer(data)
+                ? [
+                    {
+                      value: "chat" as const,
+                      label: "Chat",
+                      icon: <MessagesSquare />,
+                    },
+                  ]
+                : []),
               {
                 value: "review",
                 label: "Review",
@@ -273,6 +300,23 @@ export function RunDetailRoute() {
             live={live}
             synced={stream.synced}
           />
+        </TabPanel>
+
+        <TabPanel value="chat" selected={active === "chat"}>
+          <Card className="p-5">
+            <AgentConversation
+              run={data}
+              events={stream.events}
+              summary={stream.summary}
+              live={live}
+              artifacts={artifacts.data}
+              runId={runId}
+              // No prompt in local state here: this task may have been started
+              // in another session entirely, so the component reconstructs it
+              // from the run itself.
+              showReviewCta={false}
+            />
+          </Card>
         </TabPanel>
 
         <TabPanel value="review" selected={active === "review"}>

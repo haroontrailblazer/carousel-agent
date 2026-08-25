@@ -53,16 +53,42 @@ function LoaderGrid({
   )
 }
 
-function useElapsed(running: boolean) {
-  const [deciseconds, setDeciseconds] = React.useState(0)
+/**
+ * Elapsed time, measured from an absolute instant rather than from mount.
+ *
+ * It used to count ticks into local state starting at 0, which meant the
+ * number was really "how long this component has existed". Switching to
+ * another tab and back unmounts and remounts it, so a task that had been
+ * running for four minutes came back reading 0.1s - the only thing on the
+ * page that was wrong, because everything else is derived from server state.
+ *
+ * Anchoring to `startedAt` makes the value a fact about the RUN, so it
+ * survives remounts, route changes and reloads. The interval now only decides
+ * how often the display refreshes; it no longer holds the measurement.
+ * Without an anchor (the pre-run "connecting" loader has no task yet) it
+ * falls back to mount time, which for that case is the correct origin.
+ */
+function useElapsed(running: boolean, startedAt?: string | null) {
+  const origin = React.useMemo(() => {
+    if (startedAt) {
+      const parsed = new Date(startedAt).getTime()
+      if (!Number.isNaN(parsed)) return parsed
+    }
+    return Date.now()
+  }, [startedAt])
+
+  const [now, setNow] = React.useState(() => Date.now())
 
   React.useEffect(() => {
     if (!running) return
-    const timer = window.setInterval(() => setDeciseconds((value) => value + 1), 100)
+    // Re-read the clock rather than incrementing: a background tab throttles
+    // timers, and an incrementing counter would silently lose that time.
+    setNow(Date.now())
+    const timer = window.setInterval(() => setNow(Date.now()), 100)
     return () => window.clearInterval(timer)
-  }, [running])
+  }, [running, origin])
 
-  const total = deciseconds / 10
+  const total = Math.max(0, (now - origin) / 1000)
   if (total < 60) return `${total.toFixed(1)}s`
   return `${Math.floor(total / 60)}m ${(total % 60).toFixed(1)}s`
 }
@@ -73,14 +99,17 @@ export function LoadingState({
   videoSrc = "/subway-surfers.mp4",
   running = true,
   outcome = "complete",
+  startedAt,
 }: {
   label?: string
   variant?: LoadingVariant
   videoSrc?: string
   running?: boolean
   outcome?: string
+  /** When the task began. Without it the timer measures this component's age. */
+  startedAt?: string | null
 }) {
-  const elapsed = useElapsed(running)
+  const elapsed = useElapsed(running, startedAt)
   const surfer = variant === "Surfer"
   const resolvedLabel = label ?? (surfer ? "Subway surfing" : "Churning")
   const [videoOk, setVideoOk] = React.useState(true)

@@ -350,14 +350,23 @@ class CarouselOrchestrator(BaseAgent):
             text += f" ({note})"
         return self._progress(ctx, text, delta, holder=holder)
 
-    async def _record_phase_quietly(self, state: Any, phase: str) -> None:
-        """Best-effort mirror of the phase into the ``runs`` table."""
+    async def _record_phase_quietly(
+        self, state: Any, phase: str, status: Optional[str] = None
+    ) -> None:
+        """Best-effort mirror of the phase into the ``runs`` table.
+
+        ``status`` overrides the one derived from the phase, for the one case
+        where they disagree: the rework hard stop ends in the ``done`` phase
+        because that is what terminates the loop, but it is a failure.
+        """
         run_id = str(state.get(K_RUN_ID) or "")
         if not run_id:
             return
         try:
             review_round = int(state.get(K_REVIEW_ROUND) or 0)
-            await db.update_run_phase(run_id, phase, review_round=review_round)
+            await db.update_run_phase(
+                run_id, phase, review_round=review_round, status=status
+            )
         except Exception as exc:  # DB may be absent in local runs - never fatal
             logger.debug("runs-table phase update skipped (%s).", exc)
 
@@ -606,7 +615,20 @@ class CarouselOrchestrator(BaseAgent):
                 ),
                 holder=holder,
             )
-            await self._record_phase_quietly(state, PHASE_DONE)
+            # Session state moves to DONE above because that is what stops the
+            # loop - but the runs table is what the console DISPLAYS, and this
+            # run did not finish, it gave up in rework. Mirroring DONE there
+            # claimed two things that never happened: it lit every step of the
+            # phase rail including Publishing, and it recorded the run as
+            # published in the task list. What is true is "failed, while
+            # reworking", so that is what is stored.
+            #
+            # Recovery is unaffected: interrupted_run_candidates skips runs
+            # whose status is already failed, so leaving an active phase name
+            # here cannot make a dead run look resumable.
+            await self._record_phase_quietly(
+                state, PHASE_REWORK, status=db.RUN_STATUS_FAILED
+            )
             return
 
         verdict = _safe_model(state, K_VERDICT, Verdict)

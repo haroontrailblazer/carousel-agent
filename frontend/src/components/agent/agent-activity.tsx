@@ -69,15 +69,24 @@ export function PixelLoader({
   live,
   outcome = "complete",
   variant = "Drive",
+  startedAt,
 }: {
   label: string
   live: boolean
   outcome?: string
   variant?: LoadingVariant
+  /** The task's start instant, so the timer is not reset by a remount. */
+  startedAt?: string | null
 }) {
   return (
     <div className="py-2">
-      <LoadingState label={label} variant={variant} running={live} outcome={outcome} />
+      <LoadingState
+        label={label}
+        variant={variant}
+        running={live}
+        outcome={outcome}
+        startedAt={startedAt}
+      />
     </div>
   )
 }

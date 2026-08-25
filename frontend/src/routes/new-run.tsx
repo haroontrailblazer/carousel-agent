@@ -1,13 +1,14 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ExternalLink, MoreHorizontal } from "lucide-react"
+import { MoreHorizontal } from "lucide-react"
 import { Link, useSearchParams } from "react-router"
 import { toast } from "sonner"
 
-import { PixelLoader, StreamedAgentText, ThinkingPanel, ToolChipList } from "@/components/agent/agent-activity"
-import { AgentAssetRail, AgentAssetStrip } from "@/components/agent/agent-assets"
+import { PixelLoader } from "@/components/agent/agent-activity"
+import { AgentAssetRail } from "@/components/agent/agent-assets"
 import { AgentComposer, type ComposerState } from "@/components/agent/agent-composer"
 import { AgentActivityStatus } from "@/components/agent/agent-workspace-status"
+import { AgentConversation } from "@/components/agent/agent-conversation"
 import { BrandLogo } from "@/components/layout/brand-logo"
 import { useRunStream } from "@/hooks/use-run-stream"
 import { ApiError, get, post } from "@/lib/api"
@@ -279,58 +280,23 @@ export function NewRunRoute() {
 
         <div className="agent-conversation-scroll">
           <div className="mx-auto w-full max-w-3xl space-y-6 px-5 pb-44 pt-6 sm:px-8 sm:pt-9">
-            <div className="flex justify-end gap-3">
-              <div className="max-w-[82%] rounded-[16px] bg-[var(--muted)] px-4 py-3 text-sm leading-6">
-                {submittedPrompt || (run.data?.source === "url" ? run.data.news.source_url : `Create a carousel about ${run.data?.title ?? "this story"}`)}
+            {run.isLoading ? (
+              <PixelLoader label="Connecting to the task transcript…" live />
+            ) : run.isError || !run.data ? (
+              <div className="rounded-[14px] border border-[var(--phase-failed)]/35 bg-[var(--phase-failed-soft)] p-4 text-sm text-[var(--phase-failed-fg)]">
+                This task could not be loaded. It may have been removed.
               </div>
-              <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-[var(--foreground)] text-[11px] font-semibold text-[var(--background)]">
-                You
-              </span>
-            </div>
-
-            <div className="min-w-0 space-y-5">
-                {run.isLoading ? (
-                  <PixelLoader label="Connecting to the task transcript…" live />
-                ) : run.isError || !run.data ? (
-                  <div className="rounded-[14px] border border-[var(--phase-failed)]/35 bg-[var(--phase-failed-soft)] p-4 text-sm text-[var(--phase-failed-fg)]">
-                    This task could not be loaded. It may have been removed.
-                  </div>
-                ) : (
-                  <>
-                    <PixelLoader
-                      key={runId}
-                      label={activityLabel(run.data, stream.events)}
-                      live={isLive}
-                      outcome={["failed", "cancelled", "interrupted"].includes(run.data.status) ? "stopped" : "complete"}
-                      variant={run.data.phase === "qa" ? "Dots" : run.data.phase === "generate" ? "Orbit" : "Drive"}
-                    />
-                    <ThinkingPanel events={stream.events} summary={stream.summary} live={isLive} />
-                    <ToolChipList events={stream.events} />
-                    <StreamedAgentText events={stream.events} live={isLive} />
-                    <AgentAssetStrip artifacts={artifacts.data} live={isLive} runId={runId} />
-
-                    {run.data.news.source_url && (
-                      <a href={run.data.news.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs text-[var(--link)] hover:underline">
-                        Original story <ExternalLink className="size-3" />
-                      </a>
-                    )}
-
-                    {run.data.pending_review && (
-                      <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--card)] p-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium">Your carousel is ready</p>
-                          <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                            Review the cover and {Math.max(0, run.data.slide_count - 1)} remaining slides before anything is published.
-                          </p>
-                        </div>
-                        <Link to={`/tasks/${runId}?tab=review`} className="rounded-[10px] bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-[var(--brand-foreground)] hover:bg-[var(--brand-hover)]">
-                          Review carousel
-                        </Link>
-                      </div>
-                    )}
-                  </>
-                )}
-            </div>
+            ) : (
+              <AgentConversation
+                run={run.data}
+                events={stream.events}
+                summary={stream.summary}
+                live={isLive}
+                artifacts={artifacts.data}
+                runId={runId}
+                prompt={submittedPrompt}
+              />
+            )}
           </div>
         </div>
 
