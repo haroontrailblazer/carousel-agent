@@ -41,7 +41,10 @@ from app.tools import instagram_tools, telegram_tools
 logger = logging.getLogger(__name__)
 
 #: Session-state key the publish outcome is written under (per CONTRACTS).
-K_PUBLISH_RESULT = "publish_result"
+# Re-exported from app.state, which is the single place session-state keys
+# are declared - the web console reads this key too and must not have to
+# import the whole agent stack to learn its name.
+from app.state import K_PUBLISH_RESULT  # noqa: E402
 
 # Lazily constructed fallback when the runner's wired artifact service is not
 # a SupabaseArtifactService (e.g. in-memory local runs).

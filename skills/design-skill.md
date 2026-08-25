@@ -19,7 +19,7 @@ Use these exact current `baskaranbuilds.com` variables:
 - `--text-primary-light: #E8E4D6` - primary text on ink.
 - `--text-muted-light: #B9C5AA` - muted text.
 - `--text-dark: #1A1A18` - primary text on paper.
-- `--accent-green: #B8EF43` - the only accent green. Every emphasized phrase,
+- `--accent-green: #8FB832` - the only accent green. Every emphasized phrase,
   number, node, and data mark uses this exact solid color with no shade change,
   tint, gradient, glow, or alternate green.
 
@@ -122,7 +122,7 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
   area below the divider (y=1161 through the bottom edge) empty; never draw
   replacement footer furniture inside the generated artwork.
 - One thin divider may anchor the rail. Do not add a thick footer block.
-- Exactly one `#B8EF43` emphasis moment per slide: a phrase, value, path, or node.
+- Exactly one `#8FB832` emphasis moment per slide: a phrase, value, path, or node.
 - The rail is consistent across light and dark slides; invert text colors for
   contrast while preserving geometry.
 
@@ -147,16 +147,17 @@ metaphor, and generous negative space. Do not add bullets or filler labels.
 - Use at most one visual technique per slide. Do not combine a chart, diagram,
   code block, portrait, and decorative texture.
 - Keep illustrations away from body copy and preserve breathing room.
-- Bottom-anchor any dominant visual that occupies most of the lower content
-  area: its lowest visible edge must meet the footer divider at y=1160 with no
-  empty background band between the visual and the line. It may be naturally
-  cropped by that divider, but it must never cross into the rail below it.
-- The compositor detects a wide visual that stops early and extends it to the
-  divider. Do not leave a paper or ink band between dominant artwork and the
-  line.
-- A smaller illustration that is clearly centered and does not span most of
-  the available width or lower area may float above the divider. Keep that gap
-  visually tight; do not push a compact visual down merely to make it touch.
+- Generate every explanatory visual directly as the exact 2:1 lower panel
+  (1088x544 generation, merged into slide coordinates x=0..1080 and
+  y=620..1160). Compose for that wide frame from the start. Keep important
+  subjects fully visible and use the complete panel so no post-generation
+  stretching or cropping is needed.
+- The compositor must preserve the artwork's aspect ratio. If an unexpected
+  source ratio is returned, contain the whole image and use the surrounding
+  paper or ink field as padding. Never use cover-cropping or non-uniform resize.
+- Sourced subject images are contained, centered horizontally, and aligned to
+  the divider. The full source remains visible; the generated panel behind it
+  supplies any side space needed for a different aspect ratio.
 
 ## CTA slide
 

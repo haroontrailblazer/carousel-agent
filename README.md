@@ -292,9 +292,9 @@ permalink.
 `skills/` is the system's personality, and it is meant to be edited:
 
 - `skills/cover-style.md` - the cover composition contract (media zone, black
-  grain dissolve, solid `#B8EF43` highlight rules).
+  grain dissolve, solid `#8FB832` highlight rules).
 - `skills/design-skill.md` - the Baskaran Builds body/CTA slide system,
-  including layout archetypes, the single `#B8EF43` accent, exact safe areas,
+  including layout archetypes, the single `#8FB832` accent, exact safe areas,
   and the official website footer favicon.
 - `skills/references/` - visual proofs and canonical brand assets. Footer
   furniture is composited deterministically after image generation so the

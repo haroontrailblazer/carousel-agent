@@ -16,7 +16,7 @@ current Baskaran Builds site palette.
 
 - Ink: `#161811`.
 - Primary text: `#E8E4D6`.
-- Accent: `#B8EF43` only. Never use another green shade or a gradient.
+- Accent: `#8FB832` only. Never use another green shade or a gradient.
 - Muted: `#B9C5AA`.
 
 Legacy orange is not used for new cover text or accent furniture.
@@ -29,11 +29,11 @@ Legacy orange is not used for new cover text or accent furniture.
    stippled/noise edge, never a generic smooth gradient.
 3. **Title block (lower third).** Use a large 128 px condensed bold grotesk,
    tight editorial line height, warm-white, with exactly one verbatim phrase
-   in `#B8EF43`. This is intentionally larger than the fixed 76 px inside-slide
+   in `#8FB832`. This is intentionally larger than the fixed 76 px inside-slide
    headline so the cover has correct feed-thumbnail proportion. Wrap to no
    more than three balanced lines and never shrink it.
 4. **Continuity furniture.** Preserve the faint perspective floor/grid and
-   compact side-arrow cues from the current overlay, recolored to `#B8EF43`.
+   compact side-arrow cues from the current overlay, recolored to `#8FB832`.
 5. **Brand rail.** Keep the lower edge quiet. Do not add a second headline,
    badges, stats, or source labels.
 
@@ -61,7 +61,7 @@ Example shape: `YOUR AGENT LOOKS SMART UNTIL REALITY HITS`, highlighting
   subject. Prefer attached official media pages and trusted news or media
   catalogs. Reject unverified blog OG graphics, text-heavy generic graphics,
   and images that do not visibly show the subject.
-- Do not tint the whole media frame green. `#B8EF43` belongs only to the highlight
+- Do not tint the whole media frame green. `#8FB832` belongs only to the highlight
   phrase and small directional furniture.
 - Avoid glows, lens flares, floating logos, and decorative circuit patterns.
 - If the source is a paper or UI screenshot, keep one identifiable proof region
@@ -71,4 +71,4 @@ Example shape: `YOUR AGENT LOOKS SMART UNTIL REALITY HITS`, highlighting
 
 `STRANGE-COVER (1).png` remains the geometry source for the grain dissolve,
 grid, and arrows. Runtime compositing scrubs its example title and recolors its
-legacy orange accents to the single `#B8EF43` token before rendering new copy.
+legacy orange accents to the single `#8FB832` token before rendering new copy.

@@ -59,7 +59,7 @@ CTA_HANDLE_LEFT = BODY_HANDLE_LEFT
 
 INK = (22, 24, 17)
 PAPER = (247, 247, 245)
-ACCENT_GREEN = (184, 239, 67)
+ACCENT_GREEN = (143, 184, 50)
 WARM_WHITE = (232, 228, 214)
 TEXT_DARK = (26, 26, 24)
 MUTED_DARK = (113, 122, 95)
@@ -482,7 +482,7 @@ def _rail_colors(image: Image.Image) -> tuple[tuple[int, int, int], ...]:
 
 
 def anchor_dominant_visual_to_divider(image: Image.Image) -> Image.Image:
-    """Extend a wide lower visual to the footer divider when it stops early."""
+    """Bottom-align a dominant visual without resizing or cropping its content."""
     result = image.convert("RGB")
     visual_top = TEXT_PANEL_BOTTOM
     visual_bottom = RAIL_DIVIDER_Y
@@ -514,11 +514,12 @@ def anchor_dominant_visual_to_divider(image: Image.Image) -> Image.Image:
     if source_height < 180:
         return result
     source = result.crop((0, visual_top, SLIDE_WIDTH, last_content + 1))
-    source = source.resize(
-        (SLIDE_WIDTH, visual_bottom - visual_top),
-        Image.Resampling.LANCZOS,
+    gap = visual_bottom - (last_content + 1)
+    ImageDraw.Draw(result).rectangle(
+        (0, visual_top, SLIDE_WIDTH, visual_bottom - 1),
+        fill=background,
     )
-    result.paste(source, (0, visual_top))
+    result.paste(source, (0, visual_top + gap))
     return result
 
 

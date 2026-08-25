@@ -74,16 +74,25 @@ CREATE INDEX IF NOT EXISTS memory_entries_scope_idx
     ON memory_entries (app_name, user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS memory_entries_event_uq
     ON memory_entries (app_name, user_id, session_id, event_id);
+-- Mirrors db/schema.sql's feedback block EXACTLY. Both are
+-- CREATE TABLE IF NOT EXISTS, so on a fresh database whichever runs first
+-- wins; if the two disagree the surviving shape depends on boot order. They
+-- previously disagreed (serial vs BIGSERIAL, feedback_created_at_idx vs
+-- idx_feedback_created_at). Change one, change the other.
 CREATE TABLE IF NOT EXISTS feedback (
     id          BIGSERIAL PRIMARY KEY,
     run_id      TEXT NOT NULL,
     verdict     TEXT NOT NULL,
-    feedback    TEXT NOT NULL,
+    feedback    TEXT NOT NULL DEFAULT '',
     targets     JSONB NOT NULL DEFAULT '[]'::jsonb,
     news_title  TEXT NOT NULL DEFAULT '',
+    decided_by  TEXT,
+    source      TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS feedback_created_at_idx
+CREATE INDEX IF NOT EXISTS idx_feedback_run_id
+    ON feedback (run_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at
     ON feedback (created_at DESC);
 """
 

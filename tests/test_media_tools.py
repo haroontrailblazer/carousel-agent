@@ -177,7 +177,15 @@ class CoverTypographyTests(unittest.TestCase):
                 self.assertIsNone(counter_zone.getbbox())
 
     def test_template_example_title_reservation_is_fully_scrubbed(self) -> None:
-        with Image.open(media_tools.settings.cover_overlay_template) as source:
+        # This asserts a property OF THE BRAND ASSET, not of our code: that
+        # scrubbing clears the template's baked-in example headline. The asset
+        # is optional (a missing one falls back to a plain gradient, and
+        # _build_overlay_png is covered for that path above), so skip rather
+        # than fail when it is not present in this checkout.
+        template = media_tools.settings.cover_overlay_template
+        if not template.exists():
+            self.skipTest(f"cover overlay template not present: {template}")
+        with Image.open(template) as source:
             scrubbed = media_tools._scrub_template_text(source.convert("RGBA"))
         x0 = int(scrubbed.width * media_tools._TEMPLATE_TEXT_BOX[0])
         y0 = int(scrubbed.height * media_tools._TEMPLATE_TEXT_BOX[1])

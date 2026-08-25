@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import math
 import re
 import subprocess
@@ -87,7 +88,7 @@ _IMAGE_CANDIDATE_LIMIT = 5
 
 # Title styling (current baskaranbuilds.com tokens; skills/cover-style.md).
 _TEXT_PRIMARY = (232, 228, 214, 255)  # #E8E4D6
-_ACCENT_GREEN = (*ACCENT_GREEN, 255)  # #B8EF43
+_ACCENT_GREEN = (*ACCENT_GREEN, 255)  # #8FB832
 _TITLE_MAX_LINES = HEADLINE_MAX_LINES
 _COVER_TITLE_FONT_SIZE = 128
 _TITLE_MAX_WIDTH_FRAC = 0.78
@@ -1033,7 +1034,7 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
     Centered in the lower third, up to three lines, 128 px condensed bold
     grotesk typography,
     uppercase, white, with the highlight phrase in a per-character horizontal
-    single brand green (#B8EF43), with no gradient or shade variation.
+    single brand green (#8FB832), with no gradient or shade variation.
     """
     width, height = settings.slide_width, settings.slide_height
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -1122,10 +1123,31 @@ def _recolor_legacy_accents(tpl: Image.Image) -> Image.Image:
     return tpl
 
 
+#: Whether the missing-template warning has already been emitted. The overlay
+#: is loaded once per cover render, so warning every time would bury the log.
+_TEMPLATE_WARNED = False
+
+
 def _load_scrubbed_template() -> Optional[Image.Image]:
-    """Load the overlay template with its example text scrubbed (cached)."""
+    """Load the overlay template with its example text scrubbed (cached).
+
+    Returns ``None`` when the file is absent, which is a supported state:
+    ``_build_overlay_png`` then draws a plain gradient so a missing brand asset
+    degrades the cover instead of failing the run. It is still worth saying out
+    loud once - an unbranded cover that nobody noticed shipping is worse than a
+    run that stopped.
+    """
+    global _TEMPLATE_WARNED
     path = settings.cover_overlay_template
     if not path.exists():
+        if not _TEMPLATE_WARNED:
+            _TEMPLATE_WARNED = True
+            logging.getLogger(__name__).warning(
+                "Cover overlay template not found at %s - covers will be "
+                "rendered with a plain gradient instead of the brand overlay. "
+                "Set COVER_OVERLAY_TEMPLATE or restore the file to fix.",
+                path,
+            )
         return None
     key = (str(path), path.stat().st_mtime)
     cached = _SCRUBBED_TEMPLATE_CACHE.get(key)
@@ -1202,7 +1224,7 @@ def compose_cover(
         media_path: Local path of the trimmed clip or downloaded image.
         title: Cover hook title (rendered uppercase in the shared inside-slide
             headline style, up to three balanced lines).
-        highlight: Verbatim phrase inside ``title`` rendered in solid #B8EF43.
+        highlight: Verbatim phrase inside ``title`` rendered in solid #8FB832.
         is_video: True when ``media_path`` is a video clip.
         workdir: Run-specific working folder.
 

@@ -28,3 +28,7 @@ node_modules/
 Thumbs.db
 .idea/
 .vscode/
+
+# Built SPA (produced by 'npm run build' in frontend/)
+frontend/dist/
+frontend/node_modules/

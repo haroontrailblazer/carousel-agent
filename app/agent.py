@@ -32,10 +32,7 @@ import logging
 from typing import Optional
 
 from google.adk.agents import BaseAgent
-from google.adk.artifacts import BaseArtifactService
-from google.adk.memory import BaseMemoryService
 from google.adk.runners import Runner
-from google.adk.sessions import BaseSessionService
 
 from app.agents.cta import build_cta_agent
 from app.agents.feedback_router import build_feedback_router_agent
@@ -48,11 +45,10 @@ from app.agents.research import build_research_agent
 from app.agents.review_dispatcher import build_review_dispatcher_agent
 from app.agents.stitch_verify import build_stitch_verify_agent
 from app.agents.template_design import build_template_design_agent
+from app import runtime
 from app.config import settings
 from app.observability import init_observability
 from app.orchestrator import ORCHESTRATOR_NAME, CarouselOrchestrator
-from app.services.artifact_service import SupabaseArtifactService
-from app.services.memory_service import PostgresMemoryService
 
 logger = logging.getLogger(__name__)
 
@@ -118,76 +114,12 @@ root_agent: CarouselOrchestrator = build_root_agent()
 # ---------------------------------------------------------------------------
 # Service wiring (production services with graceful in-memory fallbacks)
 # ---------------------------------------------------------------------------
-def _build_session_service() -> BaseSessionService:
-    """Build the session service: Postgres-backed, else in-memory.
-
-    ``DatabaseSessionService`` (google-adk 2.7.0: ``DatabaseSessionService
-    (db_url)``, SQLAlchemy async engine) persists sessions so the review
-    pause survives process restarts and the review API can resume runs.
-    Without ``DATABASE_URL`` (or with the sqlalchemy extra missing) the
-    in-memory service keeps local ``adk web`` fully functional.
-    """
-    if settings.database_url:
-        try:
-            from google.adk.sessions import DatabaseSessionService
-
-            return DatabaseSessionService(settings.database_url)
-        except Exception as exc:
-            logger.warning(
-                "DatabaseSessionService unavailable (%s); falling back to "
-                "InMemorySessionService.",
-                exc,
-            )
-    else:
-        logger.warning(
-            "DATABASE_URL not set; using InMemorySessionService - sessions "
-            "will not survive a restart and the review API cannot resume "
-            "runs from another process."
-        )
-    from google.adk.sessions import InMemorySessionService
-
-    return InMemorySessionService()
-
-
-def _build_artifact_service() -> BaseArtifactService:
-    """Build the artifact service: Supabase S3-backed, else in-memory."""
-    if settings.s3_endpoint and settings.s3_access_key and settings.s3_secret_key:
-        try:
-            return SupabaseArtifactService()
-        except Exception as exc:
-            logger.warning(
-                "SupabaseArtifactService unavailable (%s); falling back to "
-                "InMemoryArtifactService.",
-                exc,
-            )
-    else:
-        logger.warning(
-            "Supabase S3 settings missing (SUPABASE_S3_ENDPOINT / "
-            "SUPABASE_S3_ACCESS_KEY / SUPABASE_S3_SECRET_KEY); using "
-            "InMemoryArtifactService - artifacts stay local to this process "
-            "and no public URLs can be signed for publishing."
-        )
-    from google.adk.artifacts import InMemoryArtifactService
-
-    return InMemoryArtifactService()
-
-
-def _build_memory_service() -> BaseMemoryService:
-    """Build the memory service: Postgres-backed, else in-memory.
-
-    ``PostgresMemoryService`` opens its asyncpg pool lazily, so constructing
-    it here performs no I/O; runtime DB errors degrade gracefully inside the
-    orchestrator/learner (best-effort feedback features).
-    """
-    if settings.database_url:
-        return PostgresMemoryService()
-    logger.warning(
-        "DATABASE_URL not set; using InMemoryMemoryService - recent-feedback "
-        "injection and permanent feedback storage are disabled."
-    )
-    from google.adk.memory import InMemoryMemoryService
-
-    return InMemoryMemoryService()
+# The three services moved to app/runtime.py, where they are built ONCE and
+# shared. Building them per runner meant a new SQLAlchemy engine and connection
+# pool for every run and every resume - fine for a one-shot CLI, a connection
+# leak in a long-lived web process. The agent tree is deliberately still built
+# fresh per runner (see build_root_agent), because that is what lets the
+# Learner's edits to skills/agents/*.md take effect without a redeploy.
 
 
 def build_runner(agent: Optional[BaseAgent] = None) -> Runner:
@@ -208,9 +140,9 @@ def build_runner(agent: Optional[BaseAgent] = None) -> Runner:
     return Runner(
         app_name=settings.app_name,
         agent=agent if agent is not None else build_root_agent(),
-        session_service=_build_session_service(),
-        artifact_service=_build_artifact_service(),
-        memory_service=_build_memory_service(),
+        session_service=runtime.session_service(),
+        artifact_service=runtime.artifact_service(),
+        memory_service=runtime.memory_service(),
     )
 
 

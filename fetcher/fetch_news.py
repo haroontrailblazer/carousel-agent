@@ -718,6 +718,30 @@ async def run_one() -> Optional[str]:
     runner = build_runner()
     phase = ""
     paused_on_tool = False
+    # Say "still alive" on a timer for as long as this run is going.
+    #
+    # runs.updated_at otherwise only moves on a PHASE transition, and a single
+    # phase runs for many minutes (template_design renders every slide with an
+    # image model). Startup recovery in the web service treats a long-idle run
+    # in an active phase as killed, so without this a healthy CLI run gets
+    # reclaimed out from under itself the moment the web service restarts -
+    # which is exactly what happened twice during development.
+    from app.runs.service import HEARTBEAT_INTERVAL_S
+
+    async def _heartbeat() -> None:
+        while True:
+            try:
+                await asyncio.sleep(HEARTBEAT_INTERVAL_S)
+                await db.touch_run(run_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.debug("Heartbeat failed for run %s: %s", run_id, exc)
+
+    beat = asyncio.get_running_loop().create_task(
+        _heartbeat(), name=f"heartbeat-{run_id}"
+    )
+
     try:
         await runner.session_service.create_session(
             app_name=settings.app_name,
@@ -757,6 +781,7 @@ async def run_one() -> Optional[str]:
         await _mark_news_quietly(news_id, db.STATUS_FAILED)
         raise
     finally:
+        beat.cancel()
         try:
             await runner.close()
         except Exception as exc:

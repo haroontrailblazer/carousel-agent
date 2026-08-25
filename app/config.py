@@ -26,10 +26,19 @@ def _project_path(name: str, default: Path) -> Path:
     return configured if configured.is_absolute() else PROJECT_ROOT / configured
 
 
+#: ADK derives an app's name from the AGENT PACKAGE DIRECTORY, so every session
+#: it writes is keyed on "app". Defaulting app_name to anything else (it used to
+#: default to "carousel_factory") means the fetcher, the review API and the web
+#: UI address different sessions and a resume silently finds nothing. Deriving
+#: it from this file's own directory makes the two agree by construction, and
+#: keeps working if the package is ever renamed.
+_ADK_APP_NAME = Path(__file__).resolve().parent.name
+
+
 @dataclass(frozen=True)
 class Settings:
     # --- app ---
-    app_name: str = os.getenv("APP_NAME", "carousel_factory")
+    app_name: str = os.getenv("APP_NAME", _ADK_APP_NAME)
     review_api_base_url: str = os.getenv("REVIEW_API_BASE_URL", "http://localhost:8080")
     max_rework_rounds: int = int(os.getenv("MAX_REWORK_ROUNDS", "5"))
     max_carousel_slides: int = int(os.getenv("MAX_CAROUSEL_SLIDES", "10"))  # IG limit
@@ -89,6 +98,30 @@ class Settings:
     newsletter_query: str = os.getenv(
         "NEWSLETTER_QUERY", "label:newsletters newer_than:2d"
     )
+
+    # --- web console + auth ---
+    # The anon key is PUBLIC by design - it ships inside the browser bundle, so
+    # it is served to the SPA by /api/auth/config. The service key never is.
+    supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
+    # Supabase signs JWTs two ways depending on project age: a shared HS256
+    # secret (legacy) or asymmetric keys published as JWKS (current). Set this
+    # only for a legacy project; leaving it empty selects the JWKS path.
+    supabase_jwt_secret: str = os.getenv("SUPABASE_JWT_SECRET", "")
+    # Signs OUR session cookie - unrelated to Supabase's keys. Must be stable
+    # across restarts or everyone is logged out on every deploy.
+    session_secret: str = os.getenv("SESSION_SECRET", "")
+    session_ttl_s: int = int(os.getenv("SESSION_TTL_S", str(12 * 3600)))
+    # Seeds app_users ONLY while that table is empty, so a fresh database is
+    # not locked out of its own console.
+    auth_bootstrap_emails: tuple[str, ...] = tuple(
+        e.strip()
+        for e in os.getenv("AUTH_BOOTSTRAP_EMAILS", "").split(",")
+        if e.strip()
+    )
+    # This service's own public URL. Used for CORS and for building absolute
+    # links; Render cannot self-reference a URL in a blueprint, so it is set by
+    # hand after the first deploy.
+    public_base_url: str = os.getenv("PUBLIC_BASE_URL", "")
 
     # --- observability (Langfuse; empty keys = tracing disabled) ---
     langfuse_public_key: str = os.getenv("LANGFUSE_PUBLIC_KEY", "")

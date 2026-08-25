@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.schemas import CopySet
 from app.agents.template_design import _body_display_numbers
 from app.tools.brand_layout import (
+    ACCENT_GREEN,
     BODY_FONT_SIZE,
     BODY_MIN_FONT_SIZE,
     HEADLINE_FONT_SIZE,
@@ -26,6 +27,9 @@ from app.tools.brand_layout import (
 
 
 class BrandLayoutTests(unittest.TestCase):
+    def test_accent_green_uses_current_brand_value(self) -> None:
+        self.assertEqual(ACCENT_GREEN, (143, 184, 50))
+
     def test_typography_uses_preferred_sizes_when_copy_is_compact(self) -> None:
         layout = _fit_typography_layout(
             "A SHORT HEADLINE",
@@ -95,14 +99,23 @@ class BrandLayoutTests(unittest.TestCase):
         self.assertEqual(rendered.getpixel((20, 20)), PAPER)
         self.assertEqual(rendered.getpixel((20, 300)), PAPER)
 
-    def test_dominant_visual_is_extended_to_footer_divider(self) -> None:
+    def test_dominant_visual_is_bottom_aligned_without_stretching(self) -> None:
         image = Image.new("RGB", (1080, 1350), PAPER)
         ImageDraw.Draw(image).rectangle(
             (0, TEXT_PANEL_BOTTOM, 1079, RAIL_DIVIDER_Y - 70),
             fill=(30, 30, 30),
         )
+        before_rows = sum(
+            image.getpixel((540, y)) == (30, 30, 30)
+            for y in range(TEXT_PANEL_BOTTOM, RAIL_DIVIDER_Y)
+        )
         rendered = anchor_dominant_visual_to_divider(image)
         self.assertLess(sum(rendered.getpixel((540, RAIL_DIVIDER_Y - 1))), 200)
+        after_rows = sum(
+            rendered.getpixel((540, y)) == (30, 30, 30)
+            for y in range(TEXT_PANEL_BOTTOM, RAIL_DIVIDER_Y)
+        )
+        self.assertEqual(after_rows, before_rows)
 
     def test_slide_copy_rejects_alternate_script_parentheticals(self) -> None:
         with self.assertRaises(ValidationError):

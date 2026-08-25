@@ -16,9 +16,10 @@ Rendering contract (see docs/CONTRACTS.md + skills/design-skill.md):
   visual zone after generation and is never used as an edit-template input.
 - Without a reference, ``images.generate`` is used with a detailed style
   prompt built from skills/design-skill.md.
-- gpt-image-2 arbitrary sizes must be divisible by 16, so generation happens
-  at 1088x1360 (exact 4:5) and the result is downscaled with Pillow LANCZOS to
-  1080x1350 before being written to ``out_path``.
+- The visual slot is exactly 1080x540 (2:1), from y=620 through y=1160.
+  gpt-image-2 generation happens at the matching divisible-by-16 size
+  1088x544, then the complete visual is merged into that slot without
+  stretching or cropping before deterministic typography and rails are added.
 """
 
 from __future__ import annotations
@@ -44,10 +45,12 @@ from app import observability
 from app.config import load_skill, settings
 from app.text_rules import require_no_em_dash, require_readable_text
 from app.tools.brand_layout import (
+    INK,
+    PAPER,
     RAIL_DIVIDER_Y,
+    SLIDE_HEIGHT,
     SLIDE_WIDTH,
     TEXT_PANEL_BOTTOM,
-    anchor_dominant_visual_to_divider,
     apply_body_brand_rail,
     apply_cta_brand_rail,
     apply_slide_typography,
@@ -56,11 +59,14 @@ from app.tools.brand_layout import (
 
 logger = logging.getLogger(__name__)
 
-# gpt-image-2 requires width/height divisible by 16 → generate at exact 4:5
-# then downscale to the Instagram slide size from settings (1080x1350).
+# The lower visual slot is 1080x540 (exact 2:1). gpt-image-2 requires dimensions
+# divisible by 16, so request the matching 1088x544 canvas and downscale both
+# axes proportionally by the same ratio before merging it into the slide.
 _GEN_WIDTH: int = 1088
-_GEN_HEIGHT: int = 1360
+_GEN_HEIGHT: int = 544
 _GEN_SIZE: str = f"{_GEN_WIDTH}x{_GEN_HEIGHT}"
+_VISUAL_WIDTH: int = SLIDE_WIDTH
+_VISUAL_HEIGHT: int = RAIL_DIVIDER_Y - TEXT_PANEL_BOTTOM
 
 # Image generation is slow; give the API a generous but explicit budget.
 _REQUEST_TIMEOUT_S: float = 300.0
@@ -73,28 +79,32 @@ _client_singleton: Optional[OpenAI] = None
 
 # Inline fallback used only when skills/design-skill.md is missing on disk.
 _FALLBACK_STYLE = """
-Design system: 1080x1350 (4:5) editorial social slide. Alternate ink (#161811)
-and paper (#F7F7F5) backgrounds. Use warm white (#E8E4D6) or ink (#1A1A18)
-text and exactly #B8EF43 green for exactly ONE emphasized element. Never use
+Design system for an exact 2:1 lower visual panel that will be merged into a
+1080x1350 editorial social slide. Alternate ink (#161811) and paper (#F7F7F5)
+backgrounds. Use warm white (#E8E4D6) or ink (#1A1A18)
+text and exactly #8FB832 green for exactly ONE emphasized element. Never use
 another green shade, tint, gradient, glow, or color variation for highlights.
 Bricolage-style bold grotesk headlines, clean Instrument-style body text,
-generous safe margins, one dominant explanatory visual, and a compact bottom
-brand rail. Choose an editorial explainer, data proof, process line, comparison,
+one dominant explanatory visual composed fully inside the wide panel. Choose
+an editorial explainer, data proof, process line, comparison,
 dark technical proof, or statement-pause layout based on the content. Never use
-a repeated card grid. A large lower-half visual must meet the footer divider;
-only a compact centered visual may float above it with a tight gap. CTA slide:
-same family, one clear action, no swipe arrow.
+a repeated card grid. Keep every important subject fully visible and let the
+visual meet the panel edges naturally. CTA visuals use the same family and one
+clear action.
 """.strip()
 
 _NO_TEXT_RULE = (
-    "CRITICAL VISUAL-LAYER RULE: render no text, letters, digits, labels, "
+    "CRITICAL VISUAL-LAYER RULE: this output is only the standalone 2:1 lower "
+    "visual panel, not a full carousel slide. Fill the complete canvas with the "
+    "finished visual composition and keep every important subject fully inside "
+    "the frame. Do not create a header, text panel, footer, or empty reserved "
+    "bands. Render no text, letters, digits, labels, "
     "captions, logos, handles, watermarks, pseudo-text, or writing-like marks "
-    "anywhere. Typography is added deterministically after generation. Keep "
-    "the entire upper text panel from y=132 through y=620 visually blank and "
-    "flat. If a chart, interface, sign, poster, or diagram normally contains "
+    "anywhere. Typography is added deterministically after this panel is merged "
+    "into the slide. If a chart, interface, sign, poster, or diagram normally contains "
     "writing, remove its labels and use only clear unlabeled shapes. Do not "
     "use lime or any green accent in the visual layer because the typography "
-    "layer owns the slide's single #B8EF43 emphasis. Generated illustration "
+    "layer owns the slide's single #8FB832 emphasis. Generated illustration "
     "uses only paper, ink, warm white, and muted neutral tones. Do not use red, "
     "orange, blue, purple, or unrelated gradients. Real source-image colors "
     "are allowed only in the sourced image composited after generation."
@@ -217,16 +227,42 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
     raise RuntimeError(f"Image generation failed after retry: {last_exc}")  # pragma: no cover
 
 
-def _finalize(png_bytes: bytes, out_path: str) -> str:
-    """Downscale to slide size with LANCZOS and write the PNG to ``out_path``."""
-    target = (settings.slide_width, settings.slide_height)  # 1080x1350
+def _contain_without_crop(
+    image: Image.Image,
+    target: tuple[int, int],
+    background: tuple[int, int, int],
+    *,
+    bottom_align: bool = True,
+) -> Image.Image:
+    """Fit the complete image into ``target`` without cropping or distortion."""
+    source = image.convert("RGB")
+    fitted = ImageOps.contain(source, target, method=Image.Resampling.LANCZOS)
+    panel = Image.new("RGB", target, background)
+    left = (target[0] - fitted.width) // 2
+    top = target[1] - fitted.height if bottom_align else (target[1] - fitted.height) // 2
+    panel.paste(fitted, (left, top))
+    return panel
+
+
+def _finalize(
+    png_bytes: bytes,
+    out_path: str,
+    *,
+    theme: str = "paper",
+) -> str:
+    """Merge an exact-aspect generated visual into the full carousel slide."""
+    background = INK if theme == "ink" else PAPER
     destination = Path(out_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(BytesIO(png_bytes)) as img:
-        rgb = img.convert("RGB")
-        if rgb.size != target:
-            rgb = rgb.resize(target, Image.Resampling.LANCZOS)
-        rgb.save(destination, format="PNG")
+        visual = _contain_without_crop(
+            img,
+            (_VISUAL_WIDTH, _VISUAL_HEIGHT),
+            background,
+        )
+    slide = Image.new("RGB", (SLIDE_WIDTH, SLIDE_HEIGHT), background)
+    slide.paste(visual, (0, TEXT_PANEL_BOTTOM))
+    slide.save(destination, format="PNG")
     return str(destination)
 
 
@@ -234,20 +270,21 @@ def _composite_subject_reference(
     image: Image.Image,
     visual_reference: str,
 ) -> Image.Image:
-    """Place a sourced subject image into the lower visual zone without restyling it."""
+    """Merge the complete sourced image into the visual slot without cropping."""
     result = image.convert("RGB")
     reference = _template_file(visual_reference) if visual_reference else None
     if reference is None:
         return result
     _filename, data, _mime = reference
     with Image.open(BytesIO(data)) as source:
-        fitted = ImageOps.fit(
+        fitted = ImageOps.contain(
             source.convert("RGB"),
-            (SLIDE_WIDTH, RAIL_DIVIDER_Y - TEXT_PANEL_BOTTOM),
+            (_VISUAL_WIDTH, _VISUAL_HEIGHT),
             method=Image.Resampling.LANCZOS,
-            centering=(0.5, 0.45),
         )
-    result.paste(fitted, (0, TEXT_PANEL_BOTTOM))
+    left = (SLIDE_WIDTH - fitted.width) // 2
+    top = RAIL_DIVIDER_Y - fitted.height
+    result.paste(fitted, (left, top))
     return result
 
 
@@ -303,14 +340,12 @@ def generate_slide_image(
         f'Use the "{layout_hint}" layout archetype from the design system.',
         _meaning_block(headline, copy_lines),
         (
-            "Build the explanatory visual only in y=640..1160. For a dominant "
-            "image or illustration that occupies most of this lower content "
-            "area, extend its lowest visible edge to y=1160 so it touches the "
-            "footer divider with no empty band. A compact centered visual may "
-            "float above the divider with a tight gap. Never cross below y=1160. "
-            "Leave x=88..200 and y=76..130 blank for the deterministic slide "
-            "number. Leave y=1161..1350 completely blank for the deterministic "
-            "brand rail."
+            "Generate the complete explanatory visual for an exact 2:1 panel. "
+            "Compose directly for that wide frame so no element needs to be "
+            "stretched or cropped later. Use the full panel edge-to-edge, keep "
+            "important subjects fully visible, and let the composition naturally "
+            "meet its bottom edge. The runtime merges this panel exactly into "
+            "slide coordinates x=0..1080 and y=620..1160."
         ),
     ]
     if visual_context.strip():
@@ -348,13 +383,12 @@ def generate_slide_image(
         )
         input_image = None
     png = _call_images_api(prompt, input_image)
-    result = _finalize(png, out_path)
+    result = _finalize(png, out_path, theme="paper")
     with Image.open(result) as rendered:
         grounded = _composite_subject_reference(rendered, visual_reference)
         normalized = normalize_accent_green(grounded)
-        anchored = anchor_dominant_visual_to_divider(normalized)
         typeset = apply_slide_typography(
-            anchored,
+            normalized,
             headline,
             copy_lines,
             theme="paper",
@@ -413,10 +447,11 @@ def generate_cta_image(
         _meaning_block(headline, render_lines),
     ]
     text_parts.append(
-        "Keep the CTA visual inside x=88..992 and y=640..1160. "
-        "Leave y=1161..1350 completely blank for the deterministic favicon "
-        "and handle rail. Do not draw a handle, footer portrait, logo, divider, "
-        "footer decoration, slide number, or swipe arrow in that reserved area."
+        "Generate the CTA visual as a complete exact 2:1 panel. Compose directly "
+        "for that wide frame, use the full canvas, and keep every important "
+        "subject fully visible so nothing needs cropping or stretching. The "
+        "runtime merges it into y=620..1160 and adds all typography and footer "
+        "furniture afterward."
     )
     text_spec = "\n".join(text_parts)
 
@@ -434,12 +469,11 @@ def generate_cta_image(
             f"{_style_prompt()}\n\n{text_spec}"
         )
     png = _call_images_api(prompt, template)
-    result = _finalize(png, out_path)
+    result = _finalize(png, out_path, theme="ink")
     with Image.open(result) as rendered:
         normalized = normalize_accent_green(rendered)
-        anchored = anchor_dominant_visual_to_divider(normalized)
         typeset = apply_slide_typography(
-            anchored,
+            normalized,
             headline,
             render_lines,
             theme="ink",
