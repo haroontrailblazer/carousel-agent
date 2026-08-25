@@ -33,6 +33,28 @@ function authMessage(error: unknown): string {
   return raw || "Could not sign in."
 }
 
+/**
+ * Where to go once signed in.
+ *
+ * Reads `?next=` first: that is what the SERVER sets when it turns away an
+ * unauthenticated HTML request, and it is the only channel that survives a
+ * cold navigation from outside the app - a Telegram review link, a bookmark,
+ * a pasted URL. React Router's `location.state` cannot carry those, because
+ * there was no in-app navigation to attach state to.
+ *
+ * Only path-absolute, same-origin destinations are honoured. `//evil.com` and
+ * `https://evil.com` are both rejected: an open redirect on a login page is a
+ * phishing primitive - it lets an attacker send a real link to the real site
+ * that deposits the user somewhere else immediately after they type a
+ * password.
+ */
+function redirectTarget(search: string, stateFrom?: string): string {
+  const candidate = new URLSearchParams(search).get("next") ?? stateFrom
+  if (!candidate) return "/new"
+  if (!candidate.startsWith("/") || candidate.startsWith("//")) return "/new"
+  return candidate
+}
+
 export function LoginRoute() {
   const { status, signIn } = useAuth()
   const navigate = useNavigate()
@@ -51,7 +73,7 @@ export function LoginRoute() {
   // see a login form.
   if (status === "in") {
     const from = (location.state as { from?: string } | null)?.from
-    return <Navigate to={from ?? "/new"} replace />
+    return <Navigate to={redirectTarget(location.search, from)} replace />
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -61,7 +83,7 @@ export function LoginRoute() {
     try {
       await signIn(email.trim(), password)
       const from = (location.state as { from?: string } | null)?.from
-      navigate(from ?? "/new", { replace: true })
+      navigate(redirectTarget(location.search, from), { replace: true })
     } catch (err) {
       setError(authMessage(err))
     } finally {

@@ -9,8 +9,8 @@ Chosen over the Gmail API because the setup is a bot token and a chat id -
 no Google Cloud project, no OAuth consent screen, no browser round trip, and
 no 7-day refresh-token expiry to re-do every week.
 
-The Approve/Reject buttons are inline keyboard **URL** buttons pointing at the
-review API, exactly like the mail links did. URL buttons are handled entirely
+The review button is an inline keyboard **URL** button pointing at the console's
+own review screen, which is behind the login. URL buttons are handled entirely
 client-side, so nothing here needs a webhook or ``getUpdates`` polling - the
 human-in-the-loop resume protocol is untouched.
 
@@ -130,13 +130,34 @@ def _preview_paths(bundle: dict) -> list[Path]:
     return existing
 
 
-def _review_urls(run_id: str) -> tuple[str, str]:
-    """(approve_url, reject_url) for a run - same links the mail carried."""
-    base = settings.review_api_base_url.rstrip("/")
-    return (
-        f"{base}/review/{run_id}/approve",
-        f"{base}/review/{run_id}/reject",
-    )
+def _console_review_url(run_id: str) -> str:
+    """The console's own review screen for this run.
+
+    Both Telegram buttons open THIS, not the standalone review pages under
+    ``/review-api``. Two reasons, and the second is the important one:
+
+    * The console screen shows the actual carousel - the cover video and the
+      still side by side, every slide at full size, the caption with its
+      character count against Instagram's limit. The standalone page could
+      only show a confirmation prompt. Approving is a decision about the
+      artwork, so the artwork should be on screen when it is made.
+    * It is behind the login. The ``/review-api`` pages deliberately were not,
+      because a Telegram link opens where nobody can sign in - which meant
+      anyone holding the URL could approve, and approving auto-publishes to
+      Instagram. Sending reviewers to the console makes an identity mandatory
+      before anything is posted publicly.
+
+    Falls back to REVIEW_API_BASE_URL's origin when PUBLIC_BASE_URL is unset,
+    so a half-configured deployment still produces a working link rather than
+    a broken one.
+    """
+    base = (settings.public_base_url or "").rstrip("/")
+    if not base:
+        parsed = urlparse(settings.review_api_base_url)
+        if parsed.scheme and parsed.hostname:
+            port = f":{parsed.port}" if parsed.port else ""
+            base = f"{parsed.scheme}://{parsed.hostname}{port}"
+    return f"{base}/tasks/{run_id}?tab=review"
 
 
 def _buttons_supported(url: str) -> bool:
@@ -224,7 +245,7 @@ def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
         bundle.get("news_title") or cover.get("title") or "Untitled carousel"
     )
     caption = (bundle.get("caption") or "").strip()
-    approve_url, reject_url = _review_urls(run_id)
+    review_url = _console_review_url(run_id)
     previews = _preview_paths(bundle)
 
     with httpx.Client(base_url=_api_base(), timeout=_TIMEOUT) as client:
@@ -241,28 +262,24 @@ def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
                 f"Showing {sent_previews} of {len(previews)} images "
                 f"(Telegram allows {MEDIA_GROUP_LIMIT} per album).",
             ]
-        use_buttons = _buttons_supported(approve_url)
+        use_buttons = _buttons_supported(review_url)
         if use_buttons:
             lines += [
                 "",
-                "Approve - feedback optional.",
-                "Reject - feedback required.",
+                "Open the review screen to approve or reject.",
+                "Sign-in required - approving publishes to Instagram.",
             ]
         else:
             # Telegram refuses a non-public URL in a button, which would fail
-            # the whole message and strand the paused run. Put the links in the
+            # the whole message and strand the paused run. Put the link in the
             # body instead so the carousel is still reviewable.
             logger.warning(
-                "REVIEW_API_BASE_URL (%s) is not publicly reachable, so Telegram "
-                "cannot render Approve/Reject buttons; sending plain links "
-                "instead. Expose the review API publicly for one-tap review.",
-                settings.review_api_base_url,
+                "PUBLIC_BASE_URL (%s) is not publicly reachable, so Telegram "
+                "cannot render a Review button; sending a plain link instead. "
+                "Expose the console publicly for one-tap review.",
+                settings.public_base_url or settings.review_api_base_url,
             )
-            lines += [
-                "",
-                f"Approve (feedback optional): {approve_url}",
-                f"Reject (feedback required): {reject_url}",
-            ]
+            lines += ["", f"Review and decide: {review_url}"]
 
         text = "\n".join(lines)
         if len(text) > MESSAGE_LIMIT:
@@ -278,9 +295,12 @@ def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
         if use_buttons:
             data["reply_markup"] = json.dumps(
                 {
+                    # One button, not two. Approve and Reject both had to
+                    # land on the same screen now that the decision is made in
+                    # the console, and two buttons opening the identical page
+                    # would imply the choice was already made by tapping.
                     "inline_keyboard": [
-                        [{"text": "APPROVE", "url": approve_url}],
-                        [{"text": "REJECT", "url": reject_url}],
+                        [{"text": "REVIEW CAROUSEL", "url": review_url}],
                     ]
                 }
             )

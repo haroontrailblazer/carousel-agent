@@ -103,7 +103,11 @@ async function redirectToLogin(): Promise<void> {
   } catch {
     /* already gone */
   }
-  window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`)
+  // pathname + search: the tab a review link asked for lives in the query,
+  // and dropping it lands the reviewer one screen short of where they were.
+  window.location.replace(
+    `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`,
+  )
 }
 
 async function parseError(response: Response): Promise<ApiError> {

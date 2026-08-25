@@ -54,7 +54,19 @@ COOKIE_NAME = "carousel_session"
 ALWAYS_OPEN = (
     "/healthz",
     "/health",
-    "/review-api",
+    # NOTE: "/review-api" is deliberately NOT here any more.
+    #
+    # Those pages were open because a Telegram link opens on a phone where
+    # nobody can sign in, and an unguessable run_id was treated as the
+    # capability. But approving auto-publishes to Instagram, so anyone who
+    # ever saw one of those URLs - a forwarded message, a shared screenshot,
+    # a chat backup - could post publicly as the brand, forever.
+    #
+    # Telegram now links to the console's own review screen instead, so the
+    # reviewer signs in and the verdict carries their identity. These pages
+    # stay reachable for old links, but behind the same login: an HTML request
+    # without a session is redirected to /login?next=..., which returns here
+    # once the reviewer is known.
     "/api/auth/config",
     "/api/auth/session",
 )
@@ -62,7 +74,7 @@ ALWAYS_OPEN = (
 #: Prefixes that require an identity. Everything else falls through to the
 #: static SPA bundle, which must load unauthenticated - otherwise the browser
 #: can never render a login screen to get a credential in the first place.
-PROTECTED = ("/api/",)
+PROTECTED = ("/api/", "/review-api")
 
 
 #: Minimum session-secret length. PyJWT warns below 32 bytes for HS256, and a
@@ -420,7 +432,14 @@ class AuthMiddleware:
             return
 
         if _wants_html(scope):
-            target = f"{self._login_path}?next={quote(path, safe='')}"
+            # The QUERY STRING has to survive the round trip. A Telegram review
+            # link is /tasks/<id>?tab=review; dropping the query sent the
+            # reviewer to the trace tab after signing in, one step short of the
+            # screen they tapped through for.
+            raw_query = scope.get("query_string") or b""
+            query = raw_query.decode("latin-1")
+            destination = f"{path}?{query}" if query else path
+            target = f"{self._login_path}?next={quote(destination, safe='')}"
             response = RedirectResponse(target, status_code=302)
         else:
             response = JSONResponse(

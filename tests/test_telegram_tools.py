@@ -19,12 +19,17 @@ import httpx
 from app.tools import telegram_tools as tg
 
 
-def _settings(token: str = "bot-token", chat: str = "12345"):
+def _settings(
+    token: str = "bot-token",
+    chat: str = "12345",
+    public_base_url: str = "https://console.example",
+):
     """Stand-in for the frozen Settings singleton (it cannot be mutated)."""
     return SimpleNamespace(
         telegram_bot_token=token,
         telegram_chat_id=chat,
         review_api_base_url="https://review.example/",
+        public_base_url=public_base_url,
     )
 
 
@@ -47,12 +52,12 @@ class ConfigGuardTests(unittest.TestCase):
 
 
 class ReviewUrlTests(unittest.TestCase):
-    def test_links_match_the_review_api_routes(self) -> None:
-        with patch.object(tg, "settings", _settings()):
-            approve, reject = tg._review_urls("run-abc")
-        # Trailing slash on the base must not produce a double slash.
-        self.assertEqual(approve, "https://review.example/review/run-abc/approve")
-        self.assertEqual(reject, "https://review.example/review/run-abc/reject")
+    def test_a_trailing_slash_does_not_double_up(self) -> None:
+        with patch.object(tg, "settings", _settings(public_base_url="https://c.example/")):
+            self.assertEqual(
+                tg._console_review_url("run-abc"),
+                "https://c.example/tasks/run-abc?tab=review",
+            )
 
 
 class PreviewPathTests(unittest.TestCase):
@@ -201,17 +206,18 @@ class SendReviewMessageTests(unittest.TestCase):
         self.assertIn("Cover title", body["text"][0])
         self.assertIn("round 2", body["text"][0])
 
-    def test_keyboard_carries_both_review_links(self) -> None:
+    def test_keyboard_is_one_button_to_the_console(self) -> None:
+        """One button, not two.
+
+        Approve and Reject both have to land on the same screen now that the
+        decision is made in the console, and two buttons opening the identical
+        page would imply the choice was made by tapping one of them.
+        """
         body = self._capture_message({"news_title": "T"})
         keyboard = json.loads(body["reply_markup"][0])
         urls = [row[0]["url"] for row in keyboard["inline_keyboard"]]
-        self.assertEqual(
-            urls,
-            [
-                "https://review.example/review/run-abc/approve",
-                "https://review.example/review/run-abc/reject",
-            ],
-        )
+        self.assertEqual(urls, ["https://console.example/tasks/run-abc?tab=review"])
+        self.assertEqual(len(keyboard["inline_keyboard"]), 1)
 
     def _capture_message(self, bundle: dict, round_no: int = 1) -> dict:
         """Run a send and return the parsed form body of the sendMessage call."""
@@ -270,7 +276,10 @@ class ButtonFallbackTests(unittest.TestCase):
         transport = httpx.MockTransport(handler)
         real_client = httpx.Client
         stub = SimpleNamespace(
-            telegram_bot_token="t", telegram_chat_id="1", review_api_base_url=base_url
+            telegram_bot_token="t",
+            telegram_chat_id="1",
+            review_api_base_url=base_url,
+            public_base_url=base_url,
         )
         with patch.object(tg, "settings", stub), patch.object(
             tg.httpx,
@@ -282,21 +291,54 @@ class ButtonFallbackTests(unittest.TestCase):
             tg.send_review_message("run-abc", {"news_title": "T"}, 1)
         return captured
 
-    def test_local_base_url_sends_links_in_the_body_not_buttons(self) -> None:
+    def test_local_base_url_sends_the_link_in_the_body_not_a_button(self) -> None:
         body = self._send_with_base("http://localhost:8080")
         self.assertNotIn("reply_markup", body)
-        text = body["text"][0]
-        self.assertIn("http://localhost:8080/review/run-abc/approve", text)
-        self.assertIn("http://localhost:8080/review/run-abc/reject", text)
+        self.assertIn(
+            "http://localhost:8080/tasks/run-abc?tab=review", body["text"][0]
+        )
 
-    def test_public_base_url_still_uses_buttons(self) -> None:
-        body = self._send_with_base("https://review.example")
+    def test_public_base_url_still_uses_a_button(self) -> None:
+        body = self._send_with_base("https://console.example")
         self.assertIn("reply_markup", body)
         keyboard = json.loads(body["reply_markup"][0])
         self.assertEqual(
             [row[0]["text"] for row in keyboard["inline_keyboard"]],
-            ["APPROVE", "REJECT"],
+            ["REVIEW CAROUSEL"],
         )
+
+
+class ReviewLinkTests(unittest.TestCase):
+    """Where the review button sends people, and what that implies."""
+
+    def test_it_points_at_the_console_review_screen(self) -> None:
+        with patch.object(tg, "settings", _settings()):
+            url = tg._console_review_url("run-1")
+        self.assertEqual(url, "https://console.example/tasks/run-1?tab=review")
+
+    def test_it_does_not_point_at_the_open_review_api(self) -> None:
+        """The whole reason for the change.
+
+        /review-api/review/<id>/approve needed no credentials, and approving
+        auto-publishes to Instagram - so anyone who ever saw that URL could
+        post as the brand. The button must not lead there any more.
+        """
+        with patch.object(tg, "settings", _settings()):
+            url = tg._console_review_url("run-1")
+        self.assertNotIn("/review-api", url)
+        self.assertNotIn("/approve", url)
+        self.assertNotIn("/reject", url)
+
+    def test_it_falls_back_to_the_review_api_origin(self) -> None:
+        """A half-configured deploy gets a working link, not a broken one."""
+        with patch.object(tg, "settings", _settings(public_base_url="")):
+            url = tg._console_review_url("run-1")
+        self.assertEqual(url, "https://review.example/tasks/run-1?tab=review")
+
+    def test_the_review_tab_is_requested_explicitly(self) -> None:
+        """Landing on the trace would be one tap short of the decision."""
+        with patch.object(tg, "settings", _settings()):
+            self.assertIn("tab=review", tg._console_review_url("run-1"))
 
 
 if __name__ == "__main__":
