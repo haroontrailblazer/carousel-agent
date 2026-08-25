@@ -299,3 +299,171 @@
   object-fit: contain;
   background: var(--muted);
 }
+
+/* ---------------------------------------------------------------------------
+   New-carousel agent workspace.
+
+   This route deliberately opts out of the dashboard's centered max-width
+   wrapper. It is a conversation surface: the transcript owns the available
+   height, the composer stays reachable, and rendered assets arrive in a
+   narrow rail instead of pushing the current agent step below the fold.
+--------------------------------------------------------------------------- */
+.agent-main {
+  height: calc(100dvh - 3.5rem);
+  min-height: 38rem;
+  overflow: hidden;
+}
+
+.agent-empty-workspace {
+  position: relative;
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-running-composer-dock {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 20;
+  background: color-mix(in oklch, var(--background) 94%, transparent);
+  padding-top: 0.75rem;
+  backdrop-filter: blur(16px);
+}
+
+.agent-workspace-grid {
+  display: grid;
+  height: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.agent-conversation-pane {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-workspace-header {
+  display: flex;
+  min-height: 6.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding: 1.65rem 1.25rem 1rem;
+}
+
+.agent-conversation-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.agent-asset-rail {
+  display: none;
+  min-height: 0;
+  overflow-y: auto;
+  border-top-width: 1px;
+}
+
+.agent-asset-strip {
+  display: block;
+}
+
+.agent-composer {
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.agent-composer:focus-within {
+  border-color: color-mix(in oklch, var(--foreground) 38%, var(--border));
+}
+
+.agent-loading-grid {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(3, 4px);
+  gap: 1.5px;
+}
+
+.agent-loading-grid > span {
+  display: block;
+  width: 4px;
+  height: 4px;
+  background: var(--foreground);
+}
+
+.agent-loading-label {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  color: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  animation: shimmer-text 1.4s linear infinite;
+}
+
+@keyframes pixel-on {
+  0%, 42%, 100% { opacity: 0.15; transform: scale(1); }
+  16% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes shimmer-text {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@keyframes loading-pop-in {
+  from { opacity: 0; transform: translateY(-3px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.agent-loading-video {
+  animation: loading-pop-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top left;
+}
+
+@media (min-width: 768px) {
+  .agent-main {
+    height: 100dvh;
+    min-height: 42rem;
+  }
+
+  .agent-workspace-header {
+    padding-inline: 2.25rem;
+  }
+}
+
+@media (min-width: 1180px) {
+  .agent-workspace-grid {
+    grid-template-columns: minmax(0, 1fr) 15rem;
+  }
+
+  .agent-asset-rail {
+    display: block;
+    border-top-width: 0;
+    border-left-width: 1px;
+  }
+
+  .agent-asset-strip {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-loading-grid > span,
+  .agent-loading-label,
+  .agent-loading-video {
+    animation: none !important;
+  }
+}

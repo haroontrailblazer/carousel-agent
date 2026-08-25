@@ -1,0 +1,155 @@
+import { Check, Image as ImageIcon, LoaderCircle } from "lucide-react"
+import { Link } from "react-router"
+
+import type { RunArtifacts } from "@/lib/types"
+
+type AssetItem = {
+  key: string
+  label: string
+  url: string | null
+  index: number
+}
+
+function readyAssets(artifacts: RunArtifacts | null | undefined): AssetItem[] {
+  if (!artifacts) return []
+  const items: AssetItem[] = []
+  if (artifacts.cover.poster?.url) {
+    items.push({ key: "cover", label: "Cover", url: artifacts.cover.poster.url, index: 1 })
+  }
+  for (const slide of artifacts.slides) {
+    if (!slide.url) continue
+    items.push({ key: slide.filename ?? `slide-${slide.index}`, label: `Slide ${slide.index}`, url: slide.url, index: slide.index })
+  }
+  if (artifacts.cta.url) {
+    items.push({ key: "cta", label: "CTA", url: artifacts.cta.url, index: items.length + 1 })
+  }
+  return items
+}
+
+function AssetSkeleton({ index }: { index: number }) {
+  return (
+    <div className="relative aspect-[4/5] overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--card)]">
+      <LoaderCircle className="absolute left-3 top-3 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
+      <div className="absolute inset-x-5 top-[38%] space-y-2">
+        <div className="h-2 rounded-full bg-[var(--muted)]" />
+        <div className="h-2 w-4/5 rounded-full bg-[var(--muted)]" />
+        <div className="mt-5 h-1.5 w-2/3 rounded-full bg-[var(--muted)]" />
+        <div className="h-1.5 w-1/2 rounded-full bg-[var(--muted)]" />
+      </div>
+      <span className="absolute bottom-3 left-3 grid size-6 place-items-center rounded-lg bg-[var(--muted)] text-xs tabular-nums text-[var(--muted-foreground)]">
+        {index}
+      </span>
+    </div>
+  )
+}
+
+export function AgentAssetRail({
+  artifacts,
+  loading,
+  live,
+  runId,
+}: {
+  artifacts: RunArtifacts | null | undefined
+  loading: boolean
+  live: boolean
+  runId: string
+}) {
+  const items = readyAssets(artifacts)
+  const expected = Math.max(artifacts?.expected_count ?? 0, items.length, live ? 3 : 0)
+  const skeletons = Math.min(Math.max(expected - items.length, loading && !items.length ? 2 : 0), 4)
+
+  return (
+    <aside className="agent-asset-rail border-[var(--border)] bg-[var(--background)]">
+      <div className="sticky top-0 z-10 flex items-center justify-between bg-[var(--background)]/92 px-4 pb-3 pt-5 backdrop-blur">
+        <div>
+          <h2 className="text-sm font-semibold">Assets</h2>
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
+            <span className="size-1.5 rounded-full bg-[var(--brand)]" />
+            {items.length}{expected ? ` of ${expected}` : ""} ready
+          </p>
+        </div>
+        <ImageIcon className="size-4 text-[var(--muted-foreground)]" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 px-4 pb-5 sm:grid-cols-3 lg:grid-cols-1">
+        {items.map((item) => (
+          <figure key={item.key} className="group relative overflow-hidden rounded-[14px] border border-[var(--border)] bg-[var(--card)]">
+            <img
+              src={item.url ?? undefined}
+              alt={`${item.label} preview`}
+              className="aspect-[4/5] w-full object-contain"
+              loading="lazy"
+            />
+            <figcaption className="absolute inset-x-2 bottom-2 flex items-center justify-between rounded-[9px] bg-black/70 px-2 py-1.5 text-[11px] text-white backdrop-blur-sm">
+              <span>{item.label}</span>
+              <span className="grid size-5 place-items-center rounded-full bg-[var(--brand)] text-[var(--brand-foreground)]">
+                <Check className="size-3 stroke-[3]" />
+              </span>
+            </figcaption>
+          </figure>
+        ))}
+
+        {Array.from({ length: skeletons }, (_, index) => (
+          <AssetSkeleton key={`skeleton-${index}`} index={items.length + index + 1} />
+        ))}
+
+        {!loading && !live && !items.length && (
+          <div className="col-span-full grid min-h-40 place-items-center rounded-[14px] border border-dashed border-[var(--border)] px-4 text-center text-xs leading-5 text-[var(--muted-foreground)]">
+            No rendered assets are available for this task.
+          </div>
+        )}
+      </div>
+
+      {items.length > 0 && (
+        <div className="border-t border-[var(--border)] p-4">
+          <Link
+            to={`/tasks/${runId}?tab=review`}
+            className="flex w-full items-center justify-center rounded-[10px] bg-[var(--foreground)] px-3 py-2 text-xs font-medium text-[var(--background)] transition-opacity hover:opacity-85"
+          >
+            Open carousel review
+          </Link>
+        </div>
+      )}
+    </aside>
+  )
+}
+
+export function AgentAssetStrip({
+  artifacts,
+  live,
+  runId,
+}: {
+  artifacts: RunArtifacts | null | undefined
+  live: boolean
+  runId: string
+}) {
+  const items = readyAssets(artifacts)
+  if (!items.length && !live) return null
+
+  return (
+    <section className="agent-asset-strip space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-[var(--muted-foreground)]">
+          Assets · {items.length}{artifacts?.expected_count ? ` of ${artifacts.expected_count}` : ""} ready
+        </p>
+        {items.length > 0 && <Link to={`/tasks/${runId}?tab=review`} className="text-xs text-[var(--link)] hover:underline">Open review</Link>}
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {items.map((item) => (
+          <img
+            key={item.key}
+            src={item.url ?? undefined}
+            alt={`${item.label} preview`}
+            className="h-32 w-[6.4rem] shrink-0 rounded-[10px] border border-[var(--border)] bg-[var(--card)] object-contain"
+            loading="lazy"
+          />
+        ))}
+        {live && Array.from({ length: Math.max(1, Math.min(3, (artifacts?.expected_count ?? 3) - items.length)) }, (_, index) => (
+          <div key={index} className="grid h-32 w-[6.4rem] shrink-0 place-items-center rounded-[10px] border border-[var(--border)] bg-[var(--card)]">
+            <LoaderCircle className="size-4 animate-spin-slow text-[var(--muted-foreground)]" />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}

@@ -1,5 +1,6 @@
 import * as React from "react"
 import { PanelLeft } from "lucide-react"
+import { useLocation } from "react-router"
 
 import { SidebarContent, SidebarDrawer } from "@/components/layout/sidebar"
 import { Button } from "@/components/ui/button"
@@ -14,17 +15,19 @@ import { Button } from "@/components/ui/button"
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = React.useState(false)
+  const location = useLocation()
+  const isAgentWorkspace = location.pathname === "/new"
 
   return (
     <div className="min-h-dvh bg-[var(--background)]">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 border-r border-[var(--border)] bg-[var(--card)] md:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[17rem] border-r border-[var(--border)] bg-[var(--card)] md:block">
         <SidebarContent />
       </aside>
 
       <SidebarDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <div className="md:pl-60">
+      <div className="md:pl-[17rem]">
         {/* Slim bar that exists only to hold the menu button on small screens. */}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-[var(--border)] bg-[var(--background)]/85 px-4 backdrop-blur md:hidden">
           <Button variant="ghost" size="icon" onClick={() => setMenuOpen(true)}>
@@ -41,7 +44,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="text-sm font-semibold">Carousel Factory</span>
         </header>
 
-        <main className="mx-auto max-w-5xl px-4 py-8 md:px-8">{children}</main>
+        <main
+          className={
+            isAgentWorkspace
+              ? "agent-main"
+              : "mx-auto max-w-5xl px-4 py-8 md:px-8"
+          }
+        >
+          {children}
+        </main>
       </div>
     </div>
   )

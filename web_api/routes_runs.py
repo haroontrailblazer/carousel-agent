@@ -49,8 +49,12 @@ from app.state import (
     AGENT_REVIEW_DISPATCHER,
     AGENT_STITCH_VERIFY,
     AGENT_TEMPLATE_DESIGN,
+    K_BODY_SLIDES,
     K_BUNDLE,
+    K_COVER,
+    K_CTA_SLIDE,
     K_NEWS_ITEM,
+    K_PLAN,
     K_PHASE,
     K_PUBLISH_RESULT,
     K_QA_REPORT,
@@ -363,13 +367,16 @@ async def run_artifacts(
         logger.warning("Could not list artifact versions for %s: %s", run_id, versions)
         versions = {}
 
-    bundle = state.get(K_BUNDLE)
-    if not bundle:
+    bundle = state.get(K_BUNDLE) or {}
+    cover = bundle.get("cover") or state.get(K_COVER) or {}
+    slides = bundle.get("slides") or state.get(K_BODY_SLIDES) or []
+    cta = bundle.get("cta") or state.get(K_CTA_SLIDE) or {}
+    if not bundle and not cover and not slides and not cta:
         raise HTTPException(
             404,
             {
-                "code": "no_bundle_yet",
-                "message": "This run has not assembled a carousel yet.",
+                "code": "no_artifacts_yet",
+                "message": "This run has not rendered an asset yet.",
             },
         )
 
@@ -395,10 +402,6 @@ async def run_artifacts(
             return {"filename": filename, "url": None, "error": str(exc)}
         return {"filename": filename, "url": url}
 
-    cover = bundle.get("cover") or {}
-    cta = bundle.get("cta") or {}
-    slides = bundle.get("slides") or []
-
     poster, video, cta_img = await asyncio.gather(
         sign(cover.get("poster_artifact", "")),
         sign(cover.get("video_artifact", "")),
@@ -412,6 +415,8 @@ async def run_artifacts(
         "run_id": run_id,
         "expires_in": ARTIFACT_URL_TTL_S,
         "caption": bundle.get("caption", ""),
+        "complete": bool(bundle),
+        "expected_count": int((state.get(K_PLAN) or {}).get("slide_count") or 0),
         "cover": {
             "poster": poster,
             "video": video,

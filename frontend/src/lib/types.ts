@@ -83,6 +83,10 @@ export type RunArtifacts = {
   run_id: string
   expires_in: number
   caption: string
+  /** False while the endpoint is exposing progressive pre-bundle renders. */
+  complete?: boolean
+  /** Planned total including cover and CTA, when the planner has run. */
+  expected_count?: number
   cover: {
     poster: SignedArtifact | null
     video: SignedArtifact | null

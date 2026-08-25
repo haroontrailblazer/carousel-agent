@@ -26,6 +26,7 @@ from __future__ import annotations
 import itertools
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -461,6 +462,52 @@ def _truncate(value: Any, limit: int = 1200) -> str:
     return text if len(text) <= limit else text[:limit] + f"\n… (+{len(text) - limit} chars)"
 
 
+_URL_RE = re.compile(r"https?://[^\s<>\"'\]\[)]+")
+
+
+def _source_urls(value: Any, limit: int = 24) -> list[str]:
+    """Collect ordered HTTP references from one tool response.
+
+    Search tools return sources in a few shapes (``sources`` arrays,
+    ``source_url`` fields, citations embedded in an answer).  Normalising
+    those shapes here keeps the frontend presentational and, importantly,
+    preserves the exact references recorded in ADK's transcript.
+    """
+    found: list[str] = []
+    seen: set[str] = set()
+
+    def add(url: str) -> None:
+        cleaned = url.rstrip(".,;:!?")
+        if cleaned in seen or not cleaned.startswith(("http://", "https://")):
+            return
+        seen.add(cleaned)
+        found.append(cleaned)
+
+    def walk(node: Any) -> None:
+        if len(found) >= limit:
+            return
+        if isinstance(node, str):
+            for match in _URL_RE.findall(node):
+                add(match)
+                if len(found) >= limit:
+                    break
+            return
+        if isinstance(node, dict):
+            for child in node.values():
+                walk(child)
+                if len(found) >= limit:
+                    break
+            return
+        if isinstance(node, (list, tuple)):
+            for child in node:
+                walk(child)
+                if len(found) >= limit:
+                    break
+
+    walk(value)
+    return found
+
+
 def build_trace(rows: list[dict]) -> tuple[list[dict], dict]:
     """Turn stored ADK events into display frames plus a summary.
 
@@ -535,9 +582,13 @@ def build_trace(rows: list[dict]) -> tuple[list[dict], dict]:
                 pending[call["id"]] = {"tool": tool, "started": ts}
 
         # A response completes the call recorded earlier, wherever it was.
+        frame_sources: list[str] = []
         for resp in responses:
             started = pending.pop(resp["id"], None) if resp["id"] else None
             payload = resp.get("response")
+            for url in _source_urls(payload):
+                if url not in frame_sources:
+                    frame_sources.append(url)
             failed = isinstance(payload, dict) and str(
                 payload.get("status", "")
             ).lower() in ("error", "failed")
@@ -559,6 +610,9 @@ def build_trace(rows: list[dict]) -> tuple[list[dict], dict]:
                         "result": _truncate(payload),
                     }
                 )
+
+        if frame_sources:
+            frame.setdefault("data", {})["sources"] = frame_sources
 
         if tools:
             frame["tools"] = tools

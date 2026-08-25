@@ -1,15 +1,17 @@
 import * as React from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "react-router"
-import { ArrowRight, Link2, Newspaper, Sparkles } from "lucide-react"
-import { Link } from "react-router"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { ExternalLink, MoreHorizontal } from "lucide-react"
+import { Link, useSearchParams } from "react-router"
 import { toast } from "sonner"
 
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Chip } from "@/components/ui/chip"
-import { Textarea } from "@/components/ui/input"
-import { ApiError, post } from "@/lib/api"
+import { PixelLoader, StreamedAgentText, ThinkingPanel, ToolChipList } from "@/components/agent/agent-activity"
+import { AgentAssetRail, AgentAssetStrip } from "@/components/agent/agent-assets"
+import { AgentComposer, type ComposerState } from "@/components/agent/agent-composer"
+import { AgentActivityStatus } from "@/components/agent/agent-workspace-status"
+import { useRunStream } from "@/hooks/use-run-stream"
+import { ApiError, get, post } from "@/lib/api"
+import { AGENT_LABELS, PHASE_LABELS } from "@/lib/pipeline"
+import type { RunArtifacts, RunDetail } from "@/lib/types"
 
 const SUGGESTIONS = [
   "the new viral news in AI",
@@ -17,45 +19,84 @@ const SUGGESTIONS = [
   "a developer tool that just shipped something notable",
 ]
 
-/** Looks like a URL the moment it starts with a scheme, so the chip can flip
- *  as the user pastes rather than after they submit. */
 function looksLikeUrl(value: string): boolean {
   return /^https?:\/\/\S+$/i.test(value.trim())
 }
 
-/**
- * The composer, and nothing else.
- *
- * The fetched-story list used to live under this box and has moved to the
- * Newsroom. Two different jobs were sharing one page: "I have an idea" and
- * "show me what came in". Keeping the list here meant the one input you came
- * for sat above a wall of headlines.
- *
- * Unlike the Newsroom, submitting here DOES navigate to the new task - you
- * just described something specific, so watching it start is what you want
- * next.
- */
+function activeAgentLabel(events: ReturnType<typeof useRunStream>["events"]): string {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const author = events[index].author
+    if (author && author !== "user" && author !== "carousel_orchestrator") {
+      return AGENT_LABELS[author] ?? author.replaceAll("_", " ")
+    }
+  }
+  return "Preparing your carousel"
+}
+
+function activityLabel(run: RunDetail, events: ReturnType<typeof useRunStream>["events"]): string {
+  if (run.status === "awaiting_review") return "Your carousel is ready for review"
+  if (run.status === "done") return "Carousel published"
+  if (run.status === "cancelled") return "Task cancelled"
+  if (run.status === "failed") return "The carousel agent stopped"
+  if (run.status === "interrupted") return "The background task was interrupted"
+  const agent = activeAgentLabel(events)
+  return `${agent} · ${(PHASE_LABELS[run.phase] ?? run.phase).toLowerCase()}`
+}
+
+/** The New carousel screen is the synchronized ADK agent workspace itself. */
 export function NewRunRoute() {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [params, setParams] = useSearchParams()
+  const runId = params.get("run")
   const [value, setValue] = React.useState("")
+  const [submittedPrompt, setSubmittedPrompt] = React.useState("")
   const isUrl = looksLikeUrl(value)
+
+  const run = useQuery({
+    queryKey: ["run", runId],
+    queryFn: () => get<RunDetail>(`/api/runs/${runId}`),
+    enabled: !!runId,
+    refetchInterval: (query) => query.state.data?.status === "running" ? 4_000 : false,
+    refetchIntervalInBackground: false,
+  })
+  const isLive = run.data?.status === "running"
+
+  const stream = useRunStream(runId, {
+    live: isLive,
+    onPhase: () => {
+      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
+      void queryClient.invalidateQueries({ queryKey: ["artifacts", runId] })
+    },
+    onEnd: () => {
+      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
+      void queryClient.invalidateQueries({ queryKey: ["artifacts", runId] })
+      void queryClient.invalidateQueries({ queryKey: ["runs"] })
+    },
+  })
+
+  const artifacts = useQuery({
+    queryKey: ["artifacts", runId],
+    queryFn: () => get<RunArtifacts>(`/api/runs/${runId}/artifacts`),
+    enabled: !!runId,
+    retry: false,
+    refetchInterval: isLive ? 4_000 : false,
+    refetchIntervalInBackground: false,
+  })
 
   const start = useMutation({
     mutationFn: (payload: { source: string; topic?: string; url?: string }) =>
       post<{ run_id: string; title: string }>("/api/runs", payload),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["runs"] })
+      setSubmittedPrompt(value.trim())
+      setParams({ run: data.run_id }, { replace: true })
       toast.success("Your carousel is cooking", { description: data.title })
-      navigate(`/tasks/${data.run_id}`)
     },
     onError: (error) => {
-      // Branch on the machine-readable code, never the message - the message
-      // is prose and is expected to be reworded.
       const code = error instanceof ApiError ? error.code : undefined
       if (code === "too_many_active_runs") {
         toast.error("One at a time", {
-          description: "A carousel is already being made. Wait for it to reach review.",
+          description: "A carousel is already being made. Open it from Tasks or wait for review.",
         })
         return
       }
@@ -65,91 +106,175 @@ export function NewRunRoute() {
         })
         return
       }
-      toast.error(error instanceof Error ? error.message : "Could not start that.")
+      toast.error(error instanceof Error ? error.message : "Could not start that carousel.")
     },
   })
 
-  function submit(event: React.FormEvent) {
-    event.preventDefault()
+  const cancel = useMutation({
+    mutationFn: () => post(`/api/runs/${runId}/cancel`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
+      void queryClient.invalidateQueries({ queryKey: ["runs"] })
+      toast.success("Task stopped")
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not stop the task."),
+  })
+
+  function submit() {
     const trimmed = value.trim()
     if (trimmed.length < 3) return
-    start.mutate(
-      isUrl ? { source: "url", url: trimmed } : { source: "topic", topic: trimmed },
+    start.mutate(isUrl ? { source: "url", url: trimmed } : { source: "topic", topic: trimmed })
+  }
+
+  function reset() {
+    setValue("")
+    setSubmittedPrompt("")
+    setParams({}, { replace: true })
+  }
+
+  const composerState: ComposerState = start.isPending || (!!runId && run.isLoading)
+    ? "starting"
+    : isLive
+      ? "running"
+      : runId && run.data && ["awaiting_review", "done"].includes(run.data.status)
+        ? "complete"
+        : runId
+          ? "failed"
+          : "idle"
+
+  if (!runId) {
+    return (
+      <div className="agent-empty-workspace">
+        <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 py-12 sm:px-8">
+          <div className="w-full">
+            <h1 className="mb-7 text-center font-[Georgia,serif] text-3xl font-normal tracking-[-0.035em] sm:text-[42px] sm:leading-tight">
+              What should we turn into a carousel?
+            </h1>
+
+            <AgentComposer value={value} onChange={setValue} onSubmit={submit} state={composerState} />
+
+            <div className="mt-4 flex flex-wrap justify-center gap-2" aria-label="Suggested prompts">
+              {SUGGESTIONS.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  disabled={start.isPending}
+                  onClick={() => setValue(suggestion)}
+                  className="rounded-[10px] border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-left text-xs text-[var(--muted-foreground)] transition-[background-color,color,border-color,transform] hover:-translate-y-px hover:border-[color-mix(in_oklch,var(--foreground)_18%,var(--border))] hover:bg-[var(--muted)] hover:text-[var(--foreground)] disabled:translate-y-0 disabled:cursor-default disabled:opacity-50"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-5 text-center text-[11px] leading-5 text-[var(--muted-foreground)]">
+              Carousel Factory can make mistakes. Every carousel pauses for human review before publishing.
+            </p>
+          </div>
+        </main>
+      </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Make a carousel</h1>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Describe a topic and the agents will find the story, or paste an
-          article URL to use a specific one.
-        </p>
-      </div>
-
-      <Card className="p-4">
-        <form onSubmit={submit}>
-          <div className="mb-2 flex items-center gap-2">
-            {isUrl ? (
-              <Chip tone="qa" dot>
-                <Link2 className="size-3" /> News URL
-              </Chip>
+    <div className="agent-workspace-grid">
+      <section className="agent-conversation-pane">
+        <header className="agent-workspace-header">
+          <div className="min-w-0">
+            <h1 className="truncate font-[Georgia,serif] text-2xl font-normal tracking-[-0.025em] sm:text-[31px]">
+              {run.data?.title || run.data?.news.title || "New carousel"}
+            </h1>
+            {run.data ? (
+              <AgentActivityStatus status={run.data.status} label={activityLabel(run.data, stream.events)} connected={stream.connected} />
             ) : (
-              <Chip tone="generate" dot>
-                <Sparkles className="size-3" /> Topic
-              </Chip>
+              <p className="mt-1 flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                <span className="size-1.5 rounded-full bg-[var(--brand)] animate-pip-pulse" />
+                Connecting to the carousel agent
+              </p>
             )}
-            <span className="text-xs text-[var(--muted-foreground)]">
-              {isUrl
-                ? "The article text and images will be pulled from this page."
-                : "Research will search the web for the story behind this."}
-            </span>
           </div>
+          <Link
+            to={`/tasks/${runId}`}
+            className="grid size-9 shrink-0 place-items-center rounded-[10px] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+            title="Open full task details"
+          >
+            <MoreHorizontal className="size-5" />
+            <span className="sr-only">Open full task details</span>
+          </Link>
+        </header>
 
-          <Textarea
-            rows={4}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="the new viral news in AI"
-            className="text-base"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(e)
-            }}
-          />
+        <div className="agent-conversation-scroll">
+          <div className="mx-auto w-full max-w-3xl space-y-6 px-5 pb-44 pt-6 sm:px-8 sm:pt-9">
+            <div className="flex justify-end gap-3">
+              <div className="max-w-[82%] rounded-[16px] bg-[var(--muted)] px-4 py-3 text-sm leading-6">
+                {submittedPrompt || (run.data?.source === "url" ? run.data.news.source_url : `Create a carousel about ${run.data?.title ?? "this story"}`)}
+              </div>
+              <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-[var(--foreground)] text-[11px] font-semibold text-[var(--background)]">
+                You
+              </span>
+            </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {!value &&
-              SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setValue(s)}
-                  className="rounded-[var(--radius-pill)] border border-[var(--border)] px-3 py-1 text-xs text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-                >
-                  {s}
-                </button>
-              ))}
-            <Button
-              type="submit"
-              variant="brand"
-              className="ml-auto"
-              disabled={value.trim().length < 3 || start.isPending}
-            >
-              {start.isPending ? "Starting…" : "Generate"}
-              <ArrowRight />
-            </Button>
+            <div className="min-w-0 space-y-5">
+                {run.isLoading ? (
+                  <PixelLoader label="Connecting to the task transcript…" live />
+                ) : run.isError || !run.data ? (
+                  <div className="rounded-[14px] border border-[var(--phase-failed)]/35 bg-[var(--phase-failed-soft)] p-4 text-sm text-[var(--phase-failed-fg)]">
+                    This task could not be loaded. It may have been removed.
+                  </div>
+                ) : (
+                  <>
+                    <PixelLoader
+                      key={runId}
+                      label={activityLabel(run.data, stream.events)}
+                      live={isLive}
+                      outcome={["failed", "cancelled", "interrupted"].includes(run.data.status) ? "stopped" : "complete"}
+                      variant={run.data.phase === "qa" ? "Dots" : run.data.phase === "generate" ? "Orbit" : "Drive"}
+                    />
+                    <ThinkingPanel events={stream.events} summary={stream.summary} live={isLive} />
+                    <ToolChipList events={stream.events} />
+                    <StreamedAgentText events={stream.events} live={isLive} />
+                    <AgentAssetStrip artifacts={artifacts.data} live={isLive} runId={runId} />
+
+                    {run.data.news.source_url && (
+                      <a href={run.data.news.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs text-[var(--link)] hover:underline">
+                        Original story <ExternalLink className="size-3" />
+                      </a>
+                    )}
+
+                    {run.data.pending_review && (
+                      <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--card)] p-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium">Your carousel is ready</p>
+                          <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                            Review the cover and {Math.max(0, run.data.slide_count - 1)} remaining slides before anything is published.
+                          </p>
+                        </div>
+                        <Link to={`/tasks/${runId}?tab=review`} className="rounded-[10px] bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-[var(--brand-foreground)] hover:bg-[var(--brand-hover)]">
+                          Review carousel
+                        </Link>
+                      </div>
+                    )}
+                  </>
+                )}
+            </div>
           </div>
-        </form>
-      </Card>
+        </div>
 
-      <p className="text-center text-sm text-[var(--muted-foreground)]">
-        Or pick something that already came in —{" "}
-        <Link to="/newsroom" className="inline-flex items-center gap-1 text-[var(--link)] hover:underline">
-          <Newspaper className="size-3.5" /> the Newsroom
-        </Link>
-      </p>
+        <div className="agent-running-composer-dock">
+          <div className="mx-auto w-full max-w-3xl px-4 pb-4 sm:px-8">
+            <AgentComposer
+              value=""
+              onChange={() => undefined}
+              onSubmit={() => undefined}
+              onStop={isLive ? () => cancel.mutate() : undefined}
+              onReset={reset}
+              state={composerState}
+            />
+          </div>
+        </div>
+      </section>
+
+      <AgentAssetRail artifacts={artifacts.data} loading={artifacts.isLoading} live={isLive} runId={runId} />
     </div>
   )
 }
