@@ -59,7 +59,7 @@ export function AgentComposer({
         aria-label="Carousel prompt"
       />
 
-      <div className="flex items-center gap-2 px-1 pb-1">
+      <div className="flex items-center justify-between px-1 pb-1">
         <button
           type="button"
           disabled={!editable}
@@ -67,16 +67,12 @@ export function AgentComposer({
             if (!value) onChange("https://")
             requestAnimationFrame(() => inputRef.current?.focus())
           }}
-          className="grid size-9 shrink-0 place-items-center rounded-[10px] border border-[var(--border)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-40"
+          className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)] disabled:opacity-40"
           title="Paste a news URL"
         >
           <Plus className="size-4" />
           <span className="sr-only">Paste a news URL</span>
         </button>
-
-        <span className="ml-auto hidden text-[11px] text-[var(--muted-foreground)] sm:inline">
-          {editable ? "Enter to send · Shift + Enter for a new line" : "Synced with Google ADK"}
-        </span>
 
         {state === "running" || state === "starting" ? (
           <button

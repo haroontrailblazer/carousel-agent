@@ -46,7 +46,11 @@ function useTheme() {
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <BrandLogo className="size-9" />
+      {/* 2.5875rem = 41.4px: the previous size-9 (36px) plus 15%. An
+          arbitrary value rather than the next step on Tailwind's 4px scale,
+          because size-10 would be +11% and size-11 +22% - neither is what was
+          asked for. */}
+      <BrandLogo className="size-[2.5875rem]" />
       {!compact && (
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold leading-tight">

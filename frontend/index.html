@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Carousel Factory</title>
     <meta name="description" content="Turn news into reviewed Instagram carousels." />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- The brand mark is one file, used for the tab icon and for every
+         in-app logo (see components/layout/brand-logo.tsx). Same URL both
+         places means the browser fetches it once and serves the sidebar mark
+         from cache. -->
+    <link rel="icon" href="/logo.webp" type="image/webp" />
     <script>
       // Apply the theme before first paint. Without this the page renders in
       // light mode and then snaps to dark, which reads as a broken app. Kept
