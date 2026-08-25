@@ -46,27 +46,17 @@ COOKIE_NAME = "carousel_session"
 
 #: Paths that must work with no credentials at all.
 #:
-#: ``/review-api`` is here deliberately: the Approve/Reject links are opened
-#: from a Telegram message where there is nobody to log in. That is acceptable
-#: because those URLs are capability URLs on an unguessable run id, the GET
-#: pages change nothing, and the POST is single-use once the pending review is
-#: claimed atomically.
+#: Deliberately short. Nothing that CHANGES anything is open - the health probe
+#: is read-only, and the two auth routes exist to obtain a credential in the
+#: first place.
 ALWAYS_OPEN = (
     "/healthz",
     "/health",
-    # NOTE: "/review-api" is deliberately NOT here any more.
-    #
-    # Those pages were open because a Telegram link opens on a phone where
-    # nobody can sign in, and an unguessable run_id was treated as the
-    # capability. But approving auto-publishes to Instagram, so anyone who
-    # ever saw one of those URLs - a forwarded message, a shared screenshot,
-    # a chat backup - could post publicly as the brand, forever.
-    #
-    # Telegram now links to the console's own review screen instead, so the
-    # reviewer signs in and the verdict carries their identity. These pages
-    # stay reachable for old links, but behind the same login: an HTML request
-    # without a session is redirected to /login?next=..., which returns here
-    # once the reviewer is known.
+    # "/review-api" used to be listed here. Those standalone Approve/Reject
+    # pages are gone entirely - approving auto-publishes to Instagram, and an
+    # open URL for it was a permanent anonymous publish button for anyone who
+    # ever saw the link. Telegram now points at /tasks/{id}?tab=review, which
+    # is behind the login like the rest of the console.
     "/api/auth/config",
     "/api/auth/session",
 )
@@ -74,7 +64,7 @@ ALWAYS_OPEN = (
 #: Prefixes that require an identity. Everything else falls through to the
 #: static SPA bundle, which must load unauthenticated - otherwise the browser
 #: can never render a login screen to get a credential in the first place.
-PROTECTED = ("/api/", "/review-api")
+PROTECTED = ("/api/",)
 
 
 #: Minimum session-secret length. PyJWT warns below 32 bytes for HS256, and a

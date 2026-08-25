@@ -28,7 +28,6 @@ def _settings(
     return SimpleNamespace(
         telegram_bot_token=token,
         telegram_chat_id=chat,
-        review_api_base_url="https://review.example/",
         public_base_url=public_base_url,
     )
 
@@ -246,9 +245,9 @@ class SendReviewMessageTests(unittest.TestCase):
 class ButtonFallbackTests(unittest.TestCase):
     """Telegram refuses non-public URLs in buttons; that must not fail the send.
 
-    Discovered the hard way: with REVIEW_API_BASE_URL=http://localhost:8080 the
-    API answers "Bad Request: ... Wrong HTTP URL" and the whole review message
-    fails - which would leave a paused run with nobody notified.
+    Discovered the hard way: with a localhost PUBLIC_BASE_URL the API answers
+    "Bad Request: ... Wrong HTTP URL" and the whole review message fails -
+    which would leave a paused run with nobody notified.
     """
 
     def test_classifies_local_and_public_urls(self) -> None:
@@ -278,7 +277,6 @@ class ButtonFallbackTests(unittest.TestCase):
         stub = SimpleNamespace(
             telegram_bot_token="t",
             telegram_chat_id="1",
-            review_api_base_url=base_url,
             public_base_url=base_url,
         )
         with patch.object(tg, "settings", stub), patch.object(
@@ -329,11 +327,16 @@ class ReviewLinkTests(unittest.TestCase):
         self.assertNotIn("/approve", url)
         self.assertNotIn("/reject", url)
 
-    def test_it_falls_back_to_the_review_api_origin(self) -> None:
-        """A half-configured deploy gets a working link, not a broken one."""
+    def test_without_public_base_url_there_is_no_tappable_button(self) -> None:
+        """Better a visible plain link than one that looks configured.
+
+        The old fallback guessed an origin from REVIEW_API_BASE_URL - a
+        setting that named a service which no longer exists.
+        """
         with patch.object(tg, "settings", _settings(public_base_url="")):
             url = tg._console_review_url("run-1")
-        self.assertEqual(url, "https://review.example/tasks/run-1?tab=review")
+        self.assertEqual(url, "/tasks/run-1?tab=review")
+        self.assertFalse(tg._buttons_supported(url))
 
     def test_the_review_tab_is_requested_explicitly(self) -> None:
         """Landing on the trace would be one tap short of the decision."""

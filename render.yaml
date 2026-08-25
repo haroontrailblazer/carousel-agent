@@ -29,10 +29,11 @@
 #
 # AFTER THE FIRST DEPLOY
 #
-# Set REVIEW_API_BASE_URL by hand to this service's public URL plus
-# /review-api. Render cannot self-reference a URL in a blueprint, and Telegram
-# rejects button URLs that are not publicly resolvable - so until it is set,
-# the review links degrade to plain text in the message body.
+# Set PUBLIC_BASE_URL to this service's public URL (Render blueprints cannot
+# self-reference one). The Telegram review button is built from it, and
+# Telegram refuses a non-public URL in a button - so until it is set, review
+# notifications carry a plain-text link instead of a tappable one.
+#
 
 services:
   - type: web
@@ -63,8 +64,6 @@ services:
       # Setting it to anything else silently breaks every resume.
       - key: PUBLIC_BASE_URL
         sync: false          # https://<service>.onrender.com
-      - key: REVIEW_API_BASE_URL
-        sync: false          # <PUBLIC_BASE_URL>/review-api - set after deploy
       - key: MAX_REWORK_ROUNDS
         value: "5"
       - key: MAX_CAROUSEL_SLIDES

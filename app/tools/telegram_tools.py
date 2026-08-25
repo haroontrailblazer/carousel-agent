@@ -147,16 +147,13 @@ def _console_review_url(run_id: str) -> str:
       Instagram. Sending reviewers to the console makes an identity mandatory
       before anything is posted publicly.
 
-    Falls back to REVIEW_API_BASE_URL's origin when PUBLIC_BASE_URL is unset,
-    so a half-configured deployment still produces a working link rather than
-    a broken one.
+    PUBLIC_BASE_URL is the only source. There used to be a fallback to
+    REVIEW_API_BASE_URL's origin, but that setting named a service that no
+    longer exists; guessing an origin from it would produce a link that looks
+    configured and is not. With PUBLIC_BASE_URL unset the URL is relative,
+    _buttons_supported rejects it, and the caller logs what to set.
     """
     base = (settings.public_base_url or "").rstrip("/")
-    if not base:
-        parsed = urlparse(settings.review_api_base_url)
-        if parsed.scheme and parsed.hostname:
-            port = f":{parsed.port}" if parsed.port else ""
-            base = f"{parsed.scheme}://{parsed.hostname}{port}"
     return f"{base}/tasks/{run_id}?tab=review"
 
 
@@ -169,9 +166,9 @@ def _buttons_supported(url: str) -> bool:
 
     A local address is useless in a button anyway: the link opens on the
     reviewer's phone, where ``localhost`` is the phone itself. So when
-    ``REVIEW_API_BASE_URL`` points somewhere local, the links go in the message
-    text instead - visible and copyable, just not tappable. Expose the review
-    API on a public URL (a tunnel, or a deployed host) to get real buttons.
+    ``PUBLIC_BASE_URL`` points somewhere local, the link goes in the message
+    text instead - visible and copyable, just not tappable. Expose the console
+    on a public URL (a tunnel, or a deployed host) to get a real button.
     """
     try:
         parsed = urlparse(url)
@@ -277,7 +274,7 @@ def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
                 "PUBLIC_BASE_URL (%s) is not publicly reachable, so Telegram "
                 "cannot render a Review button; sending a plain link instead. "
                 "Expose the console publicly for one-tap review.",
-                settings.public_base_url or settings.review_api_base_url,
+                settings.public_base_url or "(unset)",
             )
             lines += ["", f"Review and decide: {review_url}"]
 

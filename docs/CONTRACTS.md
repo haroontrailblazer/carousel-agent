@@ -75,10 +75,15 @@ re-runs; then qa → review again with the replaced piece. If the router targets
 full regenerate of dependents; `research` implies planner and therefore a full
 regenerate on the corrected facts) - the router's `reasons` say why.
 
-## Review resume protocol (review_api/main.py ↔ dispatcher)
+## Review resume protocol (web_api/routes_runs.py ↔ dispatcher)
 
-1. Dispatcher tool `send_review_email(...)` mails preview + links:
-   `GET {REVIEW_API_BASE_URL}/review/{run_id}/approve` and `/reject`.
+1. Dispatcher tool `send_review_message(...)` posts the preview album to
+   Telegram with one button: `{PUBLIC_BASE_URL}/tasks/{run_id}?tab=review`,
+   the console's own review screen. There is no anonymous approval surface -
+   the standalone `/review-api` Approve/Reject pages were deleted, because a
+   URL that publishes to Instagram with no sign-in is a permanent, forwardable
+   publish button. The verdict is submitted by `POST /api/runs/{id}/verdict`,
+   which requires a session and records who decided.
 2. Dispatcher then calls `await_human_review()` - a `LongRunningFunctionTool`
    returning no immediate result → ADK pauses; runner invocation ends with the
    pending function_call id (persist it in state via the tool callback or db).
@@ -116,7 +121,6 @@ regenerate on the corrected facts) - the router's `reasons` say why.
 | app/agents/learner.py | `build_learner_agent()` - stores FeedbackRecord (memory_service), and when a rule repeats (>=2 similar feedbacks) appends a distilled rule to the relevant skills/agents/<name>.md or skills/design-skill.md under "Learned rules". |
 | app/orchestrator.py | `CarouselOrchestrator(BaseAgent)` per the state machine above; children passed via sub_agents so adk web draws the graph; emits one concise Event per phase transition for realtime visibility. |
 | app/agent.py | builds everything, exposes `root_agent` (module-level) for `adk web`/`adk run`; also `build_runner()` returning a Runner wired to DatabaseSessionService(settings.database_url), SupabaseArtifactService, PostgresMemoryService (with in-memory fallbacks when env is missing so `adk web` works locally). |
-| review_api/main.py | FastAPI per the resume protocol; GET confirm pages + POST submit; reject form REQUIRES feedback; uses build_runner(). |
 | fetcher/fetch_news.py | pulls Gmail newsletters (query settings.newsletter_query), RSS (feedparser), YouTube channel feeds; dedupe by URL hash into news_queue; `python -m fetcher.fetch_news --run-one` pops one item and starts a pipeline run via build_runner(). |
 | README.md | setup (venv, ffmpeg, .env), Supabase schema apply, `adk web` for the REALTIME AGENT GRAPH + event/state inspector (this is the "agent graph, loop visuals, realtime operation" surface), running fetcher/review API, the rework loop explained, NO git commits until review. |
 

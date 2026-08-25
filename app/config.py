@@ -39,7 +39,6 @@ _ADK_APP_NAME = Path(__file__).resolve().parent.name
 class Settings:
     # --- app ---
     app_name: str = os.getenv("APP_NAME", _ADK_APP_NAME)
-    review_api_base_url: str = os.getenv("REVIEW_API_BASE_URL", "http://localhost:8080")
     max_rework_rounds: int = int(os.getenv("MAX_REWORK_ROUNDS", "5"))
     max_carousel_slides: int = int(os.getenv("MAX_CAROUSEL_SLIDES", "10"))  # IG limit
 

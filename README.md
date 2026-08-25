@@ -45,7 +45,6 @@ Supabase Storage. The architecture is modeled in `architecture/carousel.c4`
 | `app/tools/` | media (yt-dlp + FFmpeg), gpt-image-2, Gmail, Instagram Graph API tools |
 | `app/services/` | Supabase Storage artifact service, Postgres memory service, asyncpg helpers |
 | `fetcher/fetch_news.py` | pulls newsletters/RSS/YouTube into the news queue; starts runs |
-| `review_api/main.py` | FastAPI Approve/Reject endpoints that resume paused runs |
 | `db/schema.sql` | `news_queue`, `runs`, `feedback`, `pending_reviews` |
 | `skills/` | the editable harness: cover style, design skill, per-agent instructions |
 | `docs/CONTRACTS.md` | the binding code-level spec |
@@ -208,20 +207,24 @@ starts a run via `build_runner()` - the run executes generate → qa → review
 and then **pauses**, waiting for the email verdict. In production these are a
 Cloud Scheduler → Cloud Run job; locally you run them by hand.
 
-### Review API
+### Reviewing a carousel
 
-The Approve/Reject links in the review mail point at this service - it must
-be running (and reachable from wherever you read the mail) for verdicts to
-land:
+Reviews happen in the console, at `/tasks/{run_id}?tab=review`. Telegram sends
+one **REVIEW CAROUSEL** button pointing there, so the reviewer sees the cover
+video and still side by side, every slide at full size, and the caption
+counted against Instagram's limit before deciding.
 
-```powershell
-uvicorn review_api.main:app --port 8080
-```
+Signing in is required. There used to be standalone Approve/Reject pages that
+needed no credentials, on the reasoning that a Telegram link opens where
+nobody can log in - but approving auto-publishes to Instagram, so any leaked
+URL was a permanent, anonymous publish button. Those pages are gone; the
+verdict now goes through `POST /api/runs/{id}/verdict`, which records who
+decided.
 
-`REVIEW_API_BASE_URL` in `.env` must match the address the links should carry
-(`http://localhost:8080` only works if you open the mail on the same
-machine; for real remote review deploy it or tunnel it and set the public
-URL).
+Set `PUBLIC_BASE_URL` in `.env` to the address the button should carry.
+Telegram refuses a non-public URL in a button, so with `localhost` (or nothing)
+the review message falls back to a plain-text link - visible and copyable, just
+not tappable. Tunnel the console or deploy it to get a real button.
 
 ---
 

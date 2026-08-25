@@ -1,13 +1,21 @@
-"""The deployed console: React SPA, JSON API, and the Telegram review pages.
+"""The deployed console: React SPA and JSON API.
 
 One ASGI app, one process, one Render service:
 
 ===================  ====================================================
 ``/``                the React console (static bundle, SPA history fallback)
 ``/api/...``         the console's JSON API and event stream (signed in)
-``/review-api/...``  the Telegram Approve/Reject pages (deliberately open)
 ``/healthz``         platform health probe
 ===================  ====================================================
+
+There is no longer a ``/review-api`` surface. It served standalone Approve and
+Reject pages that needed no credentials, on the reasoning that a Telegram link
+opens where nobody can sign in. But approving auto-publishes to Instagram, so
+any leaked URL was a permanent, anonymous publish button. Telegram now links to
+``/tasks/{run_id}?tab=review`` - the console's own review screen, behind the
+login, where the decision is recorded against a person and made with the actual
+carousel on screen. The decision logic those pages used lives in ``app.review``
+and is unchanged; only the pages are gone.
 
 **Google ADK runs the whole pipeline, and none of its web surface is served.**
 The agents, the orchestrator, the session store and the artifact store are all
@@ -52,7 +60,6 @@ from app.runs.recovery import reconcile_on_startup, release_stuck_queue_items
 from app.runs.service import drain_run_tasks
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.services import db
-from review_api.routes import router as review_router
 from web_api.auth import AuthMiddleware, build_verifier, validate_session_secret
 from web_api.routes_auth import router as auth_router
 from web_api.routes_runs import router as runs_router
@@ -78,18 +85,13 @@ def _configure_logging() -> None:
         )
     for noisy in ("httpx", "httpcore", "botocore", "boto3", "urllib3", "apscheduler"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
-    for ours in ("app", "web_api", "review_api", "fetcher"):
+    for ours in ("app", "web_api", "fetcher"):
         logging.getLogger(ours).setLevel(level)
 
 
 _configure_logging()
 
 logger = logging.getLogger(__name__)
-
-#: Where the review pages live. Set REVIEW_API_BASE_URL to this service's public
-#: URL plus this prefix, e.g. https://carousel.onrender.com/review-api - the
-#: channel tools build "{base}/review/{run_id}/approve" on top of it.
-REVIEW_API_MOUNT = "/review-api"
 
 #: The built SPA. Absent until `npm run build` has run, in which case
 #: SPAStaticFiles serves an explanatory page instead of failing.
@@ -179,17 +181,15 @@ def build_app() -> ASGIApp:
 
     root.include_router(auth_router, prefix="/api/auth", tags=["auth"])
     root.include_router(runs_router, prefix="/api", tags=["runs"])
-    root.include_router(review_router, prefix=REVIEW_API_MOUNT, tags=["review"])
 
     # Registered LAST: it is the catch-all, and anything mounted after it would
     # never be reached.
     root.mount("/", SPAStaticFiles(directory=SPA_DIST, html=True), name="spa")
 
     logger.info(
-        "Console assembled: SPA at /, API at /api, review at %s. "
-        "Set REVIEW_API_BASE_URL to <public url>%s.",
-        REVIEW_API_MOUNT,
-        REVIEW_API_MOUNT,
+        "Console assembled: SPA at /, API at /api. "
+        "Set PUBLIC_BASE_URL to this service's public URL so the Telegram "
+        "review button can link back to it."
     )
 
     return AuthMiddleware(
@@ -217,4 +217,4 @@ def _secure_cookies_default() -> bool:
 app = build_app()
 
 
-__all__ = ["REVIEW_API_MOUNT", "app", "build_app"]
+__all__ = ["app", "build_app"]

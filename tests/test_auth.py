@@ -96,32 +96,37 @@ def _cookie(role: str = "reviewer", ttl: int = 3600, secret: str = SECRET) -> di
 
 
 class OpenPathTests(unittest.TestCase):
-    def test_the_review_pages_now_require_a_session(self) -> None:
-        """This assertion is deliberately the OPPOSITE of what it once was.
+    def test_there_is_no_anonymous_approval_surface_left(self) -> None:
+        """The standalone Approve/Reject pages are gone, not merely closed.
 
-        These pages used to be open, on the reasoning that a Telegram link
-        opens on a phone where nobody can sign in, and that an unguessable
-        run_id was capability enough. But approving auto-publishes to
-        Instagram, so anyone who ever saw one of those URLs - a forwarded
-        message, a screenshot, a chat backup - could post as the brand, with
-        no identity recorded against the decision.
+        They were open on the reasoning that a Telegram link opens where
+        nobody can sign in, and an unguessable run_id was capability enough.
+        But approving auto-publishes to Instagram, so any leaked URL - a
+        forwarded message, a screenshot, a chat backup - was a permanent
+        anonymous publish button. Telegram links to /tasks/{id}?tab=review
+        now, which is behind the login like everything else.
 
-        Telegram now links to the console's review screen instead, so signing
-        in is part of the flow rather than an obstacle to it.
+        What matters is that nothing there can ACT. A GET may still be answered
+        by whatever catch-all sits at the root - that is a static page with no
+        handler behind it - but the submit endpoint that actually recorded a
+        verdict must be gone.
         """
-        r = _app().get("/review-api/review/run-1/approve")
-        self.assertEqual(r.status_code, 401)
-
-    def test_a_stale_review_link_is_sent_to_login_and_back(self) -> None:
-        """An old Telegram link must still be usable, just not anonymously."""
-        r = _app().get(
-            "/review-api/review/run-1/approve",
-            headers={"Accept": "text/html"},
-            follow_redirects=False,
+        post = _app().post(
+            "/review-api/review/run-1/submit", data={"status": "approved"}
         )
-        self.assertEqual(r.status_code, 302)
-        self.assertIn("/login?next=", r.headers["location"])
-        self.assertIn("review-api", r.headers["location"])
+        self.assertEqual(post.status_code, 404)
+
+    def test_the_app_registers_no_review_routes_at_all(self) -> None:
+        """Stronger than probing URLs: the routes do not exist to be reached."""
+        import web_app
+
+        inner = getattr(web_app.app, "app", web_app.app)
+        paths = [getattr(route, "path", "") for route in inner.routes]
+        self.assertEqual([p for p in paths if "review" in p], [])
+
+    def test_the_verdict_api_is_the_only_way_in_and_it_needs_a_session(self) -> None:
+        r = _app().post("/api/runs/run-1/verdict", json={"status": "approved"})
+        self.assertEqual(r.status_code, 401)
 
     def test_the_health_probe_is_open(self) -> None:
         """A 401 here would make the platform restart-loop the service."""
