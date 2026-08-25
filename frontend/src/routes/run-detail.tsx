@@ -165,8 +165,21 @@ export function RunDetailRoute() {
           </Chip>
           <MutedChip>{PHASE_LABELS[data.phase] ?? data.phase}</MutedChip>
           {data.rework_round > 0 && <MutedChip>Rework {data.rework_round}</MutedChip>}
-          {!stream.connected && stream.synced && (
-            <MutedChip>
+          {/* Only when the view has genuinely lost track of the run.
+              This used to key off the SSE connection with no `live` guard,
+              which meant two wrong things at once: every tunnelled session
+              showed it (Cloudflare buffers SSE, so the stream never opens
+              even though polling is fine), and a FINISHED task showed it
+              permanently - there is no stream to connect to once a run ends,
+              so `connected` stayed false forever on an immutable trace. */}
+          {stream.stale && (
+            <MutedChip
+              title="Could not reach the server for the latest trace; retrying."
+              style={{
+                background: "var(--phase-failed-soft)",
+                color: "var(--phase-failed-fg)",
+              }}
+            >
               <WifiOff className="size-3" /> Reconnecting
             </MutedChip>
           )}

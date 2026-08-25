@@ -33,6 +33,19 @@ export type TraceState = {
   gapped: boolean
   /** Whether the live stream is currently connected. */
   connected: boolean
+  /**
+   * Whether the trace has actually stopped keeping up.
+   *
+   * NOT the same as `connected`. SSE is an optimisation here - Cloudflare
+   * buffers event streams, so `connected` is false on every tunnelled session
+   * even while 3s polling keeps the trace perfectly in sync. Reporting that as
+   * a connection problem cried wolf on a view that was working.
+   *
+   * This is true only when the polling itself is failing, and only while the
+   * run is live: a finished trace is immutable and is not being fetched at
+   * all, so it can never be out of date.
+   */
+  stale: boolean
   /** True while the history request is in flight. */
   loading: boolean
   /** Per-agent timing and token totals for the run. */
@@ -148,6 +161,10 @@ export function useRunStream(
     phase,
     gapped,
     connected,
+    // failureCount covers the window where a request has failed and React
+    // Query is retrying; isError is the state after retries are exhausted.
+    // Either one means this view is no longer tracking the run.
+    stale: live && (history.isError || history.failureCount > 0),
     loading: history.isLoading,
     summary: history.data?.summary ?? null,
   }
