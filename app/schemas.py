@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.text_rules import require_no_em_dash, require_readable_text
 
@@ -162,12 +162,57 @@ class Verdict(BaseModel):
     decided_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class ReworkReason(BaseModel):
+    """One target and the correction it must apply."""
+
+    target: str = ""  # a state.AGENT_* name
+    reason: str = ""
+
+
 class ReworkPlan(BaseModel):
-    """Feedback Router output: which agents must re-run and why."""
+    """Feedback Router output: which agents must re-run and why.
+
+    ``reasons`` is a LIST of pairs rather than the obvious ``dict[str, str]``,
+    and that is not a style choice. This model is the Feedback Router's
+    ``output_schema``, so it is sent to OpenAI as a strict ``response_format``
+    - and strict mode cannot express an open-ended map. Pydantic renders
+    ``dict[str, str]`` as ``{"type": "object", "additionalProperties":
+    {"type": "string"}}`` with no ``properties``, OpenAI refuses to accept
+    that as a property at all, and then rejects the whole request for listing
+    a key it has just discarded::
+
+        Invalid schema for response_format 'ReworkPlan': In context=(),
+        'required' is required to be supplied and to be an array including
+        every key in properties. Extra required key 'reasons' supplied.
+
+    The effect was that every rejection died the moment the reviewer's
+    feedback reached the router - the verdict and feedback were saved, the
+    learner ran, and then the rework never started.
+    """
 
     targets: list[str] = Field(default_factory=list)  # values from state.AGENT_* names
-    reasons: dict[str, str] = Field(default_factory=dict)  # target -> reason
+    reasons: list[ReworkReason] = Field(default_factory=list)
     feedback: str = ""
+
+    @field_validator("reasons", mode="before")
+    @classmethod
+    def _accept_legacy_mapping(cls, value: Any) -> Any:
+        """Read plans stored in the old ``{target: reason}`` shape.
+
+        A run that was mid-rework when this changed still has the mapping in
+        its session state; without this it would fail validation and silently
+        lose the routing the reviewer had already waited for.
+        """
+        if isinstance(value, dict):
+            return [{"target": k, "reason": v} for k, v in value.items()]
+        return value
+
+    def reason_for(self, target: str) -> str:
+        """The reason recorded for ``target``, or an empty string."""
+        for entry in self.reasons:
+            if entry.target == target:
+                return entry.reason
+        return ""
 
 
 class FeedbackRecord(BaseModel):

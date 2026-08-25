@@ -52,6 +52,7 @@ from app.schemas import (
     QAReport,
     RenderedSlide,
     ReworkPlan,
+    ReworkReason,
 )
 from app.state import (
     AGENT_CTA,
@@ -701,7 +702,10 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
         )
         rework = ReworkPlan(
             targets=critical_targets,
-            reasons={t: "; ".join(reasons[t]) for t in critical_targets},
+            reasons=[
+                ReworkReason(target=t, reason="; ".join(reasons[t]))
+                for t in critical_targets
+            ],
             feedback=feedback_text,
         )
         set_model(state, K_REWORK_PLAN, rework)

@@ -30,7 +30,7 @@ from pydantic import ValidationError
 
 from app.config import agent_instructions, settings
 from app.llm import resolve_model
-from app.schemas import ReworkPlan, Verdict
+from app.schemas import ReworkPlan, ReworkReason, Verdict
 from app.state import (
     AGENT_CTA,
     AGENT_FEEDBACK_ROUTER,
@@ -305,23 +305,24 @@ def _sanitize_rework_plan(
         # implies dependents re-run, so nothing criticised can survive).
         normalized = [AGENT_PLANNER]
 
-    # One reason per target: keep the LLM's reason when it maps cleanly,
-    # otherwise fall back to the feedback text itself.
-    normalized_reasons: dict[str, str] = {}
-    for raw_key, reason in (plan.reasons or {}).items():
-        key = _normalize_target(str(raw_key))
-        if key in normalized and key not in normalized_reasons and reason:
-            normalized_reasons[key] = str(reason)
+    # One reason per target, in target order: keep the LLM's reason when it
+    # maps cleanly, otherwise fall back to the feedback text itself.
+    by_target: dict[str, str] = {}
+    for entry in plan.reasons or []:
+        key = _normalize_target(str(entry.target))
+        if key in normalized and key not in by_target and entry.reason:
+            by_target[key] = str(entry.reason)
     fallback_reason = (
         plan.feedback
         or effective_feedback
         or "Reviewer rejected the carousel; rework required."
     )
-    for target in normalized:
-        normalized_reasons.setdefault(target, fallback_reason)
 
     plan.targets = normalized
-    plan.reasons = normalized_reasons
+    plan.reasons = [
+        ReworkReason(target=target, reason=by_target.get(target, fallback_reason))
+        for target in normalized
+    ]
     set_model(state, K_REWORK_PLAN, plan)
     logger.info("Rework plan sanitized: targets=%s", normalized)
     return None
@@ -400,7 +401,8 @@ These are the only re-runnable agents. Never output any other value.
    when the feedback names several problems.
 2. Keep targets MINIMAL: never include an agent the feedback does not
    criticise. A complaint about only the cover must not re-run phrasing.
-3. "reasons" must contain exactly one key per chosen target; each value is a
+3. "reasons" is a LIST with exactly one entry per chosen target, each
+   {"target": <one of the targets>, "reason": <correction>}. Each reason is a
    short, concrete, imperative correction for that agent (what to fix, not a
    restatement of the complaint).
 4. "feedback" must carry the reviewer's feedback text verbatim.
@@ -409,7 +411,7 @@ These are the only re-runnable agents. Never output any other value.
 
 ## Output shape (example values, not a template to copy)
 
-{"targets": ["first_page_visual", "phrasing"], "reasons": {"first_page_visual": "Pick a more dynamic source clip for the cover.", "phrasing": "Shorten slide 3 to two punchy lines."}, "feedback": "first visual is boring and slide 3 is too wordy"}
+{"targets": ["first_page_visual", "phrasing"], "reasons": [{"target": "first_page_visual", "reason": "Pick a more dynamic source clip for the cover."}, {"target": "phrasing", "reason": "Shorten slide 3 to two punchy lines."}], "feedback": "first visual is boring and slide 3 is too wordy"}
 """
 
 
