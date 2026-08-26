@@ -1,5 +1,5 @@
 import * as React from "react"
-import { CheckCircle2, ExternalLink, Hourglass, Loader2, XCircle } from "lucide-react"
+import { CheckCircle2, ExternalLink, Hourglass, Loader2, Send, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -16,16 +16,17 @@ import type { RunDetail } from "@/lib/types"
  * confirmation step - the email flow already refuses to decide anything on a
  * GET, and the console should not be laxer than the email.
  *
- * The same run can be decided from Telegram, so this component has to handle
- * FOUR states, not two:
+ * Three states, keyed on `status` rather than on guessing from a snapshot:
  *
  *   0. too early        - the pipeline has not reached review; there is
  *                         nothing to decide and nothing has been decided.
- *   1. pending          - a decision is wanted; show the buttons.
+ *   1. reviewable       - status is awaiting_review: the carousel is finished
+ *                         and a human is needed. Show the buttons. This does
+ *                         NOT wait for the Telegram notice - the console is
+ *                         where verdicts are made, and the notification is
+ *                         just a notification. If it failed, say so and offer
+ *                         to send it again.
  *   2. decided          - a verdict is recorded; show what it was.
- *   3. being processed  - no pending row and no verdict yet, because a resume
- *                         is in flight. Showing "already decided" here would
- *                         be wrong, and showing the buttons would be worse.
  *
  * And it is not monotonic: a failed resume restores the pending row, so a run
  * can go pending -> not pending -> pending again. Which is why a pending row
@@ -40,6 +41,8 @@ export function ApprovalCard({
   onApprove,
   onReject,
   busy,
+  onResend,
+  resending = false,
 }: {
   run: RunDetail
   publishConfigured: boolean
@@ -48,6 +51,9 @@ export function ApprovalCard({
   onApprove: () => void
   onReject: (feedback: string) => void
   busy: boolean
+  /** Retry the review notification. Only offered when one has failed. */
+  onResend?: () => void
+  resending?: boolean
 }) {
   const [rejecting, setRejecting] = React.useState(false)
   const [feedback, setFeedback] = React.useState("")
@@ -142,23 +148,19 @@ export function ApprovalCard({
     )
   }
 
-  // --- state 3: a decision is being processed right now -------------------
-  if (!run.pending_review) {
-    return (
-      <Card className="p-5">
-        <div className="flex items-center gap-3">
-          <Loader2 className="size-4 animate-spin-slow text-[var(--muted-foreground)]" />
-          <div>
-            <p className="font-medium">A decision is being processed</p>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              This task was just decided — possibly from Telegram. The pipeline
-              is picking it up now.
-            </p>
-          </div>
-        </div>
-      </Card>
-    )
-  }
+  // NOTE: there is no longer a "a decision is being processed" state.
+  //
+  // It existed because a run could be decided on the standalone Telegram
+  // approval pages, so a missing pending row genuinely might mean "someone
+  // else just decided this". Those pages are deleted; every verdict is made
+  // HERE now. What a missing pending row actually means today is that the
+  // dispatcher has not paused yet - it is still sending the notification, or
+  // the send failed - and in both cases the carousel is finished and
+  // reviewable, so the honest thing to show is the buttons.
+  //
+  // Concurrency is still handled, just not by guessing from a snapshot: two
+  // people deciding at once is caught by the atomic claim, and the loser gets
+  // a 409 the panel reports as "already decided".
 
   // --- state 1b: the pending row is back, but nobody is waiting on you ----
   //
@@ -220,17 +222,28 @@ export function ApprovalCard({
       </div>
 
       {run.notice_failed && (
-        <p
-          className="mb-4 rounded-[var(--radius-md)] px-3 py-2 text-sm"
+        <div
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm"
           style={{
             background: "var(--phase-failed-soft)",
             color: "var(--phase-failed-fg)",
           }}
         >
-          The carousel is ready, but the review notification could not be sent
-          — Telegram was not told about it. Nothing is wrong with the slides;
-          decide here, or resume the task from the header to retry the notice.
-        </p>
+          <span className="min-w-0 flex-1">
+            Telegram was not notified — the message failed to send. Nothing is
+            wrong with the carousel; you can decide it right here.
+          </span>
+          {onResend && (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy || resending}
+              onClick={onResend}
+            >
+              <Send /> {resending ? "Sending…" : "Send again"}
+            </Button>
+          )}
+        </div>
       )}
 
       {!publishConfigured && (

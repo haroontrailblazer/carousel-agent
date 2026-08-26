@@ -45,6 +45,21 @@ export function ReviewPanel({ run }: { run: RunDetail }) {
 
   const meta = useQuery({ queryKey: ["meta"], queryFn: () => get<Meta>("/api/meta") })
 
+  // Retrying the notification is just re-entering the review phase: the
+  // dispatcher runs again in SEND_MAIL mode and sends. Resume already does
+  // exactly that, so there is no second endpoint to keep in step with it.
+  const resend = useMutation({
+    mutationFn: () => post(`/api/runs/${runId}/resume`),
+    onSuccess: () => {
+      toast.success("Sending again", { description: "Retrying the Telegram notice." })
+      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Could not send that again.",
+      ),
+  })
+
   const decide = useMutation({
     mutationFn: (payload: { status: string; feedback: string }) =>
       post(`/api/runs/${runId}/verdict`, { ...payload, cover: coverChoice }),
@@ -93,6 +108,8 @@ export function ReviewPanel({ run }: { run: RunDetail }) {
         busy={decide.isPending}
         onApprove={() => decide.mutate({ status: "approved", feedback: "" })}
         onReject={(feedback) => decide.mutate({ status: "rejected", feedback })}
+        onResend={() => resend.mutate()}
+        resending={resend.isPending}
       />
 
       {artifacts.isLoading && (
