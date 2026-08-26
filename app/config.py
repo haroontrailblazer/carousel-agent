@@ -78,8 +78,17 @@ class Settings:
     # Approve/Reject links back to the review API. Chosen over Gmail because it
     # needs no Google Cloud project, no OAuth consent screen and no 7-day token
     # expiry - a bot token and a chat id are the whole setup.
-    telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID", "")
+    # NOTE: there is deliberately no TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID.
+    #
+    # The bot is connected from the console (Profile -> Telegram), which
+    # discovers the chat id itself and stores the token ENCRYPTED in
+    # app_config. Keeping an environment fallback would have meant a bearer
+    # credential sitting in plaintext in a file, in every shell that inherits
+    # it and in the process listing - and a second, invisible source of truth
+    # that quietly overrides whatever the console shows.
+    #
+    # SECRETS_KEY is what encrypts it. See app/services/secret_box.py.
+    secrets_key: str = os.getenv("SECRETS_KEY", "")
 
     # --- instagram ---
     ig_user_id: str = os.getenv("IG_USER_ID", "")

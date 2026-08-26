@@ -46,17 +46,16 @@ MESSAGE_LIMIT = 4096  # characters per sendMessage
 def _api_base() -> str:
     """Bot API base URL, or a RuntimeError naming what to configure.
 
-    Credentials come from ``app.services.telegram_config``, which prefers what
-    the console stored over what ``.env`` holds - so connecting a bot is a
-    thing the reviewer does on the profile page, not a file edit and a
-    restart. The env vars still work as a fallback.
+    Credentials come from ``app.services.telegram_config`` and nowhere else -
+    there is no environment fallback. The bot is connected on the profile
+    page, and the token is stored encrypted rather than sitting in plaintext
+    in a file.
     """
     token = telegram_config.credentials()["bot_token"]
     if not token:
         raise RuntimeError(
             "No Telegram bot is connected - cannot send the review message. "
-            "Connect one from the console's profile page (Account -> Profile), "
-            "or set TELEGRAM_BOT_TOKEN in .env."
+            "Connect one from the console: Account -> Profile -> Telegram."
         )
     return f"https://api.telegram.org/bot{token}"
 
@@ -68,7 +67,7 @@ def _chat_id() -> str:
         raise RuntimeError(
             "No Telegram chat is connected - cannot send the review message. "
             "Connect the bot from the console's profile page, which discovers "
-            "the chat id for you, or set TELEGRAM_CHAT_ID in .env."
+            "the chat id for you."
         )
     return chat_id
 

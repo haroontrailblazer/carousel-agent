@@ -24,6 +24,8 @@ import { compressAvatar } from "@/lib/image"
 
 type TelegramStatus = {
   connected: boolean
+  /** False when SECRETS_KEY is absent - nothing can be stored safely. */
+  secrets_ready: boolean
   source: "console" | "environment" | "unset"
   bot_username: string
   chat_id: string
@@ -325,6 +327,9 @@ function TelegramSection() {
   const data = status.data
   const connected = !!data?.connected
   const fromConsole = data?.source === "console"
+  // Say so BEFORE someone types a bearer token into a form that will refuse
+  // it - the server will not store a credential it cannot encrypt.
+  const secretsMissing = data ? !data.secrets_ready : false
 
   return (
     <Section
@@ -338,8 +343,21 @@ function TelegramSection() {
           </Chip>
           {data?.bot_username && <MutedChip>@{data.bot_username}</MutedChip>}
           {data?.chat_id && <MutedChip>chat {data.chat_id}</MutedChip>}
-          {!fromConsole && <MutedChip>from .env</MutedChip>}
         </div>
+      )}
+
+      {secretsMissing && (
+        <p
+          className="mb-4 rounded-[var(--radius-md)] px-3 py-2 text-sm"
+          style={{
+            background: "var(--phase-failed-soft)",
+            color: "var(--phase-failed-fg)",
+          }}
+        >
+          SECRETS_KEY is not set on the server, so a bot token cannot be stored
+          encrypted - and it will not be stored any other way. Generate a key
+          and put it in .env, then reload.
+        </p>
       )}
 
       {connected && fromConsole ? (
@@ -386,7 +404,7 @@ function TelegramSection() {
             />
             <Button
               variant="brand"
-              disabled={!token.trim() || connect.isPending}
+              disabled={!token.trim() || connect.isPending || secretsMissing}
               onClick={() => connect.mutate()}
             >
               <Send /> {connect.isPending ? "Connecting..." : "Connect"}
@@ -418,12 +436,6 @@ function TelegramSection() {
         </div>
       )}
 
-      {connected && !fromConsole && (
-        <p className="mt-3 text-xs leading-5 text-[var(--muted-foreground)]">
-          These credentials come from the server .env file. Connect a bot here
-          to take over - what you set in the console is preferred.
-        </p>
-      )}
     </Section>
   )
 }

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from app.services import avatar_store, telegram_config
+from app.services import avatar_store, secret_box, telegram_config
 from app.services.telegram_connect import (
     ConnectError,
     discover_chat,
@@ -50,6 +50,7 @@ def _mask(token: str) -> str:
 def _status() -> dict:
     creds = telegram_config.credentials()
     return {
+        "secrets_ready": secret_box.configured(),
         "connected": telegram_config.configured(),
         "source": telegram_config.source(),
         "bot_username": creds["bot_username"],
@@ -112,13 +113,21 @@ async def telegram_connect(
     except ConnectError as exc:
         raise HTTPException(400, {"code": exc.code, "message": exc.message}) from exc
 
-    await telegram_config.save(
-        bot_token=token,
-        chat_id=chat_id,
-        bot_username=str(bot.get("username") or ""),
-        connected_by=identity.email,
-        connected_at=datetime.now(timezone.utc).isoformat(),
-    )
+    try:
+        await telegram_config.save(
+            bot_token=token,
+            chat_id=chat_id,
+            bot_username=str(bot.get("username") or ""),
+            connected_by=identity.email,
+            connected_at=datetime.now(timezone.utc).isoformat(),
+        )
+    except secret_box.SecretsNotConfigured as exc:
+        # Refuse rather than fall back to storing it in the clear: the whole
+        # reason the token moved out of .env was to stop it living in plain
+        # text somewhere.
+        raise HTTPException(
+            503, {"code": "secrets_unconfigured", "message": str(exc)}
+        ) from exc
     logger.info(
         "Telegram bot @%s connected to chat %s by %s.",
         bot.get("username"),

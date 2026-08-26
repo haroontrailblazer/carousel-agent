@@ -25,11 +25,11 @@ def _settings(
     public_base_url: str = "https://console.example",
 ):
     """Stand-in for the frozen Settings singleton (it cannot be mutated)."""
-    return SimpleNamespace(
-        telegram_bot_token=token,
-        telegram_chat_id=chat,
-        public_base_url=public_base_url,
-    )
+    # NOTE: no telegram_bot_token / telegram_chat_id. Credentials come from
+    # telegram_config now (console-set, encrypted at rest); settings only
+    # carries the public base URL the review button is built from.
+    del token, chat
+    return SimpleNamespace(public_base_url=public_base_url)
 
 
 def _creds(token: str = "bot-token", chat: str = "12345") -> dict:
@@ -44,12 +44,13 @@ def _creds(token: str = "bot-token", chat: str = "12345") -> dict:
 
 
 class ConfigGuardTests(unittest.TestCase):
-    """Credentials come from telegram_config now, not straight from settings.
+    """Credentials come from telegram_config, and from NOWHERE else.
 
-    They used to be read from the frozen Settings singleton, which meant
-    connecting a bot was a file edit and a restart. They are now stored in
-    app_config and set from the profile page, with .env as the fallback - so
-    these guards have to be exercised through that accessor.
+    They used to be read from the frozen Settings singleton, which meant a
+    bearer token sitting in plaintext in .env and in every shell that
+    inherited it - and a second, invisible source of truth that could override
+    what the console displayed. The bot is connected on the profile page now
+    and the token is stored encrypted.
     """
 
     def test_missing_token_points_at_the_console(self) -> None:
@@ -57,8 +58,9 @@ class ConfigGuardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 tg._api_base()
         message = str(ctx.exception)
-        self.assertIn("profile page", message)
-        self.assertIn("TELEGRAM_BOT_TOKEN", message)  # the fallback still named
+        self.assertIn("Profile", message)
+        # The .env variable must NOT be suggested - it is no longer read.
+        self.assertNotIn("TELEGRAM_BOT_TOKEN", message)
 
     def test_missing_chat_id_says_it_is_discovered_for_you(self) -> None:
         """The old message told people to read getUpdates by hand."""
@@ -71,16 +73,15 @@ class ConfigGuardTests(unittest.TestCase):
         with patch.object(tg.telegram_config, "credentials", lambda: _creds()):
             self.assertEqual(tg._api_base(), "https://api.telegram.org/botbot-token")
 
-    def test_the_console_value_wins_over_the_environment(self) -> None:
-        """The whole point of moving it: setting a bot here takes effect."""
+    def test_there_is_no_environment_fallback(self) -> None:
+        """With nothing connected, nothing is configured - full stop."""
         from app.services import telegram_config
 
-        with patch.object(telegram_config, "_cache", {"bot_token": "from-console",
-                                                      "chat_id": "999"}):
+        with patch.object(telegram_config, "_cache", None):
             creds = telegram_config.credentials()
-        self.assertEqual(creds["bot_token"], "from-console")
-        self.assertEqual(creds["chat_id"], "999")
-        self.assertEqual(telegram_config.source(), "environment")  # cache patched out again
+            self.assertEqual(creds["bot_token"], "")
+            self.assertEqual(creds["chat_id"], "")
+            self.assertFalse(telegram_config.configured())
 
 
 class ReviewUrlTests(unittest.TestCase):
@@ -206,8 +207,8 @@ class SendReviewMessageTests(unittest.TestCase):
             )
 
         with patch.object(tg, "settings", _settings()), patch.object(
-            tg.httpx, "Client", fake_client
-        ):
+            tg.telegram_config, "credentials", lambda: _creds()
+        ), patch.object(tg.httpx, "Client", fake_client):
             return tg.send_review_message("run-abc", bundle, round_no)
 
     def test_album_then_message(self) -> None:
@@ -265,6 +266,8 @@ class SendReviewMessageTests(unittest.TestCase):
         transport = httpx.MockTransport(handler)
         real_client = httpx.Client
         with patch.object(tg, "settings", _settings()), patch.object(
+            tg.telegram_config, "credentials", lambda: _creds()
+        ), patch.object(
             tg.httpx,
             "Client",
             lambda *a, **k: real_client(
@@ -307,12 +310,10 @@ class ButtonFallbackTests(unittest.TestCase):
 
         transport = httpx.MockTransport(handler)
         real_client = httpx.Client
-        stub = SimpleNamespace(
-            telegram_bot_token="t",
-            telegram_chat_id="1",
-            public_base_url=base_url,
-        )
+        stub = SimpleNamespace(public_base_url=base_url)
         with patch.object(tg, "settings", stub), patch.object(
+            tg.telegram_config, "credentials", lambda: _creds()
+        ), patch.object(
             tg.httpx,
             "Client",
             lambda *a, **k: real_client(
