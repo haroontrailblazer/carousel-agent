@@ -71,6 +71,8 @@ export type RunDetail = RunSummary & {
    * this once and caches the answer will eventually show the wrong thing.
    */
   pending_review: boolean
+  /** Carousel is ready, but the review notification could not be sent. */
+  notice_failed?: boolean
 }
 
 export type SignedArtifact = {

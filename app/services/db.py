@@ -792,6 +792,44 @@ async def rewind_session_for_restart(
     )
     return updated is not None
 
+
+async def set_session_verdict(
+    run_id: str, app_name: str, user_id: str, verdict: dict
+) -> bool:
+    """Write a verdict straight into a run's session state.
+
+    For the case where the carousel is ready but the pipeline is NOT paused on
+    ``await_human_review`` - the review notification failed, so the dispatcher
+    never got to pause. There is no function call to answer, but the
+    orchestrator's review phase already knows how to route a verdict it finds
+    in state ("recorded by an earlier invocation that stopped before
+    routing"), so putting one there and re-entering the run is a supported
+    path rather than a trick.
+
+    Returns:
+        True when a session row was updated.
+    """
+    import json as _json
+
+    pool = await get_pool()
+    updated = await pool.fetchval(
+        """
+        UPDATE sessions
+        SET state = jsonb_set(
+                        COALESCE(state, '{}'::jsonb),
+                        '{review_verdict}', $4::jsonb, true
+                    ),
+            update_time = now()
+        WHERE app_name = $1 AND user_id = $2 AND id = $3
+        RETURNING id
+        """,
+        str(app_name),
+        str(user_id),
+        str(run_id),
+        _json.dumps(verdict),
+    )
+    return updated is not None
+
 # ---------------------------------------------------------------------------
 # run_events - the distilled timeline the console replays
 # ---------------------------------------------------------------------------

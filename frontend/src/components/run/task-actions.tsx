@@ -69,6 +69,14 @@ export function TaskActions({
       })
       return
     }
+    if (code === "not_running") {
+      // With the backend correcting stale statuses this should be rare: it
+      // now means the task genuinely already ended.
+      toast.info("Already stopped", {
+        description: "That task is no longer running.",
+      })
+      return
+    }
     if (code === "run_not_finished" || code === "run_is_active") {
       toast.error("Still running", {
         description: "Only finished tasks can be deleted.",

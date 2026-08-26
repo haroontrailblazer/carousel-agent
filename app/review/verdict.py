@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from app.review.resume import spawn_resume
+from app.review.resume import PIPELINE_USER_ID, spawn_resume
 from app.services import db
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,93 @@ async def pending_review(run_id: str) -> Optional[dict]:
     return await db.load_pending_review(run_id)
 
 
+
+async def _halted_awaiting_review(run_id: str) -> bool:
+    """True when the run is parked at review with no pause to answer."""
+    from app.config import settings
+    from app.state import K_PHASE, K_REVIEW_NOTICE_FAILED, PHASE_REVIEW
+
+    try:
+        pool = await db.get_pool()
+        row = await pool.fetchrow(
+            "SELECT state FROM sessions WHERE app_name = $1 AND user_id = $2 "
+            "AND id = $3",
+            settings.app_name,
+            PIPELINE_USER_ID,
+            str(run_id),
+        )
+    except Exception:
+        logger.exception("Could not read session state for run %s.", run_id)
+        return False
+    if row is None:
+        return False
+    state = row["state"]
+    if isinstance(state, str):
+        import json as _json
+
+        state = _json.loads(state or "{}")
+    state = dict(state or {})
+    return bool(state.get(K_REVIEW_NOTICE_FAILED)) and str(
+        state.get(K_PHASE) or ""
+    ) == PHASE_REVIEW
+
+
+async def _decide_without_pause(
+    run_id: str,
+    status: str,
+    feedback: str,
+    *,
+    reviewer: str,
+    source: VerdictSource,
+) -> VerdictOutcome:
+    """Record a verdict into session state and re-enter the run."""
+    from app.config import settings
+    from app.runs.service import resume_interrupted_run
+
+    # Any pending row here is stale - it belongs to a round whose function call
+    # was already answered. Drop it so a later submit cannot resume against it.
+    try:
+        await db.claim_pending_review(run_id)
+    except Exception as exc:
+        logger.warning("Could not clear a stale pending review for %s: %s", run_id, exc)
+
+    written = await db.set_session_verdict(
+        run_id,
+        settings.app_name,
+        PIPELINE_USER_ID,
+        {
+            "status": status,
+            "feedback": feedback,
+            "reviewer": reviewer,
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    if not written:
+        return VerdictOutcome(
+            result="not_pending",
+            run_id=run_id,
+            detail="That task has no session to decide.",
+        )
+
+    try:
+        await db.record_verdict(
+            run_id, status, feedback, decided_by=reviewer, source=source
+        )
+    except Exception as exc:
+        logger.warning("record_verdict failed for run %s: %s", run_id, exc)
+
+    started = await resume_interrupted_run(run_id, requested_by=reviewer)
+    logger.info(
+        "Verdict '%s' recorded for run %s from %s without a pause; re-entered: %s.",
+        status,
+        run_id,
+        source,
+        started,
+    )
+    return VerdictOutcome(
+        result="accepted", run_id=run_id, status=status, feedback=feedback
+    )
+
 async def submit_verdict(
     run_id: str,
     status: str,
@@ -135,6 +223,18 @@ async def submit_verdict(
             run_id=run_id,
             status=clean_status,
             detail=REJECT_FEEDBACK_REQUIRED_MESSAGE,
+        )
+
+    # No live pause, but the carousel is ready: the review notification failed,
+    # so the dispatcher never reached `await_human_review`. There is nothing to
+    # claim and nothing to answer - but the orchestrator's review phase routes
+    # a verdict it finds in session state, so record one there and re-enter the
+    # run. Without this the console showed a finished carousel it could not act
+    # on, and any pending row still lying about was a STALE one from an earlier
+    # round whose function call had already been answered.
+    if await _halted_awaiting_review(run_id):
+        return await _decide_without_pause(
+            run_id, clean_status, clean_feedback, reviewer=reviewer, source=source
         )
 
     try:

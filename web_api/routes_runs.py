@@ -39,6 +39,7 @@ from app.runs.service import (
 )
 from app.services import db
 from app.state import (
+    K_REVIEW_NOTICE_FAILED,
     AGENT_CTA,
     AGENT_FEEDBACK_ROUTER,
     AGENT_FIRST_PAGE_VISUAL,
@@ -340,6 +341,10 @@ async def get_run(
         # not pending -> pending again. Any UI that reads this once will get
         # stuck showing the wrong thing.
         "pending_review": pending is not None,
+        # The carousel is ready but the reviewer could not be told. The console
+        # can still decide it - this only changes what the page SAYS, so the
+        # reviewer knows Telegram never got the message.
+        "notice_failed": bool(state.get(K_REVIEW_NOTICE_FAILED)),
     }
 
 

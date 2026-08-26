@@ -55,6 +55,7 @@ from app.config import settings
 from app.schemas import NewsItem, QAReport, ReworkPlan, Verdict
 from app.services import db
 from app.state import (
+    K_REVIEW_NOTICE_FAILED,
     AGENT_CTA,
     AGENT_FEEDBACK_ROUTER,
     AGENT_FIRST_PAGE_VISUAL,
@@ -557,7 +558,13 @@ class CarouselOrchestrator(BaseAgent):
                 yield event
             if holder["paused"]:
                 # Mail sent; invocation ends here. K_PHASE stays "review" so
-                # the resume re-enters this handler.
+                # the resume re-enters this handler. Clear any earlier
+                # notification failure - it is no longer true.
+                yield self._progress(
+                    ctx,
+                    "[review] review request sent; waiting for a human.",
+                    {K_REVIEW_NOTICE_FAILED: False},
+                )
                 logger.info(
                     "[%s] paused for human review (run %s).",
                     self.name,
@@ -566,12 +573,24 @@ class CarouselOrchestrator(BaseAgent):
                 return
             verdict = _safe_model(state, K_VERDICT, Verdict)
             if verdict is None:
+                # The carousel is FINISHED and reviewable - QA passed and the
+                # bundle is assembled. The only thing that failed is telling
+                # the reviewer about it. So the honest status is "a human is
+                # needed", not "running" (nothing is) and not "failed" (the
+                # work is done and waiting).
+                #
+                # Recording it as running left the console showing a live task
+                # forever, with no way to act on a carousel that was ready.
                 holder["halted"] = True
                 yield self._progress(
                     ctx,
-                    "[review] dispatcher finished without pausing or recording "
-                    "a verdict (review mail failure?) - halting; phase stays "
-                    "'review', re-run the pipeline to retry.",
+                    "[review] the carousel is ready but the review "
+                    "notification could not be sent - halting at 'review'. "
+                    "Decide it in the console, or resume to retry the notice.",
+                    {K_REVIEW_NOTICE_FAILED: True},
+                )
+                await self._record_phase_quietly(
+                    state, PHASE_REVIEW, status=db.RUN_STATUS_AWAITING_REVIEW
                 )
                 return
 

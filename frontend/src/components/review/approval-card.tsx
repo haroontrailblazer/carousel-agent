@@ -172,7 +172,11 @@ export function ApprovalCard({
   // for - it is derived from the phase machine, and only the review phase
   // sets awaiting_review. During rework it is running; after a failed rework,
   // failed or interrupted.
-  if (run.pending_review && run.status !== "awaiting_review") {
+  if (
+    run.pending_review &&
+    run.status !== "awaiting_review" &&
+    !run.notice_failed
+  ) {
     const stopped =
       run.status === "failed" ||
       run.status === "cancelled" ||
@@ -214,6 +218,20 @@ export function ApprovalCard({
         {run.review_round > 1 && <MutedChip>Round {run.review_round}</MutedChip>}
         {run.qa.passed === true && <Chip tone="qa">QA passed</Chip>}
       </div>
+
+      {run.notice_failed && (
+        <p
+          className="mb-4 rounded-[var(--radius-md)] px-3 py-2 text-sm"
+          style={{
+            background: "var(--phase-failed-soft)",
+            color: "var(--phase-failed-fg)",
+          }}
+        >
+          The carousel is ready, but the review notification could not be sent
+          — Telegram was not told about it. Nothing is wrong with the slides;
+          decide here, or resume the task from the header to retry the notice.
+        </p>
+      )}
 
       {!publishConfigured && (
         <p

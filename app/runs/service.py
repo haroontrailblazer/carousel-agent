@@ -306,13 +306,33 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
             user_id=PIPELINE_USER_ID,
             new_message=message,
         )
-        status = (
-            db.RUN_STATUS_AWAITING_REVIEW
-            if result["paused"]
-            else db.RUN_STATUS_DONE
-            if result.get("phase") == "done"
-            else db.RUN_STATUS_RUNNING
-        )
+        if result["paused"]:
+            status = db.RUN_STATUS_AWAITING_REVIEW
+        elif result.get("phase") == "done":
+            status = db.RUN_STATUS_DONE
+        else:
+            # The invocation ENDED without pausing and without reaching done -
+            # the orchestrator halted mid-phase. Recording RUNNING here was
+            # wrong twice over: nothing was running, so the console showed a
+            # live task forever with a pulsing trace and a Stop button that
+            # answered "not running"; and it overwrote whatever status the
+            # halting phase had just decided for itself.
+            #
+            # So respect a status the orchestrator already moved off running
+            # (the review-notice halt sets awaiting_review, because the
+            # carousel is ready and a human IS needed), and otherwise call it
+            # what it is: stopped part-way, and resumable.
+            current = ""
+            try:
+                row = await db.get_run(run_id)
+                current = str((row or {}).get("status") or "")
+            except Exception as exc:  # pragma: no cover - status read is advisory
+                logger.warning("Could not re-read status for %s: %s", run_id, exc)
+            status = (
+                current
+                if current and current != db.RUN_STATUS_RUNNING
+                else db.RUN_STATUS_INTERRUPTED
+            )
         await db.set_run_status(run_id, status)
         await record_event(
             run_id,
@@ -321,7 +341,9 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
             text=(
                 "Waiting for your review."
                 if result["paused"]
-                else f"Run finished ({status})."
+                else "Run finished."
+                if status == db.RUN_STATUS_DONE
+                else f"Run stopped ({status})."
             ),
             data={"status": status, "paused": result["paused"]},
         )
@@ -457,14 +479,51 @@ async def cancel_run(run_id: str) -> bool:
     """
     from app.review.resume import cancel_resume
 
-    stopped = False
     task = _run_tasks.get(run_id)
+    stopped = False
     if task is not None and not task.done():
         task.cancel()
         stopped = True
     if cancel_resume(run_id):
         stopped = True
-    return stopped
+    if stopped:
+        return True
+
+    # Nothing in either registry - but the run may still be RECORDED as
+    # running. Both registries are per-process and in-memory, so a restart
+    # empties them while the database keeps whatever the run last wrote. That
+    # left a phantom: a task pulsing "running" in the console that Stop
+    # refused to touch, answering "that run is not currently running" while
+    # the page insisted it was.
+    #
+    # This deployment is single-instance by design (see the run bus and the
+    # startup reconcile, which rely on the same fact), so if this process is
+    # not driving the run, nothing is. The status is stale, and the honest
+    # thing Stop can do is say so.
+    run = await db.get_run(run_id)
+    if run is None:
+        return False
+    if str(run.get("status") or "") != db.RUN_STATUS_RUNNING:
+        return False
+
+    await db.set_run_status(run_id, db.RUN_STATUS_CANCELLED)
+    try:
+        seq = await db.max_run_seq(run_id)
+        await record_event(
+            run_id,
+            seq + 1,
+            KIND_TERMINAL,
+            text=(
+                "Stopped. No agent was still running for this task - the "
+                "service had restarted since it started - so its status was "
+                "corrected rather than a process being cancelled."
+            ),
+            data={"status": db.RUN_STATUS_CANCELLED, "stale": True},
+        )
+    except Exception as exc:  # pragma: no cover - the status change is the point
+        logger.warning("Could not record the stop event for %s: %s", run_id, exc)
+    logger.info("Stopped stale run %s (no in-process task).", run_id)
+    return True
 
 
 async def drain_run_tasks(timeout: float = 10.0) -> None:
