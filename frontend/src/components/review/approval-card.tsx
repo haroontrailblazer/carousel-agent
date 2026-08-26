@@ -28,7 +28,10 @@ import type { RunDetail } from "@/lib/types"
  *                         be wrong, and showing the buttons would be worse.
  *
  * And it is not monotonic: a failed resume restores the pending row, so a run
- * can go pending -> not pending -> pending again.
+ * can go pending -> not pending -> pending again. Which is why a pending row
+ * alone is NOT enough to show the buttons - see state 1b. The buttons appear
+ * only when `status` is awaiting_review, because only the review phase sets
+ * that, so they cannot come back mid-rework or after a rework has died.
  */
 export function ApprovalCard({
   run,
@@ -150,6 +153,50 @@ export function ApprovalCard({
             <p className="text-sm text-[var(--muted-foreground)]">
               This task was just decided — possibly from Telegram. The pipeline
               is picking it up now.
+            </p>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  // --- state 1b: the pending row is back, but nobody is waiting on you ----
+  //
+  // A failed resume RESTORES the pending_reviews row so a verdict can be
+  // re-submitted. That is right for the database and wrong for this card: on
+  // its own it put "Waiting for your review" and Approve & publish back on
+  // screen for a run whose rework had just died. Approving there would have
+  // published a carousel the pipeline never finished reworking.
+  //
+  // `status` is the authority on whether a human is actually being waited
+  // for - it is derived from the phase machine, and only the review phase
+  // sets awaiting_review. During rework it is running; after a failed rework,
+  // failed or interrupted.
+  if (run.pending_review && run.status !== "awaiting_review") {
+    const stopped =
+      run.status === "failed" ||
+      run.status === "cancelled" ||
+      run.status === "interrupted"
+    return (
+      <Card className="p-5">
+        <div className="flex items-start gap-3">
+          {stopped ? (
+            <Hourglass className="mt-0.5 size-5 text-[var(--muted-foreground)]" />
+          ) : (
+            <Loader2 className="mt-0.5 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
+          )}
+          <div className="min-w-0">
+            <p className="font-medium">
+              {stopped
+                ? "The rework stopped before finishing"
+                : "Reworking your feedback"}
+            </p>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              {stopped
+                ? "Nothing to approve yet - this task did not get back to a " +
+                  "reviewable carousel. Resume or re-run it from the header."
+                : "The agents are applying your feedback. This comes back for " +
+                  "review - here and on Telegram - once they finish."}
             </p>
           </div>
         </div>

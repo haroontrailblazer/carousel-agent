@@ -746,6 +746,52 @@ async def interrupted_run_candidates(min_idle_seconds: int = 180) -> list[dict]:
     return [_run_row(r) for r in rows]
 
 
+
+async def rewind_session_for_restart(
+    run_id: str, app_name: str, user_id: str, phase: str
+) -> bool:
+    """Clear a run's rework budget and put it back into ``phase``.
+
+    What "Re-run" needs in order to mean "try the rework again" rather than
+    "start a brand new task":
+
+    * ``rework_round`` back to 0, so the round cap that stopped the run is not
+      still exhausted the instant it restarts.
+    * ``phase`` back to where the work actually stopped. The rework hard stop
+      writes DONE into session state because that is what ends the
+      orchestrator's loop - so without this the resumed invocation would read
+      DONE, emit a summary and stop again immediately.
+
+    Written with one UPDATE against the session row rather than through
+    ``DatabaseSessionService``: the same read path the console already uses
+    (see ``_session_state``), for the same reason - the supported API loads
+    the event transcript and costs seconds per call.
+
+    Returns:
+        True when a session row was updated.
+    """
+    pool = await get_pool()
+    updated = await pool.fetchval(
+        """
+        UPDATE sessions
+        SET state = jsonb_set(
+                        jsonb_set(
+                            COALESCE(state, '{}'::jsonb),
+                            '{rework_round}', '0'::jsonb, true
+                        ),
+                        '{phase}', to_jsonb($4::text), true
+                    ),
+            update_time = now()
+        WHERE app_name = $1 AND user_id = $2 AND id = $3
+        RETURNING id
+        """,
+        str(app_name),
+        str(user_id),
+        str(run_id),
+        str(phase),
+    )
+    return updated is not None
+
 # ---------------------------------------------------------------------------
 # run_events - the distilled timeline the console replays
 # ---------------------------------------------------------------------------

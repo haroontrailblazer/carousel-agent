@@ -237,6 +237,26 @@ def spawn_resume(
     task.add_done_callback(_resume_tasks.discard)
 
 
+
+def cancel_resume(run_id: str) -> bool:
+    """Cancel an in-flight resume for ``run_id``. False when there is none.
+
+    Stop has to reach these tasks too. A rework triggered by a rejection runs
+    HERE, not in ``app.runs.service`` - so a Stop that only cancelled the
+    service's tasks did nothing at all during the longest, most expensive part
+    of a review cycle, which is exactly when someone reaches for it.
+
+    Cancelling raises CancelledError inside ``resume_pipeline``, whose handler
+    restores the pending_reviews row before re-raising, so the verdict stays
+    submittable afterwards.
+    """
+    cancelled = False
+    for task in list(_resume_tasks):
+        if task.get_name() == f"resume-{run_id}" and not task.done():
+            task.cancel()
+            cancelled = True
+    return cancelled
+
 async def drain_resume_tasks(timeout: float = 10.0) -> None:
     """Give in-flight resumes a moment to finish, then cancel the rest.
 
@@ -275,6 +295,7 @@ __all__ = [
     "PIPELINE_USER_ID",
     "RESUME_TIMEOUT_S",
     "build_resume_content",
+    "cancel_resume",
     "drain_resume_tasks",
     "restore_pending_review",
     "resume_pipeline",

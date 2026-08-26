@@ -32,7 +32,13 @@ from app.config import settings
 from app.runs.bus import KIND_ERROR, KIND_TERMINAL
 from app.runs.stream import consume_invocation, record_event
 from app.services import db
-from app.state import K_NEWS_ITEM, K_RUN_ID
+from app.state import (
+    K_NEWS_ITEM,
+    K_RUN_ID,
+    PHASE_DONE,
+    PHASE_GENERATE,
+    PHASE_REWORK,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -389,13 +395,76 @@ async def resume_interrupted_run(run_id: str, *, requested_by: str = "") -> bool
     return True
 
 
-async def cancel_run(run_id: str) -> bool:
-    """Cancel a run this process is driving. Returns False if it is not."""
-    task = _run_tasks.get(run_id)
-    if task is None or task.done():
+
+async def restart_run(run_id: str, *, requested_by: str = "") -> bool:
+    """Re-run a stopped task IN PLACE, with its rework budget reset.
+
+    Not a new run. Everything the task already earned - the researched story,
+    the plan, the approved copy, the rendered slides, the reviewer's feedback,
+    the whole transcript - lives in this session, and starting a fresh one
+    throws all of it away to redo work that was never the problem. When a
+    carousel dies rendering its last slide, what you want is that slide again,
+    not another twenty minutes of research.
+
+    Two things are reset before re-entering, and only two:
+
+    * ``rework_round`` to 0, because the round cap is usually WHY the run
+      stopped; leaving it exhausted would stop it again immediately.
+    * ``phase`` back to where the work stopped, because the hard stop writes
+      DONE into session state to end the orchestrator's loop.
+
+    Applies to every origin - chat, newsroom, schedule - since none of them
+    changes what a session holds.
+
+    Returns:
+        True when a restart was started; False if the run is unknown or
+        already being driven.
+    """
+    if run_id in active_run_ids():
         return False
-    task.cancel()
-    return True
+    run = await db.get_run(run_id)
+    if run is None:
+        return False
+
+    from app.review.resume import PIPELINE_USER_ID
+
+    # The phase recorded on the run is where it actually stopped; session
+    # state may say DONE because that is how the loop was ended.
+    phase = str(run.get("phase") or "") or PHASE_GENERATE
+    if phase == PHASE_DONE:
+        phase = PHASE_REWORK
+    await db.rewind_session_for_restart(
+        run_id, settings.app_name, PIPELINE_USER_ID, phase
+    )
+    logger.info(
+        "Restarting run %s in place at phase '%s' (rework budget reset) for %s.",
+        run_id,
+        phase,
+        requested_by or "unknown",
+    )
+    return await resume_interrupted_run(run_id, requested_by=requested_by)
+
+async def cancel_run(run_id: str) -> bool:
+    """Stop whatever this process is running for ``run_id``.
+
+    TWO task registries, because a run is driven from two places: a fresh or
+    resumed invocation lives in ``_run_tasks`` here, while the rework that
+    follows a rejection lives in ``app.review.resume._resume_tasks``. Checking
+    only the first made Stop silently do nothing during a rework - the button
+    reported success and the agents kept running.
+
+    Returns False when nothing was running, which the API turns into a 409.
+    """
+    from app.review.resume import cancel_resume
+
+    stopped = False
+    task = _run_tasks.get(run_id)
+    if task is not None and not task.done():
+        task.cancel()
+        stopped = True
+    if cancel_resume(run_id):
+        stopped = True
+    return stopped
 
 
 async def drain_run_tasks(timeout: float = 10.0) -> None:

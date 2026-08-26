@@ -33,6 +33,7 @@ from app.runs.service import (
     RunRefused,
     active_run_ids,
     cancel_run,
+    restart_run,
     resume_interrupted_run,
     start_run,
 )
@@ -712,119 +713,45 @@ async def resume_run(
 async def rerun(
     run_id: str, identity: Identity = Depends(current_identity)
 ) -> dict:
-    """Start a NEW task from the same input as an existing one.
+    """Re-run a stopped task IN PLACE, with its rework budget reset.
 
-    A new run rather than a reset of the old one: the failed attempt and its
-    trace are evidence worth keeping, and re-entering a run that failed
-    halfway would resume from wherever it broke rather than starting clean.
-    Resume already exists for the case where continuing IS what you want.
+    This used to start a brand new task from the same story. That threw away
+    everything the run had already earned - the researched story, the plan,
+    the approved copy, the slides that DID render, the reviewer's feedback and
+    the whole transcript - to redo work that was never what failed. When a
+    carousel dies rendering its last slide, the useful action is that slide
+    again, not another twenty minutes of research and another entry in the
+    task list for the same story.
 
-    The original input is recovered in the order it is most likely to be
-    faithful: the old session's stored NewsItem first, then the queued story it
-    came from, then - for a typed topic - the run's title.
+    So it now reuses the session: ``rework_round`` back to 0 (the round cap is
+    usually why it stopped) and the phase rewound to where the work actually
+    stopped, then the same run is re-entered. The returned ``run_id`` is the
+    one that was passed in.
+
+    Resume and Re-run are still different: Resume continues with the budget as
+    it stands, Re-run gives the task a fresh budget to spend.
     """
     run = await db.get_run(run_id)
     if run is None:
         raise HTTPException(404, {"code": "no_such_run", "message": "Unknown task."})
 
-    news: Optional[dict] = None
-    state = await _session_state(run_id)
-    if state.get(K_NEWS_ITEM):
-        news = dict(state[K_NEWS_ITEM])
-    elif run.get("news_id"):
-        news = await db.news_payload(str(run["news_id"]))
-
-    source = str(run.get("source") or "") or ("queue" if news else "topic")
-    topic = "" if news else str(run.get("title") or "")
-    if not news and len(topic.strip()) < 3:
-        raise HTTPException(
-            422,
-            {
-                "code": "nothing_to_rerun",
-                "message": "The original input for this task is gone, so there "
-                           "is nothing to re-run. Start a new one instead.",
-            },
-        )
-
     try:
-        started = await start_run(
-            source="queue" if news else "topic",  # type: ignore[arg-type]
-            topic=topic,
-            news=news,
-            requested_by=identity.email,
-        )
+        started = await restart_run(run_id, requested_by=identity.email)
     except RunRefused as exc:
         code = 409 if exc.code in ("too_many_active_runs", "daily_limit_reached") else 400
         raise HTTPException(code, {"code": exc.code, "message": exc.detail}) from exc
 
-    logger.info(
-        "Re-ran %s as %s (source %s) for %s.",
-        run_id,
-        started.run_id,
-        source,
-        identity.email,
-    )
-    return {"run_id": started.run_id, "title": started.title, "from": run_id}
-
-
-@router.delete("/runs/{run_id}")
-async def delete_run(
-    run_id: str, identity: Identity = Depends(current_identity)
-) -> dict:
-    """Delete a finished task and everything belonging to it.
-
-    Refused while a task is running, in this process or by phase. Deleting a
-    live run would strand its asyncio task writing into rows that no longer
-    exist, and the artifacts it is midway through uploading would be
-    unreachable but still billed for.
-    """
-    run = await db.get_run(run_id)
-    if run is None:
-        raise HTTPException(404, {"code": "no_such_run", "message": "Unknown task."})
-
-    if run_id in active_run_ids():
+    if not started:
         raise HTTPException(
             409,
             {
                 "code": "run_is_active",
-                "message": "That task is running right now. Cancel it first.",
-            },
-        )
-    if run.get("status") in (db.RUN_STATUS_RUNNING, db.RUN_STATUS_AWAITING_REVIEW):
-        raise HTTPException(
-            409,
-            {
-                "code": "run_not_finished",
-                "message": "Only finished tasks can be deleted. This one is "
-                           f"{run.get('status')}.",
+                "message": "That task is already running.",
             },
         )
 
-    # Storage FIRST, then the rows.
-    #
-    # If the object purge fails we still have the rows, so the task remains
-    # visible and deletable - the user can try again. Doing it the other way
-    # round and failing leaves media in the bucket with nothing left in the
-    # database pointing at it: unreferenced, unreachable, and still billed for.
-    try:
-        removed_files = await runtime.artifact_service().delete_session_artifacts_async(
-            settings.app_name, PIPELINE_USER_ID, run_id
-        )
-    except Exception as exc:
-        logger.exception("Could not delete stored artifacts for %s.", run_id)
-        raise HTTPException(
-            502,
-            {
-                "code": "storage_delete_failed",
-                "message": f"The task's media could not be deleted ({exc}). "
-                           "Nothing was removed; try again.",
-            },
-        ) from exc
-
-    counts = await db.delete_run(settings.app_name, PIPELINE_USER_ID, run_id)
-    counts["artifacts"] = removed_files
-    logger.warning("Task %s deleted by %s: %s", run_id, identity.email, counts)
-    return {"result": "deleted", "run_id": run_id, "removed": counts}
+    logger.info("Re-ran %s in place for %s.", run_id, identity.email)
+    return {"result": "restarting", "run_id": run_id}
 
 
 @router.post("/runs/{run_id}/cancel")

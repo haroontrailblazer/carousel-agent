@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router"
-import { RotateCcw, Trash2 } from "lucide-react"
+import { RotateCcw, Square, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { DeleteTaskDialog } from "@/components/run/delete-task-dialog"
@@ -14,14 +14,18 @@ import type { RunStatus } from "@/lib/types"
  *
  * Which actions appear is driven by status rather than shown-and-disabled:
  *
- *   interrupted         -> Resume and Delete
- *   failed / cancelled  -> Re-run and Delete
- *   anything else       -> nothing
+ *   running                     -> Stop
+ *   interrupted / cancelled     -> Resume and Delete
+ *   failed / cancelled          -> Re-run and Delete
+ *   anything else               -> nothing
  *
- * Resume and re-run are genuinely different and both earn their place. Resume
- * continues a task whose earlier phases succeeded, so the expensive generate
- * work is not repeated. Re-run starts clean from the same story, which is what
- * you want when the task failed rather than merely stopped.
+ * Resume and Re-run both continue the SAME task - neither starts a new one -
+ * and the difference is the rework budget. Resume picks the phase back up with
+ * the budget as it stands. Re-run resets the round cap to zero first, which is
+ * what you want when hitting that cap is why the task stopped.
+ *
+ * A stopped task offers both because they answer different questions: "carry
+ * on from here" and "give it another go at the part that kept failing".
  *
  * One component, used in the task list, the trace page and the review page -
  * three places where "this task is stuck, do something about it" is the
@@ -89,11 +93,26 @@ export function TaskActions({
   const rerun = useMutation({
     mutationFn: () => post<{ run_id: string }>(`/api/runs/${runId}/rerun`),
     onSuccess: (data) => {
-      toast.success("Your carousel is cooking", { description: title ?? undefined })
+      toast.success("Trying again", {
+        description: "Same task, rework budget reset.",
+      })
       refresh()
+      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
+      void queryClient.invalidateQueries({ queryKey: ["trace", runId] })
+      // Same id now - a re-run continues this task rather than opening one.
       navigate(`/tasks/${data.run_id}`)
     },
     onError: (e) => fail(e, "Could not re-run that task."),
+  })
+
+  const stop = useMutation({
+    mutationFn: () => post(`/api/runs/${runId}/cancel`),
+    onSuccess: () => {
+      toast.success("Stopping", { description: "The agents are being cancelled." })
+      refresh()
+      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
+    },
+    onError: (e) => fail(e, "Could not stop that task."),
   })
 
   const remove = useMutation({
@@ -109,19 +128,38 @@ export function TaskActions({
     onError: (e) => fail(e, "Could not delete that task."),
   })
 
-  const canResume = status === "interrupted"
+  const canStop = status === "running"
+  // A stopped task is resumable for the same reason an interrupted one is:
+  // the orchestrator re-reads its phase from persisted state and re-enters it.
+  const canResume = status === "interrupted" || status === "cancelled"
   const canRerun = status === "failed" || status === "cancelled"
   const canDelete = canResume || canRerun || status === "done"
-  if (!canResume && !canRerun && !canDelete) return null
+  if (!canStop && !canResume && !canRerun && !canDelete) return null
 
-  const busy = resume.isPending || rerun.isPending || remove.isPending
-  const stop = (e: React.MouseEvent) => {
+  const busy =
+    resume.isPending || rerun.isPending || remove.isPending || stop.isPending
+  const swallow = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
   }
 
   return (
-    <span className="flex items-center gap-1" onClick={stop}>
+    <span className="flex items-center gap-1" onClick={swallow}>
+      {canStop && (
+        <Button
+          variant="ghost"
+          size={size}
+          disabled={busy}
+          title="Stop the agents now. The task can be resumed afterwards."
+          onClick={(e) => {
+            swallow(e)
+            stop.mutate()
+          }}
+        >
+          <Square /> {stop.isPending ? "Stopping…" : "Stop"}
+        </Button>
+      )}
+
       {canResume && (
         <Button
           variant="default"
@@ -129,7 +167,7 @@ export function TaskActions({
           disabled={busy}
           title="Resume from the phase it stopped in"
           onClick={(e) => {
-            stop(e)
+            swallow(e)
             resume.mutate()
           }}
         >
@@ -144,7 +182,7 @@ export function TaskActions({
           disabled={busy}
           title="Start a new task from the same story"
           onClick={(e) => {
-            stop(e)
+            swallow(e)
             rerun.mutate()
           }}
         >
@@ -160,7 +198,7 @@ export function TaskActions({
             disabled={busy}
             title="Delete this task, its trace and its media"
             onClick={(e) => {
-              stop(e)
+              swallow(e)
               setConfirming(true)
             }}
           >
