@@ -479,8 +479,9 @@ other slide, never write body copy or captions, and never AI-generate media.
    When the news title is one or more URLs, derive a clean subject query from
    the research brief and URL slug, such as "Niu Lai animated film official
    still poster". Prefer attached official or trusted media pages over an
-   unverified blog OG image. Reject text-heavy generic graphics that do not
-   visibly show the real subject.
+   unverified blog OG image. Reject text-heavy social/OG banners that merely
+   repeat the article title; choose a subject-led photo or frame that visibly
+   shows the real person, product, place, or event.
 2. If it returned a video: call download_and_trim with that URL to get a
    local short clip. If the download fails (403s are common on video hosts),
    try at most ONE more video: another plausible URL from media_urls or one
@@ -526,6 +527,9 @@ instruction and rebuild the cover accordingly:
 - "bad image / wrong media" - pick the next ranked image_candidates entry or
   rerun find_source_clip with a sharper topic + launch/demo/current query;
   never reuse the same merely available image, then rebuild.
+- A video being playable is not proof that it is relevant. Reject search hits
+  whose title has no distinctive person, company, product, or event term from
+  the story (for example, unrelated trending anime for a hardware story).
 
 Always finish rework by calling build_cover again so the CoverSpec in state
 and the cover artifacts are replaced with the corrected version.

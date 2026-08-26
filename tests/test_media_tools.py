@@ -13,6 +13,86 @@ from app.tools.brand_layout import ACCENT_GREEN, HEADLINE_FONT_SIZE, headline_fo
 
 
 class FindSourceClipTests(unittest.TestCase):
+    def test_article_photo_outranks_text_only_social_banner(self) -> None:
+        news = {
+            "title": "OpenAI Broadcom Jalapeno inference chip",
+            "source_url": "https://openai.com/index/jalapeno-chip/",
+        }
+        banner = media_tools._rank_candidate(
+            media_tools._MediaCandidate(
+                "https://images.example/openai-jalapeno-image-16_9.png",
+                "image",
+                58,
+                "source_page",
+                news["source_url"],
+            ),
+            news,
+            news["source_url"],
+        )
+        photo = media_tools._rank_candidate(
+            media_tools._MediaCandidate(
+                "https://images.example/openai-jalapeno-chip-photo.png",
+                "image",
+                58,
+                "source_page",
+                news["source_url"],
+            ),
+            news,
+            news["source_url"],
+        )
+
+        self.assertGreater(photo.score, banner.score)
+        self.assertIn("banner/social card", banner.reason)
+
+    def test_page_scrape_includes_real_article_images_not_only_og_card(self) -> None:
+        page = "https://official.example.com/jalapeno"
+        banner = "https://cdn.example.com/jalapeno-16_9.png"
+        photo = "https://cdn.example.com/sam-hock-jalapeno.png"
+        response = Mock()
+        response.headers = {"Content-Type": "text/html"}
+        response.text = (
+            f'<meta property="og:image" content="{banner}">'
+            f'<picture><source srcset="{photo}?w=1024 1024w, {photo}?w=2048 2048w">'
+            f'<img data-src="{photo}" alt="Sam Altman holding the unveiled chip"></picture>'
+        )
+        response.raise_for_status.return_value = None
+
+        with patch.object(media_tools.requests, "get", return_value=response):
+            found = media_tools._scrape_page_media(page)
+
+        urls = [item[0] for item in found]
+        self.assertIn(banner, urls)
+        self.assertIn(photo, urls)
+        self.assertIn(f"{photo}?w=2048", urls)
+
+    def test_video_search_skips_unrelated_playable_anime(self) -> None:
+        ydl = Mock()
+        ydl.extract_info.return_value = {
+            "entries": [
+                {
+                    "webpage_url": "https://video.example/anime",
+                    "duration": 30,
+                    "title": "OpenAI Sora trending anime fight scene",
+                },
+                {
+                    "webpage_url": "https://video.example/jalapeno",
+                    "duration": 20,
+                    "title": "OpenAI and Broadcom unveil Jalapeno chip",
+                },
+            ]
+        }
+        ydl_context = Mock()
+        ydl_context.__enter__ = Mock(return_value=ydl)
+        ydl_context.__exit__ = Mock(return_value=False)
+
+        with patch.object(media_tools, "YoutubeDL", return_value=ydl_context):
+            result = media_tools._search_video_online(
+                "OpenAI Broadcom Jalapeno official launch"
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["url"], "https://video.example/jalapeno")
+
     def test_attached_photo_page_is_scraped_for_its_real_image(self) -> None:
         page = "https://movie.douban.com/photos/photo/2934982707/"
         image = "https://img.doubanio.com/view/photo/l/public/p2934982707.jpg"
@@ -161,6 +241,24 @@ class ImageQualityTests(unittest.TestCase):
                     temp_dir,
                 )
             self.assertEqual(list(Path(temp_dir).rglob("img-*")), [])
+
+    def test_wide_still_fit_preserves_both_horizontal_edges(self) -> None:
+        source = Image.new("RGB", (1600, 900), (20, 30, 200))
+        source.paste((240, 20, 20), (0, 0, 120, source.height))
+        source.paste((20, 220, 40), (source.width - 120, 0, source.width, source.height))
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "wide.png"
+            source.save(source_path)
+            result_path = media_tools._prepare_still_cover(source_path, Path(temp_dir))
+            with Image.open(result_path) as fitted:
+                y = round((fitted.height - round(fitted.width * 0.96 * 900 / 1600)) * 0.12)
+                sample_y = y + 300
+                left = fitted.getpixel((45, sample_y))
+                right = fitted.getpixel((fitted.width - 46, sample_y))
+
+        self.assertGreater(left[0], left[2])
+        self.assertGreater(right[1], right[2])
 
 
 class CoverTypographyTests(unittest.TestCase):

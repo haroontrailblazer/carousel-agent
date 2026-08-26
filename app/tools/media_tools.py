@@ -10,10 +10,10 @@ Three jobs (see docs/CONTRACTS.md file map):
 2. ``download_and_trim(url)``   - fetch the clip via the yt-dlp Python API and
    trim it into the configured cover window (settings.cover_clip_min_s..max_s,
    default 4-15 s), silent H.264 mp4.
-3. ``compose_cover(...)``       - scale/center-crop the media to 1080x1350,
-   composite the STRANGE-COVER overlay template plus a Pillow-rendered title
-   block (warm-white, condensed extra-bold uppercase, solid green highlight
-   phrase) and produce the final cover mp4 + first-frame poster PNG.
+3. ``compose_cover(...)``       - subject-preserving fit over a blurred 4:5
+   fill, composite the STRANGE-COVER overlay template plus a Pillow-rendered
+   title block (warm-white, condensed extra-bold uppercase, solid green
+   highlight phrase), and produce the final cover mp4 + first-frame poster.
 
 The cover is NEVER AI-generated (skills/cover-style.md): a sourced clip, or -
 fallback - the update's own image turned into a 6 s slow-zoom video.
@@ -41,7 +41,7 @@ from typing import Any, Optional
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, download_range_func
 
@@ -128,6 +128,15 @@ _REPUTABLE_VISUAL_SITES = {
 _BAD_VISUAL_TOKENS = {
     "avatar", "badge", "favicon", "icon", "logo", "placeholder", "sprite",
     "tracking", "transparent",
+}
+_BANNER_VISUAL_MARKERS = {
+    "16_9", "16-9", "banner", "og-image", "og_image", "opengraph",
+    "share-card", "share_card", "social-card", "social_card",
+}
+_VIDEO_QUERY_NOISE = {
+    "announcement", "clip", "cover", "current", "demo", "event", "image",
+    "keynote", "launch", "latest", "news", "official", "photo", "release",
+    "trending", "video", "visual",
 }
 
 
@@ -293,6 +302,12 @@ _IFRAME_SRC_RE = re.compile(r"""<iframe\b[^>]*\bsrc\s*=\s*["']([^"']+)["']""", r
 _HREF_MEDIA_RE = re.compile(
     r"""href\s*=\s*["']([^"']+\.(?:mp4|mov|webm|m4v))(?:\?[^"']*)?["']""", re.I
 )
+_IMAGE_TAG_RE = re.compile(r"<(?:img|source)\b[^>]*>", re.I)
+_IMAGE_SRC_RE = re.compile(
+    r"""(?:src|data-src|data-lazy-src)\s*=\s*["']([^"']+)["']""", re.I
+)
+_IMAGE_SRCSET_RE = re.compile(r"""srcset\s*=\s*["']([^"']+)["']""", re.I)
+_IMAGE_ALT_RE = re.compile(r"""(?:alt|title)\s*=\s*["']([^"']+)["']""", re.I)
 
 # meta key -> (kind, score)
 _META_SCORES: dict[str, tuple[str, int]] = {
@@ -350,6 +365,27 @@ def _scrape_page_media(page_url: str) -> list[tuple[str, str, int]]:
             add(raw, "video", 80)
     for raw in _HREF_MEDIA_RE.findall(text):
         add(raw, "video", 82)
+
+    # Social/OG cards are often text-only banners. Also inspect the actual
+    # article images so a subject-led photo can compete with the page's share
+    # card. Modern sites commonly lazy-load via data-src or <picture> srcset.
+    for tag in _IMAGE_TAG_RE.findall(text):
+        alt_match = _IMAGE_ALT_RE.search(tag)
+        alt = html.unescape(alt_match.group(1)).lower() if alt_match else ""
+        score = 48
+        if any(word in alt for word in ("photo", "holding", "presents", "unveil")):
+            score += 5
+        raw_urls = list(_IMAGE_SRC_RE.findall(tag))
+        for srcset in _IMAGE_SRCSET_RE.findall(tag):
+            raw_urls.extend(
+                item.strip().split()[0]
+                for item in html.unescape(srcset).split(",")
+                if item.strip()
+            )
+        for raw in raw_urls:
+            resolved = urljoin(page_url, html.unescape(raw.strip()))
+            if _classify_url(resolved) == "image":
+                add(resolved, "image", score)
     return found
 
 
@@ -381,6 +417,41 @@ def _is_reputable_visual_site(site: str) -> bool:
         site == trusted or site.endswith("." + trusted)
         for trusted in _REPUTABLE_VISUAL_SITES
     )
+
+
+def _context_has_marker(context: str, marker: str) -> bool:
+    """Match URL/slug markers without treating ``icon`` as part of ``silicon``."""
+    if any(char in marker for char in "_-"):
+        return marker in context
+    return re.search(
+        rf"(?<![a-z0-9]){re.escape(marker)}(?![a-z0-9])",
+        context,
+    ) is not None
+
+
+def _meaningful_search_tokens(text: str) -> set[str]:
+    """Return distinctive terms suitable for rejecting unrelated video hits."""
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", (text or "").lower())
+        if len(token) >= 3
+        and token not in _TOPIC_STOPWORDS
+        and token not in _VIDEO_QUERY_NOISE
+    }
+
+
+def _video_title_matches_topic(title: str, query: str) -> bool:
+    """Reject a playable search hit when its title has no topic connection."""
+    query_tokens = _meaningful_search_tokens(query)
+    if not query_tokens:
+        return True
+    title_tokens = _meaningful_search_tokens(title)
+    overlap = len(query_tokens & title_tokens)
+    # Rich queries normally carry a named company/person plus a product or
+    # event. Requiring two signals prevents a broad shared word such as
+    # "OpenAI" from admitting an unrelated Sora/anime trend result.
+    required = 2 if len(query_tokens) >= 3 else 1
+    return overlap >= required
 
 
 def _default_visual_query(news: dict) -> str:
@@ -424,7 +495,10 @@ def _rank_candidate(
     score = candidate.score
     reasons = [candidate.reason] if candidate.reason else []
     context = f"{candidate.url} {candidate.context_url}".lower()
-    overlap = sorted(token for token in _topic_tokens(news) if token in context)
+    overlap = sorted(
+        token for token in _topic_tokens(news)
+        if _context_has_marker(context, token)
+    )
     if overlap:
         bonus = min(len(overlap) * 3, 12)
         score += bonus
@@ -442,16 +516,31 @@ def _rank_candidate(
         score -= 30
         reasons.append("unverified blog source -30")
 
-    good = sorted(token for token in _GOOD_VISUAL_TOKENS if token in context)
+    good = sorted(
+        token for token in _GOOD_VISUAL_TOKENS
+        if _context_has_marker(context, token)
+    )
     if good:
         bonus = min(len(good) * 2, 8)
         score += bonus
         reasons.append(f"visual signal +{bonus}")
-    bad = sorted(token for token in _BAD_VISUAL_TOKENS if token in context)
+    bad = sorted(
+        token for token in _BAD_VISUAL_TOKENS
+        if _context_has_marker(context, token)
+    )
     if bad:
         penalty = min(len(bad) * 12, 36)
         score -= penalty
         reasons.append(f"generic asset -{penalty}")
+
+    banner = sorted(
+        marker for marker in _BANNER_VISUAL_MARKERS
+        if _context_has_marker(context, marker)
+    )
+    if banner:
+        penalty = min(len(banner) * 18, 36)
+        score -= penalty
+        reasons.append(f"banner/social card -{penalty}")
 
     return _MediaCandidate(
         url=candidate.url,
@@ -484,9 +573,10 @@ def _search_trending_pages(
     date_hint = published[:10] if published else str(datetime.now(timezone.utc).date())
     query = (
         f'As of {date_hint}, find the newest prominent visual coverage for "{topic}". '
-        "Prefer an official launch image, product demo screenshot, keynote still, "
-        "or current reputable news image. Return pages that visibly carry the "
-        "relevant image. Avoid generic stock art, logos, icons, and old unrelated media."
+        "Prefer an official subject-led launch photo, product demo screenshot, "
+        "keynote still, or current reputable news photo. Return pages that visibly "
+        "carry a real person, product, place, or event from the story. Avoid text-only "
+        "social banners, generic stock art, logos, icons, and old unrelated media."
     )
     try:
         # Local import keeps the media layer usable in minimal/offline contexts.
@@ -535,12 +625,15 @@ def _search_video_online(query: str) -> Optional[dict[str, Any]]:
     for entry in (info or {}).get("entries") or []:
         if not entry:
             continue
+        title = str(entry.get("title") or "").strip()
+        if not _video_title_matches_topic(title, query):
+            continue
         url = str(entry.get("webpage_url") or entry.get("url") or "").strip()
         if url:
             return {
                 "url": url,
                 "duration": float(entry.get("duration") or 0.0),
-                "title": str(entry.get("title") or ""),
+                "title": title,
             }
     return None
 
@@ -722,6 +815,11 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
         probes += 1
         info = _probe_with_ytdlp(candidate.url)
         if info is not None:
+            if candidate.origin == "trend_search" and not _video_title_matches_topic(
+                str(info.get("title") or ""),
+                search_query.strip() or _default_visual_query(news),
+            ):
+                continue
             return result(
                 True,
                 candidate.url,
@@ -740,7 +838,7 @@ def find_source_clip(news: dict, search_query: str = "") -> dict:
 
     # No sourced video played - hunt the web for an event/announcement clip
     # (the original spec: "a small video piece on that event from web").
-    query = search_query.strip() or str(news.get("title") or "").strip()
+    query = search_query.strip() or _default_visual_query(news)
     searched = _search_video_online(query)
     if searched is not None:
         return result(
@@ -1193,19 +1291,46 @@ def _build_overlay_png(title: str, highlight: str, wd: Path) -> Path:
     return out
 
 
-def _center_crop_still(media_path: str, wd: Path) -> Path:
-    """Scale/center-crop a still image to 2160x2700 (2x) for smooth zoompan."""
+def _prepare_still_cover(media_path: str, wd: Path) -> Path:
+    """Fit a complete still over a softly blurred 4:5 background.
+
+    A blind center crop removes people and products from landscape news photos.
+    The foreground therefore uses a small safe inset and ``contain`` semantics;
+    only the blurred background is allowed to crop. The foreground is biased
+    toward the top so the lower cover-title reservation remains readable.
+    """
     target_w, target_h = settings.slide_width * 2, settings.slide_height * 2
     with Image.open(media_path) as img:
-        img = img.convert("RGB")
-        scale = max(target_w / img.width, target_h / img.height)
-        new_size = (max(round(img.width * scale), target_w), max(round(img.height * scale), target_h))
-        img = img.resize(new_size, Image.Resampling.LANCZOS)
-        left = (img.width - target_w) // 2
-        upper = (img.height - target_h) // 2
-        img = img.crop((left, upper, left + target_w, upper + target_h))
+        source = img.convert("RGB")
+
+        bg_scale = max(target_w / source.width, target_h / source.height)
+        bg_size = (
+            max(round(source.width * bg_scale), target_w),
+            max(round(source.height * bg_scale), target_h),
+        )
+        background = source.resize(bg_size, Image.Resampling.LANCZOS)
+        bg_left = (background.width - target_w) // 2
+        bg_top = (background.height - target_h) // 2
+        background = background.crop(
+            (bg_left, bg_top, bg_left + target_w, bg_top + target_h)
+        ).filter(ImageFilter.GaussianBlur(radius=48))
+
+        # Leave enough inset for the restrained zoompan below. The whole real
+        # image stays visible throughout the animation instead of losing faces
+        # or a product positioned near a landscape frame's edges.
+        fit_w, fit_h = round(target_w * 0.96), round(target_h * 0.96)
+        fg_scale = min(fit_w / source.width, fit_h / source.height)
+        fg_size = (
+            max(1, round(source.width * fg_scale)),
+            max(1, round(source.height * fg_scale)),
+        )
+        foreground = source.resize(fg_size, Image.Resampling.LANCZOS)
+        left = (target_w - foreground.width) // 2
+        spare_y = target_h - foreground.height
+        upper = max(0, round(spare_y * 0.12))
+        background.paste(foreground, (left, upper))
         out = wd / "still-base.png"
-        img.save(out)
+        background.save(out)
     return out
 
 
@@ -1214,11 +1339,12 @@ def compose_cover(
 ) -> dict:
     """Compose the final 1080x1350 cover video + poster from sourced media.
 
-    The media is scaled/center-cropped to 1080x1350, the STRANGE-COVER overlay
-    template plus the Pillow-rendered title block are composited on top, and
-    ffmpeg renders a silent H.264 mp4 (``+faststart``) with a first-frame
-    poster PNG. Still images become a 6 s very-slow-zoom video (static video
-    fallback if the zoom filter fails).
+    The media is fitted into 1080x1350 over a blurred fill so the real subject
+    is not destroyed by a blind 16:9-to-4:5 center crop. The STRANGE-COVER
+    overlay template plus the Pillow-rendered title block are composited on
+    top, and ffmpeg renders a silent H.264 mp4 (``+faststart``) with a
+    first-frame poster PNG. Still images become a 6 s restrained slow-zoom
+    video (static video fallback if the zoom filter fails).
 
     Args:
         media_path: Local path of the trimmed clip or downloaded image.
@@ -1265,9 +1391,14 @@ def compose_cover(
         cap = float(settings.cover_clip_max_s)
         in_duration = _media_duration(media)
         clip_t = f"{min(in_duration, cap):.3f}" if in_duration > 0 else f"{cap:g}"
+        fit_w, fit_h = round(width * 0.96), round(height * 0.96)
         filter_complex = (
-            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},setsar=1,fps={_COVER_FPS}[base];"
+            "[0:v]split=2[bgsrc][fgsrc];"
+            f"[bgsrc]scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},boxblur=18:2[bg];"
+            f"[fgsrc]scale={fit_w}:{fit_h}:force_original_aspect_ratio=decrease[fg];"
+            "[bg][fg]overlay=(W-w)/2:(H-h)*0.12,"
+            f"setsar=1,fps={_COVER_FPS}[base];"
             "[base][1:v]overlay=0:0:format=auto[out]"
         )
         _run_ffmpeg(
@@ -1289,10 +1420,10 @@ def compose_cover(
             ]
         )
     else:
-        base_png = _center_crop_still(str(media), wd)
+        base_png = _prepare_still_cover(str(media), wd)
         frames = int(_STILL_COVER_SECONDS * _COVER_FPS)
         zoom_filter = (
-            "[0:v]zoompan=z='min(1+0.00045*on,1.08)'"
+            "[0:v]zoompan=z='min(1+0.0002*on,1.035)'"
             ":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
             f":d={frames}:s={width}x{height}:fps={_COVER_FPS}[base];"
             "[base][1:v]overlay=0:0:format=auto[out]"
@@ -1321,8 +1452,7 @@ def compose_cover(
             _run_ffmpeg(zoom_cmd)
         except (RuntimeError, subprocess.TimeoutExpired):
             static_filter = (
-                f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-                f"crop={width}:{height},setsar=1,fps={_COVER_FPS}[base];"
+                f"[0:v]scale={width}:{height},setsar=1,fps={_COVER_FPS}[base];"
                 "[base][1:v]overlay=0:0:format=auto[out]"
             )
             _run_ffmpeg(
