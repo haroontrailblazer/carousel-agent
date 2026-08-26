@@ -21,6 +21,7 @@ Two complementary layers (both optional, both fail-soft):
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import threading
 from typing import Any, Optional
@@ -33,15 +34,50 @@ _lock = threading.Lock()
 _init_done = False
 _langfuse_client: Optional[Any] = None
 
-#: Process-level accumulator for OpenAI Images API token usage. Image tools
+#: Which run the current task is working on. Image tools sit several layers
+#: below anything that knows a run id, so threading it through every call
+#: signature would touch a lot of code for one number. A ContextVar reaches
+#: them for free: asyncio tasks inherit the context they were created in, and
+#: ``asyncio.to_thread`` copies it, so a blocking image call made inside a
+#: worker thread still reports against the right run.
+_current_run: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "carousel_run_id", default=""
+)
+
+
+def bind_run(run_id: str) -> None:
+    """Attribute everything this task does from here on to ``run_id``.
+
+    Call once at the top of the task driving a run. Nothing needs to unbind:
+    each run's task has its own context, so the value cannot leak sideways.
+    """
+    _current_run.set(str(run_id or ""))
+
+
+def current_run() -> str:
+    """The run this task is working on ('' outside a run)."""
+    return _current_run.get()
+
+
+#: Per-run accumulators for OpenAI Images API token usage. Image tools
 #: run outside any ADK model call, so their usage cannot ride on
 #: ``Event.usage_metadata`` - they deposit here and the orchestrator drains it.
-_image_usage: dict[str, int] = {
-    "image_input_tokens": 0,
-    "image_output_tokens": 0,
-    "image_total_tokens": 0,
-    "image_calls": 0,
-}
+#: the LLM event's usage_metadata the way every other token count does.
+#:
+#: Keyed by run id, because several carousels can be in flight at once. A
+#: single shared bucket meant whichever run happened to reach a phase
+#: transition first drained everyone's image tokens into its own total - one
+#: run billed for another's images, the other reporting none.
+_image_usage: dict[str, dict[str, int]] = {}
+
+
+def _empty_bucket() -> dict[str, int]:
+    return {
+        "image_input_tokens": 0,
+        "image_output_tokens": 0,
+        "image_total_tokens": 0,
+        "image_calls": 0,
+    }
 
 
 def init_observability() -> bool:
@@ -109,11 +145,13 @@ def record_image_usage(
     input_t = int(getattr(usage, "input_tokens", 0) or 0)
     output_t = int(getattr(usage, "output_tokens", 0) or 0)
     total_t = int(getattr(usage, "total_tokens", 0) or 0) or (input_t + output_t)
+    run_id = _current_run.get()
     with _lock:
-        _image_usage["image_input_tokens"] += input_t
-        _image_usage["image_output_tokens"] += output_t
-        _image_usage["image_total_tokens"] += total_t
-        _image_usage["image_calls"] += 1
+        bucket = _image_usage.setdefault(run_id, _empty_bucket())
+        bucket["image_input_tokens"] += input_t
+        bucket["image_output_tokens"] += output_t
+        bucket["image_total_tokens"] += total_t
+        bucket["image_calls"] += 1
     logger.info(
         "[tokens] %s %s: input=%d output=%d total=%d",
         model,
@@ -144,16 +182,26 @@ def record_image_usage(
         logger.debug("Langfuse image-generation span failed (%s).", exc)
 
 
-def pop_image_usage() -> dict[str, int]:
-    """Drain the image-usage accumulator (returns zeros when nothing new)."""
+def pop_image_usage(run_id: str = "") -> dict[str, int]:
+    """Drain one run's image-usage accumulator.
+
+    Args:
+        run_id: Whose tokens to take. Defaults to the current task's run, so
+            callers inside a run need not pass anything. Draining a run that
+            recorded nothing returns zeros.
+
+    Returns:
+        The counts recorded since the last drain, and forgets them.
+    """
+    key = str(run_id or "") or _current_run.get()
     with _lock:
-        snapshot = dict(_image_usage)
-        for key in _image_usage:
-            _image_usage[key] = 0
-    return snapshot
+        bucket = _image_usage.pop(key, None)
+    return bucket if bucket is not None else _empty_bucket()
 
 
 __all__ = [
+    "bind_run",
+    "current_run",
     "init_observability",
     "pop_image_usage",
     "record_image_usage",

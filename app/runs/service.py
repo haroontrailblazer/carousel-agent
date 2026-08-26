@@ -28,7 +28,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
+from app import observability
 from app.config import settings
+from app.runs import cancellation
 from app.runs.bus import KIND_ERROR, KIND_TERMINAL
 from app.runs.stream import consume_invocation, record_event
 from app.services import db
@@ -53,10 +55,18 @@ try:  # pragma: no cover - trivial import wiring
 except Exception:  # pragma: no cover - env dependent
     PIPELINE_USER_ID = "pipeline"
 
-#: How many runs may be in flight at once. One by default: this pipeline is
-#: CPU- and network-heavy (ffmpeg, image generation) and the service runs on a
-#: single small instance, so concurrency buys latency, not throughput.
-MAX_CONCURRENT_RUNS = int(os.getenv("MAX_CONCURRENT_RUNS", "1"))
+#: How many carousels may be in flight at once.
+#:
+#: This pipeline is CPU- and network-heavy (ffmpeg, image generation) on one
+#: small instance, so every extra slot buys the ability to work on another
+#: story while the first waits - not more throughput on any single one. Three
+#: is the default because the long pole in a run is waiting on a model or a
+#: reviewer, not local CPU; raise or lower it here rather than in code.
+#:
+#: Anything that assumed one run per process had to be fixed for this to be
+#: safe - image-token accounting is now keyed by run id, and every "is this
+#: run being driven?" check reads both task registries.
+MAX_CONCURRENT_RUNS = int(os.getenv("MAX_CONCURRENT_RUNS", "3"))
 
 #: Ceiling on runs started in a rolling 24 hours. A runaway loop that starts
 #: carousels is not a slow bug - it is an invoice.
@@ -64,6 +74,11 @@ MAX_RUNS_PER_DAY = int(os.getenv("MAX_RUNS_PER_DAY", "10"))
 
 #: Strong references to in-flight run tasks, keyed by run id.
 _run_tasks: dict[str, "asyncio.Task[None]"] = {}
+
+#: Slots claimed by a run that is being set up but has no task yet. Counted as
+#: active, so the gap between passing the cap check and registering the task
+#: cannot be used by another request to pass the same check.
+_reserved: set[str] = set()
 
 
 class RunRefused(Exception):
@@ -102,6 +117,7 @@ def active_run_ids() -> set[str]:
     on top of a rework, and let two drivers touch one ADK session.
     """
     active = {rid for rid, task in _run_tasks.items() if not task.done()}
+    active |= set(_reserved)
 
     # Deferred: app.review.resume imports app.services.db, and importing it at
     # module scope would close an import cycle through app.runs.service.
@@ -114,10 +130,52 @@ def active_run_ids() -> set[str]:
     return active
 
 
-async def _check_limits(*, new_run: bool = True) -> None:
+def _claim_slot(run_id: str) -> None:
+    """Count the actives and take a slot, with no await in between.
+
+    This is the whole point of the function. Counting in one statement and
+    registering the task several awaits later is a check-then-act race: a run
+    only became countable at ``spawn_run``, and between the check and there sit
+    a session write, three DB writes and - for a pasted URL - a thirty-second
+    HTTP fetch. Every request that arrived inside that window passed the check,
+    so N simultaneous clicks started N runs however small the cap was.
+
+    A reservation closes it because the event loop cannot interleave anything
+    between the count and the ``add`` below: no await, no suspension point.
+
+    Raises:
+        RunRefused: when every slot is taken.
+    """
+    active = active_run_ids()
+    if len(active) >= MAX_CONCURRENT_RUNS:
+        raise RunRefused(
+            "too_many_active_runs",
+            f"{len(active)} carousels are already being made "
+            f"(limit {MAX_CONCURRENT_RUNS}). Wait for one to reach review, or "
+            "raise MAX_CONCURRENT_RUNS.",
+        )
+    _reserved.add(str(run_id))
+
+
+def _release_slot(run_id: str) -> None:
+    """Hand the reservation back.
+
+    Called once the real task holds the slot instead (its id is already in
+    ``_run_tasks``, so the union in ``active_run_ids`` is unchanged), or when
+    the work never started and the slot should go back in the pool.
+    """
+    _reserved.discard(str(run_id))
+
+
+async def _check_limits(run_id: str, *, new_run: bool = True) -> None:
     """Refuse work that would exceed the concurrency or daily cap.
 
+    On success a slot is RESERVED for ``run_id``; the caller must release it
+    (see ``_release_slot``) once the driving task exists or the attempt is
+    abandoned.
+
     Args:
+        run_id: The run about to be driven.
         new_run: True when this would START a carousel. The daily cap exists
             so a bug or an impatient click cannot run up an invoice, which is
             a statement about how many carousels get MADE - so it applies only
@@ -130,13 +188,7 @@ async def _check_limits(*, new_run: bool = True) -> None:
     The concurrency cap applies either way, because it is about what this one
     small instance can do at once, not about spend.
     """
-    active = active_run_ids()
-    if len(active) >= MAX_CONCURRENT_RUNS:
-        raise RunRefused(
-            "too_many_active_runs",
-            f"A run is already in progress ({', '.join(sorted(active))}). "
-            "Wait for it to reach review before starting another.",
-        )
+    _claim_slot(run_id)
     if new_run and MAX_RUNS_PER_DAY > 0:
         since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         try:
@@ -147,6 +199,7 @@ async def _check_limits(*, new_run: bool = True) -> None:
             logger.warning("Could not check the daily run cap: %s", exc)
             return
         if started >= MAX_RUNS_PER_DAY:
+            _release_slot(run_id)
             raise RunRefused(
                 "daily_limit_reached",
                 f"{started} runs have already started in the last 24 hours "
@@ -244,45 +297,72 @@ async def start_run(
     Raises:
         RunRefused: cap exceeded, or the input could not be turned into a run.
     """
-    await _check_limits()
-
-    if source == "url":
-        news = await fetch_url_item(url)
-    elif source == "topic":
-        cleaned = (topic or "").strip()
-        if len(cleaned) < 3:
-            raise RunRefused("empty_topic", "Type a topic to generate a carousel.")
-        news = None  # the orchestrator synthesises the NewsItem from the message
-    elif news is None:
-        raise RunRefused("no_input", "Nothing to run.")
-
+    # The id is minted BEFORE the cap check so the slot can be reserved under
+    # it. Everything after the check - a session write, three DB writes, and
+    # for a pasted URL a thirty-second fetch - happens while this run already
+    # counts as active, so a second click cannot pass the same check.
     run_id = f"run-{uuid.uuid4().hex[:12]}"
-    news_id = str((news or {}).get("id") or run_id)
-    title = str((news or {}).get("title") or (topic or "").strip()[:150] or "Untitled")
+    await _check_limits(run_id)
 
-    state: dict[str, Any] = {K_RUN_ID: run_id}
-    if news is not None:
-        state[K_NEWS_ITEM] = news
+    try:
+        if source == "url":
+            news = await fetch_url_item(url)
+            # Pasting a link and clicking its newsroom card are the same act,
+            # so the paste claims the card too. Without this the story stayed
+            # queued and someone could pick it later, paying twice for one
+            # carousel. Best effort: most pasted links are not in the queue.
+            try:
+                await db.claim_news_by_url_hash(db.url_hash(url.strip()))
+            except Exception as exc:  # pragma: no cover - bookkeeping only
+                logger.debug("Could not claim a queued item for %s: %s", url, exc)
+        elif source == "topic":
+            cleaned = (topic or "").strip()
+            if len(cleaned) < 3:
+                raise RunRefused("empty_topic", "Type a topic to generate a carousel.")
+            news = None  # the orchestrator synthesises the NewsItem from the message
+        elif news is None:
+            raise RunRefused("no_input", "Nothing to run.")
 
-    from app.agent import build_runner
+        news_id = str((news or {}).get("id") or run_id)
+        title = str(
+            (news or {}).get("title") or (topic or "").strip()[:150] or "Untitled"
+        )
 
-    runner = build_runner()
-    await runner.session_service.create_session(
-        app_name=settings.app_name,
-        user_id=PIPELINE_USER_ID,
-        session_id=run_id,
-        state=state,
-    )
-    await db.create_run(run_id, news_id)
-    await db.set_run_meta(run_id, title=title, source=source, requested_by=requested_by)
-    await db.set_run_status(run_id, db.RUN_STATUS_RUNNING)
+        state: dict[str, Any] = {K_RUN_ID: run_id}
+        if news is not None:
+            state[K_NEWS_ITEM] = news
 
-    first_message = (
-        topic.strip()
-        if source == "topic"
-        else f"Create an Instagram carousel for the queued news item: {title}"
-    )
-    spawn_run(run_id, runner=runner, first_message=first_message)
+        from app.agent import build_runner
+
+        runner = build_runner()
+        await runner.session_service.create_session(
+            app_name=settings.app_name,
+            user_id=PIPELINE_USER_ID,
+            session_id=run_id,
+            state=state,
+        )
+        await db.create_run(run_id, news_id)
+        await db.set_run_meta(
+            run_id, title=title, source=source, requested_by=requested_by
+        )
+        await db.set_run_status(run_id, db.RUN_STATUS_RUNNING)
+
+        first_message = (
+            topic.strip()
+            if source == "topic"
+            else f"Create an Instagram carousel for the queued news item: {title}"
+        )
+        spawn_run(run_id, runner=runner, first_message=first_message)
+    except BaseException:
+        # Nothing is driving this run, so its slot must go back in the pool -
+        # otherwise a refused or failed start silently shrinks the cap for the
+        # rest of the process's life.
+        _release_slot(run_id)
+        raise
+
+    # The task holds the slot now; its id is in _run_tasks, which
+    # active_run_ids already counts.
+    _release_slot(run_id)
     logger.info("Started run %s (%s) for %r.", run_id, source, title)
     return StartedRun(run_id=run_id, news_id=news_id, title=title)
 
@@ -362,6 +442,12 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
     unhandled exception here would be logged by asyncio and then lost, leaving
     the run row saying "running" forever.
     """
+    # Everything this task does from here on is attributed to this run,
+    # including image calls made several layers down inside a worker thread.
+    observability.bind_run(run_id)
+    # A stop belongs to the leg it stopped. Leaving the flag up would make a
+    # deliberate Stop permanent: every later resume would refuse to publish.
+    cancellation.clear(run_id)
     beat = asyncio.get_running_loop().create_task(
         _heartbeat(run_id), name=f"heartbeat-{run_id}"
     )
@@ -404,6 +490,8 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
                 else db.RUN_STATUS_INTERRUPTED
             )
         await db.set_run_status(run_id, status)
+        if status == db.RUN_STATUS_DONE:
+            await _close_news_item(run_id)
         await record_event(
             run_id,
             result["last_seq"] + 1,
@@ -444,13 +532,54 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
             logger.warning("Closing the runner for %s failed: %s", run_id, exc)
 
 
-async def _finish_badly(run_id: str, status: str, text: str) -> None:
-    """Record an unhappy ending without letting the recording itself fail."""
+async def _close_news_item(run_id: str) -> None:
+    """Mark a published run's story finished, so nothing picks it up again.
+
+    ``mark_news_done`` had exactly one caller - the CLI fetcher - so a carousel
+    started from the console left its story at ``processing`` forever. The
+    startup sweep then treats a long-stuck ``processing`` row as abandoned and
+    returns it to the newsroom, where someone picks the same story and pays to
+    generate it a second time.
+
+    Best effort: a story that cannot be closed is a duplicate risk, not a
+    reason to fail a run that has already published.
+    """
     try:
-        await db.set_run_status(run_id, status)
-        seq = await db.max_run_seq(run_id)
-        await record_event(
-            run_id, seq + 1, KIND_ERROR, text=text, data={"status": status}
+        run = await db.get_run(run_id)
+        news_id = str((run or {}).get("news_id") or "")
+        if news_id and news_id != run_id:
+            await db.mark_news_done(news_id)
+    except Exception as exc:  # pragma: no cover - bookkeeping only
+        logger.warning("Could not close the news item for run %s: %s", run_id, exc)
+
+
+async def _finish_badly(run_id: str, status: str, text: str) -> None:
+    """Record an unhappy ending without letting the recording itself fail.
+
+    Shielded, because this runs INSIDE a cancellation handler. Press Stop
+    twice and the second ``task.cancel()`` lands on one of these awaits;
+    ``CancelledError`` derives from BaseException, so it sails past the
+    ``except Exception`` below and the status write never completes - leaving
+    the run recorded 'running' with a trace that stops dead, and needing a
+    third Stop to reach the stale-status branch. ``asyncio.shield`` lets the
+    write finish; the cancellation is still delivered afterwards.
+
+    Image tokens are folded in here too. A cancelled or failed run never
+    reaches another phase boundary, so without this its per-run bucket is
+    never drained: the cost is lost from the run's total and the entry stays
+    in the accumulator for the life of the process.
+    """
+    try:
+        observability.pop_image_usage(run_id)
+    except Exception:  # pragma: no cover - accounting must never block an ending
+        pass
+    try:
+        await asyncio.shield(db.set_run_status(run_id, status))
+        seq = await asyncio.shield(db.max_run_seq(run_id))
+        await asyncio.shield(
+            record_event(
+                run_id, seq + 1, KIND_ERROR, text=text, data={"status": status}
+            )
         )
     except Exception as exc:  # pragma: no cover - shutdown / DB down
         logger.warning("Could not record the end of run %s: %s", run_id, exc)
@@ -477,28 +606,35 @@ async def resume_interrupted_run(run_id: str, *, requested_by: str = "") -> bool
 
     # Not a new carousel: this one's images and reasoning are already spent,
     # so the daily cap does not apply. Only the concurrency cap does.
-    await _check_limits(new_run=False)
+    await _check_limits(run_id, new_run=False)
 
-    from app.agent import build_runner
-    from google.genai import types
+    try:
+        from app.agent import build_runner
+        from google.genai import types
 
-    runner = build_runner()
-    message = types.Content(
-        role="user",
-        parts=[types.Part(text="Continue the interrupted run from its current phase.")],
-    )
-    await db.set_run_status(run_id, db.RUN_STATUS_RUNNING)
-    seq = await db.max_run_seq(run_id)
-    await record_event(
-        run_id, seq + 1, KIND_TERMINAL,
-        text=f"Resuming interrupted run at phase '{run.get('phase')}'.",
-        data={"resumed_by": requested_by} if requested_by else {},
-    )
+        runner = build_runner()
+        message = types.Content(
+            role="user",
+            parts=[
+                types.Part(text="Continue the interrupted run from its current phase.")
+            ],
+        )
+        await db.set_run_status(run_id, db.RUN_STATUS_RUNNING)
+        seq = await db.max_run_seq(run_id)
+        await record_event(
+            run_id, seq + 1, KIND_TERMINAL,
+            text=f"Resuming interrupted run at phase '{run.get('phase')}'.",
+            data={"resumed_by": requested_by} if requested_by else {},
+        )
+    except BaseException:
+        _release_slot(run_id)
+        raise
     task = asyncio.get_running_loop().create_task(
         _drive_run(run_id, runner, message), name=f"resume-run-{run_id}"
     )
     _run_tasks[run_id] = task
     task.add_done_callback(lambda _t: _run_tasks.pop(run_id, None))
+    _release_slot(run_id)  # the task holds the slot now
     return True
 
 
@@ -539,7 +675,10 @@ async def restart_run(run_id: str, *, requested_by: str = "") -> bool:
     # Resume would re-enter at the rewound phase instead of where the work
     # actually stopped. resume_interrupted_run checks again, which is fine -
     # the check is cheap and idempotent.
-    await _check_limits(new_run=False)
+    await _check_limits(run_id, new_run=False)
+    # restart_run only checks; resume_interrupted_run below reserves again and
+    # owns the release, so hand this one back rather than holding two.
+    _release_slot(run_id)
 
     from app.review.resume import PIPELINE_USER_ID
 
@@ -581,11 +720,23 @@ async def cancel_run(run_id: str) -> bool:
     """
     from app.review.resume import cancel_resume
 
+    # Raise the flag FIRST, before anything is cancelled. Work already inside
+    # a worker thread cannot be interrupted - the Instagram publish is the one
+    # that matters - so the only way to stop it is for it to ask, and it can
+    # only ask about a flag that is already set.
+    cancellation.request(run_id)
+
     task = _run_tasks.get(run_id)
     stopped = False
     if task is not None and not task.done():
+        # Cancel once. A second task.cancel() re-raises CancelledError inside
+        # the handler that is busy recording the ending, which is how a
+        # double-press used to leave the run stuck on 'running'. The flag
+        # above is already set, so a repeat press is not lost - it is just not
+        # a second interruption.
+        if not task.cancelling():
+            task.cancel()
         # _drive_run's CancelledError handler records the ending itself.
-        task.cancel()
         stopped = True
     elif cancel_resume(run_id):
         # Nothing else will write the ending for a resume leg, so do it here.

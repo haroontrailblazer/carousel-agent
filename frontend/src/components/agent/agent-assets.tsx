@@ -145,7 +145,11 @@ export function AgentAssetStrip({
             loading="lazy"
           />
         ))}
-        {live && Array.from({ length: Math.max(1, Math.min(3, (artifacts?.expected_count ?? 3) - items.length)) }, (_, index) => (
+        {/* One tile per slide still to come - and none once they have all
+            arrived. Math.max(1, ...) forced a permanent phantom spinner onto
+            the end of a complete strip, so a finished carousel looked like it
+            was still rendering something. */}
+        {live && Array.from({ length: Math.max(0, Math.min(3, (artifacts?.expected_count ?? 3) - items.length)) }, (_, index) => (
           <div key={index} className="grid h-32 w-[6.4rem] shrink-0 place-items-center rounded-[10px] border border-[var(--border)] bg-[var(--card)]">
             <LoaderCircle className="size-4 animate-spin-slow text-[var(--muted-foreground)]" />
           </div>

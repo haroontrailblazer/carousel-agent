@@ -107,6 +107,15 @@ export type CoverChoice = "video" | "image" | null
 
 export type ToolCall = {
   id: string
+  /**
+   * Unique within one run, for React keys.
+   *
+   * ADK coerces a missing call id to "", so two same-named calls can both
+   * arrive with no id at all. `id || name` then collides and React reuses one
+   * row for both, dropping the other from the list. Assigned client-side by
+   * `allTools`, which knows each call's position.
+   */
+  key?: string
   name: string
   /** Pre-rendered and length-capped by the server. */
   args: string

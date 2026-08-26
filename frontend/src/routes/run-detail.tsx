@@ -1,12 +1,9 @@
 import * as React from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link, useParams, useSearchParams } from "react-router"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router"
 import { ExternalLink, Images, ListTree, MessagesSquare, WifiOff } from "lucide-react"
 
-import {
-  AgentConversation,
-  startedFromComposer,
-} from "@/components/agent/agent-conversation"
+import { startedFromComposer } from "@/components/agent/agent-conversation"
+import { AgentWorkspace, NewChatButton } from "@/components/agent/agent-workspace"
 import { ReviewPanel } from "@/components/review/review-panel"
 import { TaskActions } from "@/components/run/task-actions"
 import { AgentTrace, PhaseRail } from "@/components/run/trace"
@@ -15,12 +12,10 @@ import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Chip, MutedChip } from "@/components/ui/chip"
 import { TabPanel, Tabs } from "@/components/ui/tabs"
-import { PULSE_KEY } from "@/hooks/use-pulse"
-import { useRunStream } from "@/hooks/use-run-stream"
-import { get } from "@/lib/api"
+import { useRunWorkspace } from "@/hooks/use-run-workspace"
 import { elapsed, relativeTime } from "@/lib/format"
 import { PHASE_LABELS, STATUS_LABELS, STATUS_TOKEN } from "@/lib/pipeline"
-import type { RunArtifacts, RunDetail, RunStatus } from "@/lib/types"
+import type { RunStatus } from "@/lib/types"
 
 type TaskTab = "trace" | "chat" | "review"
 
@@ -39,60 +34,14 @@ function defaultTab(status: RunStatus): TaskTab {
 
 export function RunDetailRoute() {
   const { runId = "" } = useParams()
-  const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
-  const run = useQuery({
-    queryKey: ["run", runId],
-    queryFn: () => get<RunDetail>(`/api/runs/${runId}`),
-    // Poll while the run is going. The stream carries the trace, but the
-    // authoritative snapshot (bundle, pending_review, publish result) lives
-    // here - and pending_review is not monotonic, so a one-time read is not
-    // enough.
-    // Phase, pending_review and the publish result all change under the
-    // user's feet while a run works; 10s was slow enough that the trace moved
-    // on before the header caught up.
-    // awaiting_review polls harder than it used to because the decision card
-    // now lives on this screen: the same task can be decided from Telegram,
-    // and this snapshot is what notices.
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      if (status === "running") return 4_000
-      if (status === "awaiting_review") return 8_000
-      return false
-    },
-    refetchIntervalInBackground: false,
-  })
-
-  // Derived here rather than after the loading guard: the trace hook needs it
-  // to decide how hard to poll, and a finished task must not be polled at all.
-  const isLive = run.data?.status === "running"
-
-  // Same query key the Review tab uses, so opening Chat costs no extra
-  // request - React Query serves both from one cache entry.
-  const artifacts = useQuery({
-    queryKey: ["artifacts", runId],
-    queryFn: () => get<RunArtifacts>(`/api/runs/${runId}/artifacts`),
-    enabled: !!runId,
-    staleTime: 60_000,
-  })
-
-  const stream = useRunStream(runId, {
-    live: isLive,
-    onPhase: () => {
-      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
-      // The bundle is written at a phase boundary, and rework rewrites it.
-      // Without this the Review tab keeps showing the previous round.
-      void queryClient.invalidateQueries({ queryKey: ["artifacts", runId] })
-      // Reaching review is the moment the sidebar dot has to change, and the
-      // stream knows before any poll does.
-      void queryClient.invalidateQueries({ queryKey: PULSE_KEY })
-    },
-    onEnd: () => {
-      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
-      void queryClient.invalidateQueries({ queryKey: ["runs"] })
-      void queryClient.invalidateQueries({ queryKey: PULSE_KEY })
-    },
-  })
+  // The SAME hook the New carousel screen uses. Both screens read the same
+  // three cache entries, and React Query keys the cache by key alone - so two
+  // sets of options for one key means whichever screen mounted last decides
+  // how both behave. One hook, one answer.
+  const workspace = useRunWorkspace(runId)
+  const { run, stream, isLive } = workspace
 
   // --- which tab ----------------------------------------------------------
   // Resolved once, on arrival, then pinned. The status moves under the user -
@@ -133,13 +82,6 @@ export function RunDetailRoute() {
     [setParams],
   )
 
-  // A gap means the browser fell behind and lost events; the database still
-  // has them, so refetch rather than showing an incomplete trace.
-  React.useEffect(() => {
-    if (stream.gapped) {
-      void queryClient.invalidateQueries({ queryKey: ["run", runId] })
-    }
-  }, [stream.gapped, queryClient, runId])
 
   if (run.isLoading) {
     // Laid out like the header, tab bar and body that are about to replace it,
@@ -210,7 +152,12 @@ export function RunDetailRoute() {
           <h1 className="text-xl font-semibold tracking-tight">
             {data.title || data.news.title || data.run_id}
           </h1>
-          <TaskActions runId={data.run_id} status={data.status} title={data.title} />
+          <div className="flex items-center gap-1.5">
+            {/* Several carousels can run at once, so starting another does not
+                cost you this one - it keeps working and stays in Tasks. */}
+            <NewChatButton />
+            <TaskActions runId={data.run_id} status={data.status} title={data.title} />
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
@@ -337,18 +284,19 @@ export function RunDetailRoute() {
         </TabPanel>
 
         <TabPanel value="chat" selected={active === "chat"}>
+          {/* The same workspace as the New carousel screen, minus its own
+              header and viewport-docked composer - this page supplies both.
+              Opening Chat should give you the screen you were just working
+              in, not a read-only transcript of it. */}
           <Card className="p-5">
-            <AgentConversation
-              run={data}
-              events={stream.events}
-              summary={stream.summary}
-              live={live}
-              artifacts={artifacts.data}
+            <AgentWorkspace
               runId={runId}
+              workspace={workspace}
+              variant="embedded"
               // No prompt in local state here: this task may have been started
               // in another session entirely, so the component reconstructs it
               // from the run itself.
-              showReviewCta={false}
+              onReset={() => navigate("/new", { viewTransition: true })}
             />
           </Card>
         </TabPanel>

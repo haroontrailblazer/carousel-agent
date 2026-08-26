@@ -257,26 +257,46 @@ class FrontendVocabularyTests(unittest.TestCase):
         stream and no push channel at exactly the moment the reviewer
         approves from Telegram and the pipeline does its remaining work.
 
-        ``run-detail.tsx`` already handles this; ``new-run.tsx`` does not.
+        Both screens now read the run through ``useRunWorkspace``, so this
+        pins two things: that the shared hook keeps polling at
+        ``awaiting_review``, and that neither screen has grown its own copy of
+        the options. The second half matters as much as the first - React
+        Query keys its cache by key alone, so a second ``useQuery`` on
+        ``["run", id]`` anywhere would silently decide the refetch behaviour
+        for BOTH screens depending on which mounted last.
         """
-        new_run = (REPO / "frontend" / "src" / "routes" / "new-run.tsx").read_text(
-            encoding="utf-8"
-        )
+        src = REPO / "frontend" / "src"
+        hook = (src / "hooks" / "use-run-workspace.ts").read_text(encoding="utf-8")
+
         block = re.search(
-            r"refetchInterval:\s*\(query\)\s*=>(.*?)\n\s*refetchIntervalInBackground",
-            new_run,
-            re.DOTALL,
+            r"function runInterval\((.*?)\n\}", hook, re.DOTALL
         )
-        assert block is not None, "the run query's refetchInterval was not found"
+        assert block is not None, "runInterval was not found in the shared hook"
         self.assertIn(
             "awaiting_review",
             block.group(1),
-            "new-run.tsx polls only while status is 'running' and returns "
-            "false otherwise, so once the task reaches review the New "
-            "carousel screen freezes on 'Your carousel is ready for review' "
-            "forever - through the approval, the rework rounds and the "
-            "publish - until the user reloads or re-focuses the window.",
+            "The shared hook stops polling at awaiting_review, so a tab left "
+            "open freezes on 'ready for review' through the approval, the "
+            "rework rounds and the publish. React Query re-evaluates "
+            "refetchInterval only after a fetch settles, so returning false "
+            "there is permanent.",
         )
+
+        for route in ("new-run.tsx", "run-detail.tsx"):
+            text = (src / "routes" / route).read_text(encoding="utf-8")
+            self.assertIn(
+                "useRunWorkspace",
+                text,
+                f"{route} must read the run through the shared hook",
+            )
+            stray = re.findall(r'queryKey:\s*\["(run|artifacts|trace)",', text)
+            self.assertEqual(
+                stray,
+                [],
+                f"{route} declares its own query for {stray} - one cache key "
+                "with two sets of options means the screen you visited "
+                "previously decides how this one behaves.",
+            )
 
     def test_no_status_strands_the_user_without_an_action(self) -> None:
         """Every state a task can rest in needs a way out of it.
@@ -418,3 +438,87 @@ class FrontendVocabularyTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class WorkspaceIsOneImplementationTests(unittest.TestCase):
+    """The New carousel screen and the Chat tab are the same screen.
+
+    "Open the chat for this task" should hand you the workspace you were just
+    working in, not a read-only transcript of it. Two implementations of that
+    would drift - which is exactly what had happened: /new had a composer, a
+    Stop button and an asset rail; the Chat tab had a card with the transcript
+    in it.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.src = REPO / "frontend" / "src"
+        cls.workspace = (
+            cls.src / "components" / "agent" / "agent-workspace.tsx"
+        ).read_text(encoding="utf-8")
+        cls.composer = (
+            cls.src / "components" / "agent" / "agent-composer.tsx"
+        ).read_text(encoding="utf-8")
+
+    def test_both_screens_render_the_shared_workspace(self) -> None:
+        for route in ("new-run.tsx", "run-detail.tsx"):
+            text = (self.src / "routes" / route).read_text(encoding="utf-8")
+            self.assertIn(
+                "AgentWorkspace",
+                text,
+                f"{route} builds its own workspace instead of rendering the "
+                "shared one, so the two screens will drift apart again.",
+            )
+
+    def test_stop_is_offered_from_the_first_frame(self) -> None:
+        """A run you cannot cancel yet is a run spending money you cannot stop.
+
+        The Stop button used to be disabled for the whole `starting` state -
+        the seconds between the run being created server-side and the first
+        snapshot arriving. The agents are already working by then, and that is
+        precisely when someone realises they typed the wrong thing.
+        """
+        block = re.search(
+            r'state === "running" \|\| state === "starting" \? \((.*?)\) : state ===',
+            self.composer,
+            re.DOTALL,
+        )
+        assert block is not None, "the stop button branch was not found"
+        self.assertNotIn(
+            'state === "starting"',
+            block.group(1),
+            "the Stop button disables itself while the run is starting",
+        )
+
+    def test_stopping_refreshes_the_trace_too(self) -> None:
+        """A stopped task must not keep pulsing in the view you stopped it from."""
+        hook = (self.src / "hooks" / "use-run-workspace.ts").read_text(
+            encoding="utf-8"
+        )
+        invalidate = re.search(r"export function invalidateRun\((.*?)\n\}", hook, re.DOTALL)
+        assert invalidate is not None, "invalidateRun was not found"
+        for key in ('"run"', '"trace"', '"runs"', "PULSE_KEY"):
+            self.assertIn(
+                key,
+                invalidate.group(1),
+                f"a stop leaves {key} stale, so something on screen keeps "
+                "showing the task as live",
+            )
+        self.assertIn(
+            "invalidateRun",
+            self.workspace,
+            "the workspace's Stop must go through invalidateRun",
+        )
+
+    def test_a_new_chat_can_be_started_without_losing_this_one(self) -> None:
+        self.assertIn(
+            "NewChatButton",
+            self.workspace,
+            "there is no way to start another carousel from the workspace",
+        )
+        detail = (self.src / "routes" / "run-detail.tsx").read_text(encoding="utf-8")
+        self.assertIn(
+            "NewChatButton",
+            detail,
+            "the task page offers no way to start another carousel",
+        )

@@ -48,22 +48,33 @@ export function AgentConversation({
   const variant: LoadingVariant =
     run.phase === "qa" ? "Dots" : run.phase === "generate" ? "Orbit" : "Drive"
 
-  const asked =
-    prompt ||
-    (run.source === "url"
-      ? run.news.source_url
-      : `Create a carousel about ${run.title ?? "this story"}`)
+  // Only show a "You" bubble for something a person actually said.
+  //
+  // `prompt` is the live value, held by the tab that typed it. Without it the
+  // text is RECONSTRUCTED - the URL for a pasted link, a sentence built from
+  // the title otherwise - and that reconstruction is only honest for a task
+  // someone typed. A queue pick or a scheduled run was never asked for by
+  // anyone, so attributing "Create a carousel about X" to the reader invents a
+  // message they never sent. Those get a source line instead, which is true.
+  const typed = prompt || (startedFromComposer(run) ? reconstructPrompt(run) : "")
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end gap-3">
-        <div className="max-w-[82%] rounded-[16px] bg-[var(--muted)] px-4 py-3 text-sm leading-6">
-          {asked}
+      {typed ? (
+        <div className="flex justify-end gap-3">
+          <div className="max-w-[82%] rounded-[16px] bg-[var(--muted)] px-4 py-3 text-sm leading-6">
+            {typed}
+          </div>
+          <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-[var(--foreground)] text-[11px] font-semibold text-[var(--background)]">
+            You
+          </span>
         </div>
-        <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-[var(--foreground)] text-[11px] font-semibold text-[var(--background)]">
-          You
-        </span>
-      </div>
+      ) : (
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {run.source === "schedule" ? "Picked automatically from" : "From the newsroom"}
+          {run.news.source_name ? ` · ${run.news.source_name}` : ""}
+        </p>
+      )}
 
       <div className="min-w-0 space-y-5">
         <PixelLoader
@@ -81,7 +92,7 @@ export function AgentConversation({
           startedAt={run.created_at}
         />
         <ThinkingPanel events={events} summary={summary ?? null} live={live} />
-        <ToolChipList events={events} />
+        <ToolChipList events={events} live={live} />
         <StreamedAgentText events={events} live={live} />
         <AgentAssetStrip artifacts={artifacts} live={live} runId={runId} />
 
@@ -120,6 +131,17 @@ export function AgentConversation({
 }
 
 /** Whether this run has a conversation worth showing at all. */
+/**
+ * The best guess at what was typed, for a task this browser did not start.
+ *
+ * A paraphrase, not a recording - which is why the live value always wins and
+ * why this is only used for runs that a person really did type.
+ */
+function reconstructPrompt(run: RunDetail): string {
+  if (run.source === "url") return run.news.source_url || run.title || "this story"
+  return `Create a carousel about ${run.title || run.news.title || "this story"}`
+}
+
 export function startedFromComposer(run: Pick<RunDetail, "source">): boolean {
   // The New carousel composer posts exactly these two. Queue and schedule runs
   // were never typed by anyone, so there is no conversation to replay.

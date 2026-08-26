@@ -198,9 +198,9 @@ def _merge_token_usage(state: Any, holder: dict[str, Any]) -> dict[str, Any]:
     """Fold pending LLM + image token counts into the ``K_TOKEN_USAGE`` total.
 
     Zeroes the pending counters so every count is committed exactly once.
-    The image counts come from a process-level accumulator
-    (``observability.pop_image_usage``) - with a single pipeline run per
-    process (the local + Cloud Run setup) attribution is exact.
+    The image counts come from a per-run accumulator
+    (``observability.pop_image_usage``), drained by run id so that several
+    carousels in flight at once cannot take each other's image tokens.
 
     Returns:
         A state delta - ``{K_TOKEN_USAGE: totals}`` - or ``{}`` when nothing
@@ -210,7 +210,8 @@ def _merge_token_usage(state: Any, holder: dict[str, Any]) -> dict[str, Any]:
     pending = dict(tokens)
     for key in tokens:
         tokens[key] = 0
-    for key, value in observability.pop_image_usage().items():
+    run_id = str(state.get(K_RUN_ID) or "")
+    for key, value in observability.pop_image_usage(run_id).items():
         pending[key] = pending.get(key, 0) + value
     if not any(pending.values()):
         return {}

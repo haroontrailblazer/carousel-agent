@@ -54,11 +54,15 @@ function allTools(events: RunEvent[]): ToolCall[] {
   const tools: ToolCall[] = []
   const seen = new Set<string>()
   for (const event of events) {
-    for (const tool of event.tools ?? []) {
-      const key = tool.id || `${event.seq}:${tool.name}`
+    for (const [index, tool] of (event.tools ?? []).entries()) {
+      // A call with no id (ADK coerces a missing id to "") cannot be deduped
+      // against anything, so it gets a position-derived identity instead.
+      // Sharing `tool.name` as a React key across two such calls made React
+      // reuse one row for both and drop the other.
+      const key = tool.id || `${event.seq}:${tool.name}:${index}`
       if (seen.has(key)) continue
       seen.add(key)
-      tools.push(tool)
+      tools.push({ ...tool, key })
     }
   }
   return tools
@@ -127,17 +131,31 @@ export function ThinkingPanel({
 
   const tools = React.useMemo(() => allTools(events), [events])
   const agentSteps = React.useMemo(() => {
-    const firstSeen = new Map<string, RunEvent>()
+    // One step per CONTIGUOUS block of an agent's events, not one per agent.
+    //
+    // A rework brings agents back: planner runs, the reviewer rejects, planner
+    // runs again. Keying on the author alone recorded only the first visit, so
+    // the list froze the moment a round-2 agent was one that had already
+    // appeared - the screen said "Editorial plan" from twenty minutes ago
+    // while the pipeline redid the whole carousel.
+    const blocks: { author: string; event: RunEvent }[] = []
     for (const event of events) {
       if (!event.author || event.author === "user" || event.author === "carousel_orchestrator") {
         continue
       }
-      if (!firstSeen.has(event.author)) firstSeen.set(event.author, event)
+      const last = blocks[blocks.length - 1]
+      if (!last || last.author !== event.author) {
+        blocks.push({ author: event.author, event })
+      }
     }
-    const lastAuthor = [...firstSeen.keys()].at(-1)
-    return [...firstSeen.entries()].map(([author, event]) => {
+    // The agent currently emitting, which is the last BLOCK - not the last
+    // newly-seen author. Those differ exactly when an agent re-appears, so
+    // the spinner used to sit on whichever agent happened to be new last.
+    const lastAuthor = blocks[blocks.length - 1]?.author
+    return blocks.map(({ author, event }) => {
       const stat = summary?.agents.find((item) => item.name === author)
       return {
+        // seq is unique per frame, so a second visit gets its own row.
         id: `${event.seq}:${author}`,
         author,
         label: AGENT_LABELS[author] ?? author.replaceAll("_", " "),
@@ -240,7 +258,7 @@ export function ThinkingPanel({
                   ))}
                 </>
               ) : (
-                <EmptyThinkingView>The orchestrator is preparing the first agent.</EmptyThinkingView>
+                <EmptyThinkingView>{live ? "The orchestrator is preparing the first agent." : "No agent ran on this task."}</EmptyThinkingView>
               )}
             </div>
           )}
@@ -261,7 +279,7 @@ export function ThinkingPanel({
                 ))}
               </div>
             ) : (
-              <EmptyThinkingView>Reasoning will appear when the model emits ADK thought parts.</EmptyThinkingView>
+              <EmptyThinkingView>{live ? "Reasoning will appear when the model emits ADK thought parts." : "This task recorded no model reasoning."}</EmptyThinkingView>
             )
           )}
 
@@ -269,11 +287,11 @@ export function ThinkingPanel({
             searchTools.length ? (
               <div className="divide-y divide-[var(--border)]">
                 {searchTools.slice(-10).map((tool) => (
-                  <ToolRow key={tool.id || tool.name} tool={tool} icon={Globe2} />
+                  <ToolRow key={tool.key ?? tool.id ?? tool.name} tool={tool} live={live} icon={Globe2} />
                 ))}
               </div>
             ) : (
-              <EmptyThinkingView>Search calls and retrieved sources will appear here.</EmptyThinkingView>
+              <EmptyThinkingView>{live ? "Search calls and retrieved sources will appear here." : "This task made no searches."}</EmptyThinkingView>
             )
           )}
 
@@ -281,7 +299,7 @@ export function ThinkingPanel({
             renderTools.length || renderEvents.length ? (
               <div className="divide-y divide-[var(--border)]">
                 {renderTools.slice(-10).map((tool) => (
-                  <ToolRow key={tool.id || tool.name} tool={tool} icon={ImageIcon} />
+                  <ToolRow key={tool.key ?? tool.id ?? tool.name} tool={tool} live={live} icon={ImageIcon} />
                 ))}
                 {!renderTools.length && renderEvents.slice(-6).map((event) => (
                   <div key={event.seq} className="flex items-center gap-3 px-4 py-3 text-sm">
@@ -293,7 +311,7 @@ export function ThinkingPanel({
                 ))}
               </div>
             ) : (
-              <EmptyThinkingView>Cover and slide rendering activity will appear here.</EmptyThinkingView>
+              <EmptyThinkingView>{live ? "Cover and slide rendering activity will appear here." : "This task rendered nothing."}</EmptyThinkingView>
             )
           )}
         </>
@@ -302,8 +320,21 @@ export function ThinkingPanel({
   )
 }
 
-function ToolRow({ tool, icon: Icon }: { tool: ToolCall; icon: typeof Wrench }) {
-  const active = tool.status === "running"
+function ToolRow({
+  tool,
+  icon: Icon,
+  live = false,
+}: {
+  tool: ToolCall
+  icon: typeof Wrench
+  /** False once the run has ended, whatever the stored status says. */
+  live?: boolean
+}) {
+  // A call whose response never arrived - the run was stopped, or the process
+  // died mid-tool - is stored as "running" forever, because only a matching
+  // response flips it. Trusting that on a finished run left a spinner turning
+  // on a task that ended days ago. The run being over is the better evidence.
+  const active = live && tool.status === "running"
   return (
     <div className="flex items-start gap-3 px-4 py-3">
       <Icon className="mt-0.5 size-4 shrink-0 text-[var(--muted-foreground)]" />
@@ -317,13 +348,19 @@ function ToolRow({ tool, icon: Icon }: { tool: ToolCall; icon: typeof Wrench }) 
       </span>
       <span className="flex items-center gap-1.5 text-xs tabular-nums text-[var(--muted-foreground)]">
         <ActivityStatus active={active} failed={tool.status === "error"} />
-        {active ? "running" : compactDuration(tool.ms)}
+        {active ? "running" : tool.status === "running" ? "no result" : compactDuration(tool.ms)}
       </span>
     </div>
   )
 }
 
-export function ToolChipList({ events }: { events: RunEvent[] }) {
+export function ToolChipList({
+  events,
+  live = false,
+}: {
+  events: RunEvent[]
+  live?: boolean
+}) {
   const tools = React.useMemo(() => allTools(events), [events])
   if (!tools.length) return null
 
@@ -331,18 +368,22 @@ export function ToolChipList({ events }: { events: RunEvent[] }) {
     <div className="flex flex-wrap gap-2" aria-label={`${tools.length} tool calls`}>
       {tools.slice(-8).map((tool) => (
         <span
-          key={tool.id || tool.name}
+          key={tool.key ?? tool.id ?? tool.name}
           className="inline-flex max-w-full items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs"
           title={tool.args || tool.result || tool.name}
         >
           {SEARCH_TOOL.test(tool.name) ? <Globe2 className="size-3.5" /> : RENDER_TOOL.test(tool.name) ? <ImageIcon className="size-3.5" /> : <Wrench className="size-3.5" />}
           <span className="max-w-44 truncate font-mono">{tool.name}</span>
           <span className="tabular-nums text-[var(--muted-foreground)]">
-            {tool.status === "running" ? "running" : compactDuration(tool.ms)}
+            {tool.status === "running"
+              ? live
+                ? "running"
+                : "no result"
+              : compactDuration(tool.ms)}
           </span>
           {tool.status === "ok" ? (
             <Check className="size-3.5 text-[var(--phase-qa)]" />
-          ) : tool.status === "running" ? (
+          ) : live && tool.status === "running" ? (
             <LoaderCircle className="size-3.5 animate-spin-slow text-[var(--phase-generate)]" />
           ) : (
             <Circle className="size-3.5 fill-[var(--destructive)] text-[var(--destructive)]" />

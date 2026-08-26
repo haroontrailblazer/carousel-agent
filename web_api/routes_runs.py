@@ -248,11 +248,20 @@ async def create_run(
             requested_by=identity.email,
         )
     except RunRefused as exc:
-        # 409 for "not now" (a run is going, the cap is reached); 400 for
+        # Picking a story from the newsroom CLAIMED it (queued -> processing)
+        # above, before the run was known to be startable. A refusal here would
+        # otherwise strand it: gone from the newsroom, attached to no run, and
+        # recoverable only by the startup sweep. Put it back so the next click
+        # can have it.
+        await _return_to_queue(payload)
+        # 409 for "not now" (every slot is busy, the cap is reached); 400 for
         # "not like that" (bad URL, empty topic). The SPA renders them
         # differently, so the distinction has to reach it.
         code = 409 if exc.code in ("too_many_active_runs", "daily_limit_reached") else 400
         raise HTTPException(code, {"code": exc.code, "message": exc.detail}) from exc
+    except BaseException:
+        await _return_to_queue(payload)
+        raise
 
     return {
         "run_id": started.run_id,
@@ -261,6 +270,16 @@ async def create_run(
         "phase": PHASE_GENERATE,
         "status": db.RUN_STATUS_RUNNING,
     }
+
+
+async def _return_to_queue(payload: StartRunRequest) -> None:
+    """Undo the newsroom claim when the run never started."""
+    if payload.source != "queue" or not payload.news_id:
+        return
+    try:
+        await db.release_news_claim(payload.news_id)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning("Could not return %s to the queue: %s", payload.news_id, exc)
 
 
 @router.get("/runs")

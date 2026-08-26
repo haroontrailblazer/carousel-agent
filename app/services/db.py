@@ -282,6 +282,62 @@ async def next_queued_news_by_id(news_id: str) -> Optional[dict]:
     return payload
 
 
+async def claim_news_by_url_hash(url_hash_value: str) -> Optional[str]:
+    """Claim a queued story by its URL, if one is waiting for it.
+
+    Pasting a link is the same act as picking the matching card in the
+    newsroom, but only the card claimed the row - so a story could be run
+    twice: once by whoever pasted the URL, once by whoever clicked it later,
+    paying for the same carousel twice.
+
+    Best effort and non-blocking: a URL that is not in the queue is the normal
+    case, and returns None.
+
+    Returns:
+        The claimed row's id, or None when nothing was queued for that URL.
+    """
+    pool = await get_pool()
+    return await pool.fetchval(
+        """
+        UPDATE news_queue SET status = $2
+        WHERE url_hash = $1 AND status = $3
+        RETURNING id
+        """,
+        str(url_hash_value),
+        STATUS_PROCESSING,
+        STATUS_QUEUED,
+    )
+
+
+async def release_news_claim(news_id: str) -> bool:
+    """Put a claimed story back in the queue.
+
+    The console claims a story the moment someone picks it, which is right -
+    two people clicking the same card must not produce two runs. But the claim
+    happens before the run is known to be startable, so a refusal (every slot
+    busy, the daily cap) left the story at ``processing``: invisible in the
+    newsroom, attached to no run, and freed only by the startup sweep.
+
+    Only a row still sitting at ``processing`` is released, so this can never
+    resurrect a story whose carousel actually shipped.
+
+    Returns:
+        True when a row went back to ``queued``.
+    """
+    pool = await get_pool()
+    updated = await pool.fetchval(
+        """
+        UPDATE news_queue SET status = $2
+        WHERE id = $1 AND status = $3
+        RETURNING id
+        """,
+        str(news_id),
+        STATUS_QUEUED,
+        STATUS_PROCESSING,
+    )
+    return updated is not None
+
+
 async def mark_news_done(id: str, status: str = STATUS_DONE) -> None:
     """Set the final status of a news_queue row (``done`` or ``failed``).
 

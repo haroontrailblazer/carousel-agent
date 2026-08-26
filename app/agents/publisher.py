@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 # Re-exported from app.state, which is the single place session-state keys
 # are declared - the web console reads this key too and must not have to
 # import the whole agent stack to learn its name.
+from app.runs import cancellation  # noqa: E402
 from app.state import K_PUBLISH_RESULT  # noqa: E402
 
 # Lazily constructed fallback when the runner's wired artifact service is not
@@ -148,12 +149,40 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
 
     # (2) Publish to Instagram (sync Graph API client with its own polling
     # loop - run in a worker thread so the event loop stays responsive).
+    #
+    # The last point at which stopping is still free. A worker thread cannot be
+    # interrupted by task.cancel(), so once this call starts the post can go
+    # live minutes after someone pressed Stop, on a carousel they deliberately
+    # abandoned. Checking a flag here is the difference between "stopped" and
+    # "stopped, but published anyway".
+    try:
+        cancellation.raise_if_cancelled(run_id)
+    except cancellation.RunCancelled:
+        logger.info("Run %s was stopped before publishing; nothing posted.", run_id)
+        result = {
+            "status": "error",
+            "message": "Stopped before publishing - nothing was posted.",
+            "cancelled": True,
+        }
+        state[K_PUBLISH_RESULT] = result
+        return result
+
     try:
         ig_result: dict[str, Any] = await asyncio.to_thread(
             instagram_tools.publish_carousel,
             bundle.model_dump(mode="json"),
             public_urls,
+            should_continue=lambda: not cancellation.is_requested(run_id),
         )
+    except instagram_tools.PublishAborted:
+        logger.info("Run %s was stopped mid-publish; nothing posted.", run_id)
+        result = {
+            "status": "error",
+            "message": "Stopped while publishing - nothing was posted.",
+            "cancelled": True,
+        }
+        state[K_PUBLISH_RESULT] = result
+        return result
     except Exception as exc:  # noqa: BLE001 - ValueError/RuntimeError/HTTP
         logger.exception("Instagram publish failed for run %s.", run_id)
         result = {

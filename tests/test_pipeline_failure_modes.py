@@ -169,7 +169,9 @@ class VerdictNeverRaisesTests(unittest.TestCase):
             p.start()
         self.addCleanup(lambda: [p.stop() for p in patches])
         busy = patch.object(
-            service_mod, "active_run_ids", lambda: {"run-something-else"}
+            service_mod,
+            "active_run_ids",
+            lambda: {f"run-other-{i}" for i in range(service_mod.MAX_CONCURRENT_RUNS)},
         )
         busy.start()
         self.addCleanup(busy.stop)
@@ -479,9 +481,12 @@ class RestartIsAtomicTests(unittest.TestCase):
             ),
             patch.object(db, "rewind_session_for_restart", fake_rewind),
             # The concurrency cap is what refuses a re-run now: the daily cap
-            # deliberately no longer applies to work already paid for.
+            # deliberately no longer applies to work already paid for. Fill
+            # every slot, whatever the cap happens to be set to.
             patch.object(
-                service_mod, "active_run_ids", lambda: {"run-something-else"}
+                service_mod,
+                "active_run_ids",
+                lambda: {f"run-other-{i}" for i in range(service_mod.MAX_CONCURRENT_RUNS)},
             ),
         ]
         for p in patches:
@@ -523,8 +528,8 @@ class RunHasAWallClockCapTests(unittest.TestCase):
     * ``_heartbeat`` keeps touching the run row every 30 s regardless, so the
       180 s idle threshold in ``db.interrupted_run_candidates`` never trips
       and startup recovery cannot reclaim it;
-    * ``MAX_CONCURRENT_RUNS`` is 1, so ``_check_limits`` refuses every new run
-      while the hung one is counted as active.
+    * the concurrency cap counts the hung run as active, so it holds a slot
+      against every new run for as long as it hangs.
 
     Net effect: the console shows a task Running forever with a pulsing trace,
     and no carousel can be made again until a human notices and clicks Stop.
@@ -597,3 +602,180 @@ class ConsoleActionsAreRoutedTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class ImageCostIsAttributedPerRunTests(unittest.TestCase):
+    """With several carousels in flight, each pays for its own images.
+
+    Image tools run outside any ADK model call, so their token usage cannot
+    ride on an event's ``usage_metadata`` the way every other count does. It
+    goes into a module-level accumulator instead - which was a single shared
+    bucket, drained by whichever run reached a phase transition first. That was
+    exact only while one run existed per process, an assumption
+    ``MAX_CONCURRENT_RUNS`` no longer makes.
+    """
+
+    def setUp(self) -> None:
+        from app import observability
+
+        self.obs = observability
+
+    def test_two_runs_do_not_drain_each_others_image_tokens(self) -> None:
+        class _Usage:
+            def __init__(self, n: int) -> None:
+                self.input_tokens = n
+                self.output_tokens = n
+                self.total_tokens = n * 2
+
+        async def scenario() -> tuple[dict, dict]:
+            async def work(run_id: str, tokens: int) -> None:
+                # Each run's task gets its own context, which is what carries
+                # the run id down to the image tool.
+                self.obs.bind_run(run_id)
+                await asyncio.sleep(0)
+                self.obs.record_image_usage(
+                    "gpt-image-2", "images.generate", _Usage(tokens)
+                )
+
+            await asyncio.gather(work("run-a", 100), work("run-b", 7))
+            return self.obs.pop_image_usage("run-a"), self.obs.pop_image_usage("run-b")
+
+        a, b = asyncio.run(scenario())
+
+        self.assertEqual(
+            (a["image_input_tokens"], a["image_calls"]),
+            (100, 1),
+            "run-a's image tokens were taken by another run: the accumulator "
+            "is a process-global bucket, so whichever run reaches a phase "
+            "transition first drains everyone's counts into its own total.",
+        )
+        self.assertEqual(
+            (b["image_input_tokens"], b["image_calls"]),
+            (7, 1),
+            "run-b reported no image cost because another run drained it",
+        )
+
+    def test_draining_a_run_twice_does_not_double_count(self) -> None:
+        self.obs.bind_run("run-c")
+        self.obs.pop_image_usage("run-c")  # start clean
+        first = self.obs.pop_image_usage("run-c")
+        self.assertEqual(first["image_calls"], 0)
+
+
+class ConcurrentRunsAreCountedTests(unittest.TestCase):
+    """The cap must be enforced against every driver, not just fresh runs."""
+
+    def test_the_cap_is_a_positive_number_of_slots(self) -> None:
+        self.assertGreaterEqual(
+            service_mod.MAX_CONCURRENT_RUNS,
+            1,
+            "a cap of zero would refuse every run, including resumes",
+        )
+
+    def test_the_driving_task_binds_its_run_before_working(self) -> None:
+        """Without this, image cost lands on whichever run bound last."""
+        for name, source in (
+            ("_drive_run", inspect.getsource(service_mod._drive_run)),
+            ("resume_pipeline", inspect.getsource(resume_mod.resume_pipeline)),
+        ):
+            self.assertIn(
+                "bind_run",
+                source,
+                f"{name} drives a run without binding it, so every image call "
+                "it makes is attributed to whatever ran before it.",
+            )
+
+
+class ConcurrencySlotIsReservedTests(unittest.TestCase):
+    """The cap must hold against simultaneous clicks, not just sequential ones.
+
+    A run only became countable at ``spawn_run``. Between ``_check_limits`` and
+    there sat a session write, three DB writes and - for a pasted URL - a
+    thirty-second HTTP fetch. Every request that arrived inside that window
+    passed the same check, so N simultaneous starts began N runs however small
+    the cap was. A reservation closes it: the count and the claim happen with
+    no await between them, so the event loop cannot interleave anything.
+    """
+
+    def test_simultaneous_starts_cannot_exceed_the_cap(self) -> None:
+        cap = service_mod.MAX_CONCURRENT_RUNS
+        attempts = cap + 3
+        started: list[str] = []
+
+        async def slow_session(**_kwargs):
+            # Stands in for create_session + the DB writes: any await here is
+            # enough to let another start_run interleave.
+            await asyncio.sleep(0)
+
+        class _Runner:
+            session_service = type("S", (), {"create_session": staticmethod(slow_session)})()
+
+        def fake_spawn(run_id, *, runner, first_message):
+            started.append(run_id)
+            task = asyncio.get_running_loop().create_task(asyncio.sleep(3600))
+            service_mod._run_tasks[run_id] = task
+            task.add_done_callback(lambda _t: service_mod._run_tasks.pop(run_id, None))
+            return task
+
+        patches = [
+            patch("app.agent.build_runner", lambda: _Runner()),
+            patch.object(service_mod, "spawn_run", fake_spawn),
+            patch.object(db, "create_run", AsyncMock(return_value=None)),
+            patch.object(db, "set_run_meta", AsyncMock(return_value=None)),
+            patch.object(db, "set_run_status", AsyncMock(return_value=None)),
+            patch.object(db, "count_runs_since", AsyncMock(return_value=0)),
+        ]
+        for p in patches:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in patches])
+
+        async def scenario():
+            results = await asyncio.gather(
+                *(
+                    service_mod.start_run(source="topic", topic=f"story number {i}")
+                    for i in range(attempts)
+                ),
+                return_exceptions=True,
+            )
+            for task in list(service_mod._run_tasks.values()):
+                task.cancel()
+            service_mod._run_tasks.clear()
+            service_mod._reserved.clear()
+            return results
+
+        results = asyncio.run(scenario())
+        refused = [r for r in results if isinstance(r, service_mod.RunRefused)]
+
+        self.assertLessEqual(
+            len(started),
+            cap,
+            f"{len(started)} runs started at once against a cap of {cap}. "
+            "_check_limits counted the actives and then let the caller await "
+            "several times before the run became countable, so every "
+            "simultaneous request passed the same check.",
+        )
+        self.assertEqual(
+            len(refused),
+            attempts - cap,
+            "the requests over the cap must be refused, not silently dropped",
+        )
+
+    def test_a_refused_start_hands_its_slot_back(self) -> None:
+        """Otherwise the cap shrinks by one on every refusal, permanently."""
+        service_mod._reserved.clear()
+
+        async def scenario():
+            with patch.object(db, "count_runs_since", AsyncMock(return_value=10**6)):
+                try:
+                    await service_mod.start_run(source="topic", topic="a story")
+                except service_mod.RunRefused:
+                    pass
+            return set(service_mod._reserved)
+
+        leftover = asyncio.run(scenario())
+        self.assertEqual(
+            leftover,
+            set(),
+            f"a refused start left {leftover} reserved forever, so the number "
+            "of usable slots drops with every refusal until none are left.",
+        )

@@ -304,8 +304,8 @@ class ConcurrencyCapCountsEveryDriverTests(unittest.TestCase):
             counted,
             "A rework driven by app.review.resume is not counted by "
             "active_run_ids, so _check_limits lets a brand-new run start on "
-            "top of it. MAX_CONCURRENT_RUNS=1 exists because this pipeline "
-            "is ffmpeg- and image-heavy on one small instance, and the same "
+            "top of it. The concurrency cap exists because this pipeline is "
+            "ffmpeg- and image-heavy on one small instance, and the same "
             "blind spot lets two drivers touch one ADK session.",
         )
 

@@ -159,15 +159,19 @@ async def resume_pipeline(
         # Deferred imports: building the agent tree is heavy and needs the full
         # agent/tool dependency stack - the API itself must start without it.
         # consume_invocation is deferred for import-cycle reasons only.
+        from app import observability
         from app.agent import build_runner
+        from app.runs import cancellation
         from app.runs.bus import KIND_TERMINAL
-        from app.runs.service import HEARTBEAT_INTERVAL_S, _heartbeat
+        from app.runs.service import _heartbeat
         from app.runs.stream import consume_invocation, record_event
 
         # A resumed leg runs for minutes and writes to the run row only at
         # phase boundaries, so without this it looks idle to startup recovery
         # for the whole of a rework. _drive_run has always heartbeated for
         # exactly this reason; this path simply never did.
+        observability.bind_run(run_id)
+        cancellation.clear(run_id)
         beat = asyncio.get_running_loop().create_task(
             _heartbeat(run_id, deadline=RESUME_TIMEOUT_S),
             name=f"heartbeat-{run_id}",

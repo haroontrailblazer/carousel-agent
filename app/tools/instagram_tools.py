@@ -22,7 +22,7 @@ carries an explicit timeout, and any Graph API error payload is raised as a
 from __future__ import annotations
 
 import time
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
 import httpx
 
@@ -156,7 +156,36 @@ def _create_child_container(
     return str(container_id)
 
 
-def _wait_until_finished(client: httpx.Client, container_id: str) -> None:
+class PublishAborted(Exception):
+    """The caller withdrew consent part-way through a publish.
+
+    Raised only from the checkpoints below, each of which sits BEFORE an
+    irreversible Graph API call. Nothing has been posted when this is raised.
+    """
+
+
+def _still_wanted(should_continue: Optional[Callable[[], bool]]) -> None:
+    """Abort unless the caller still wants this publish to happen.
+
+    Uploading a carousel is a sequence of slow steps - create each child
+    container, wait for the video to transcode, create the parent, wait again,
+    then publish - and the whole thing runs in a worker thread that
+    ``task.cancel()`` cannot interrupt. Without a check between the steps,
+    pressing Stop during a publish stops nothing: the post appears anyway, on a
+    carousel someone had already abandoned.
+
+    Raises:
+        PublishAborted: when the caller says stop.
+    """
+    if should_continue is not None and not should_continue():
+        raise PublishAborted("The run was stopped before the carousel was posted.")
+
+
+def _wait_until_finished(
+    client: httpx.Client,
+    container_id: str,
+    should_continue: Optional[Callable[[], bool]] = None,
+) -> None:
     """Poll a media container until its ``status_code`` is ``FINISHED``.
 
     Bounded to ``_MAX_POLL_ATTEMPTS`` polls, ``_POLL_INTERVAL_S`` seconds
@@ -184,6 +213,7 @@ def _wait_until_finished(client: httpx.Client, container_id: str) -> None:
                 f"{last_status}: {detail}"
             )
         if attempt < _MAX_POLL_ATTEMPTS:
+            _still_wanted(should_continue)
             time.sleep(_POLL_INTERVAL_S)
     raise RuntimeError(
         f"Instagram media container {container_id} did not reach FINISHED "
@@ -217,7 +247,11 @@ def _create_parent_container(
     return str(parent_id)
 
 
-def publish_carousel(bundle: dict, public_urls: list[str]) -> dict:
+def publish_carousel(
+    bundle: dict,
+    public_urls: list[str],
+    should_continue: Optional[Callable[[], bool]] = None,
+) -> dict:
     """Publish the approved carousel to Instagram and return its identity.
 
     Args:
@@ -227,6 +261,9 @@ def publish_carousel(bundle: dict, public_urls: list[str]) -> dict:
         public_urls: Publicly reachable HTTPS URLs for every slide in order.
             The FIRST url must be the cover VIDEO (mp4); all remaining urls
             are slide images (PNG/JPEG, 1080x1350).
+        should_continue: Asked before each irreversible step. Return False to
+            abandon the publish; nothing will have been posted. This runs in a
+            worker thread, so it must be cheap and thread-safe.
 
     Returns:
         ``{"media_id": <published IG media id>, "permalink": <post url>}``.
@@ -236,6 +273,8 @@ def publish_carousel(bundle: dict, public_urls: list[str]) -> dict:
             (2 to ``settings.max_carousel_slides`` items).
         RuntimeError: When credentials are missing or the Graph API returns
             an error payload / a container fails or times out processing.
+        PublishAborted: When ``should_continue`` said to stop. Nothing was
+            posted.
     """
     if len(public_urls) > settings.max_carousel_slides:
         raise ValueError(
@@ -265,19 +304,23 @@ def publish_carousel(bundle: dict, public_urls: list[str]) -> dict:
         # decision has to come from the file rather than its position.
         child_ids: list[str] = []
         for url in public_urls:
+            _still_wanted(should_continue)
             child_ids.append(
                 _create_child_container(client, url, is_video=_is_video_url(url))
             )
 
         # (2) Wait for every child (video transcode is asynchronous).
         for child_id in child_ids:
-            _wait_until_finished(client, child_id)
+            _wait_until_finished(client, child_id, should_continue)
 
         # (3) Parent CAROUSEL container; poll it too before publishing.
+        _still_wanted(should_continue)
         parent_id = _create_parent_container(client, child_ids, caption)
-        _wait_until_finished(client, parent_id)
+        _wait_until_finished(client, parent_id, should_continue)
 
-        # (4) Publish.
+        # (4) Publish. The last checkpoint - after this the post is live and
+        # no amount of stopping takes it back.
+        _still_wanted(should_continue)
         publish_payload = _graph_request(
             client,
             "POST",
