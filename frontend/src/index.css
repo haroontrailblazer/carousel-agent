@@ -300,6 +300,90 @@
   .glide:hover { transform: none; }
 }
 
+/* ---------------------------------------------------------------------------
+   Navigation motion.
+
+   Switching screens used to be an instant swap with nothing between the two,
+   which reads as a page that flickered rather than a page that changed. Three
+   pieces fix that, and all three are built to cost nothing:
+
+   1. A cross-fade between screens, run by the browser's View Transitions API.
+      The browser snapshots both states and animates them on the compositor -
+      no React re-render, no JavaScript per frame, and it degrades to the old
+      instant swap in a browser that does not support it.
+   2. A progress bar that eases toward 90% and waits there, for the
+      navigations slow enough to need one.
+   3. A drawer that slides rather than appears.
+
+   Only `opacity` and `transform` are animated anywhere here. Anything else -
+   width, height, top - would put layout and paint on the main thread for
+   every frame, which is exactly the jank this is meant to avoid.
+--------------------------------------------------------------------------- */
+
+/* Indeterminate on purpose: the browser cannot report how much of a chunk has
+   arrived, so easing toward 90% and stopping is the honest shape. It says
+   "moving" without claiming a finish it has no way to know about. */
+@keyframes route-progress {
+  0%   { transform: scaleX(0); }
+  40%  { transform: scaleX(0.55); }
+  100% { transform: scaleX(0.9); }
+}
+.route-progress-bar {
+  transform-origin: left;
+  animation: route-progress 2.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* The cross-fade. Faster out than in, so the incoming screen is what the eye
+   settles on rather than the one being left. 180ms total: long enough to read
+   as a transition, short enough that a decisive click never waits on it. */
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } }
+
+::view-transition-old(root) {
+  animation: vt-fade-out 120ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+::view-transition-new(root) {
+  animation: vt-fade-in 180ms cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+/* The mobile drawer. `cubic-bezier(0.32, 0.72, 0, 1)` is the decelerate curve
+   a sheet wants: it leaves fast and arrives gently, so it feels attached to
+   the thumb that opened it rather than played back at it. */
+@keyframes drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-drawer-in {
+  animation: drawer-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  /* Scrolling the drawer to its end must not then scroll the page behind it,
+     and must never trigger the browser's pull-to-refresh. */
+  overscroll-behavior: contain;
+}
+.animate-backdrop-in { animation: backdrop-in 220ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* The wildcard matters: a view transition creates pseudo-elements we never
+     named, and every one of them animates by default. */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  .animate-drawer-in,
+  .animate-backdrop-in {
+    animation: none !important;
+  }
+  /* Still shown, just not travelling - the bar is information, not decoration. */
+  .route-progress-bar {
+    animation: none !important;
+    transform: scaleX(0.6);
+  }
+}
+
 /* A 4:5 slide must never be cropped to fit: the reviewer is checking
    typography and safe areas, and object-fit: cover would hide exactly the
    defects they are looking for. */

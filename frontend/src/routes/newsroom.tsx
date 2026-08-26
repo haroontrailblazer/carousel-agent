@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { SkeletonRows } from "@/components/ui/skeleton"
 import { MutedChip } from "@/components/ui/chip"
 import { ApiError, post } from "@/lib/api"
 import { relativeTime } from "@/lib/format"
@@ -142,16 +143,7 @@ export function NewsroomRoute() {
         </Button>
       </div>
 
-      {queue.isLoading && (
-        <div className="space-y-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-24 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]"
-            />
-          ))}
-        </div>
-      )}
+      {queue.isLoading && <SkeletonRows rows={4} className="[&>*]:h-24" />}
 
       {!queue.isLoading && items.length === 0 && (
         <Card className="p-10 text-center">
@@ -166,7 +158,7 @@ export function NewsroomRoute() {
               Check feeds
             </Button>
             <Button variant="brand" size="sm" asChild>
-              <Link to="/new">Write a topic</Link>
+              <Link to="/new" viewTransition>Write a topic</Link>
             </Button>
           </div>
         </Card>

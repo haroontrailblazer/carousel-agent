@@ -13,6 +13,7 @@ import { BrandLogo } from "@/components/layout/brand-logo"
 import { UserMenu } from "@/components/layout/user-menu"
 import { usePulse } from "@/hooks/use-pulse"
 import { queueQuery, runsQuery } from "@/lib/queries"
+import { prefetchRouteChunk } from "@/lib/route-chunks"
 import { cn } from "@/lib/utils"
 
 const NAV = [
@@ -162,15 +163,22 @@ export function SidebarContent({
   const queryClient = useQueryClient()
 
   /**
-   * Warm a screen's list before it is asked for.
+   * Warm a screen before it is asked for - both halves of it.
    *
-   * Worth the four lines: the database is far enough away that a list is a
-   * visible wait, and hovering a link is the one moment we know a screen is
-   * about to be opened. `prefetchQuery` respects staleTime, so a fresh list
-   * is not re-fetched just because the pointer crossed the link.
+   * Hovering a link is the one moment we know a screen is about to be opened,
+   * and there are now two things it needs: the JavaScript that draws it, and
+   * the list it draws. Screens are downloaded on demand since the bundle was
+   * split, so fetching only the data would have traded one visible wait for
+   * another.
+   *
+   * Both are safe to call on every hover. `prefetchQuery` respects staleTime,
+   * so a fresh list is not re-fetched because the pointer crossed the link,
+   * and a module resolves once - the second `import()` of a chunk already in
+   * memory costs nothing.
    */
   const prefetch = React.useCallback(
     (to: string) => {
+      prefetchRouteChunk(to)
       if (to === "/tasks") void queryClient.prefetchQuery(runsQuery())
       if (to === "/newsroom") void queryClient.prefetchQuery(queueQuery())
     },
@@ -207,6 +215,10 @@ export function SidebarContent({
             key={to}
             to={to}
             end={end}
+            // Hand the swap to the browser's View Transitions API: it
+            // cross-fades the old screen into the new one on the compositor,
+            // and does nothing at all where it is unsupported.
+            viewTransition
             onClick={onNavigate}
             // The list is already on its way by the time the click lands.
             // Pointer-enter, not mouse-enter, so a phone gets it too: it
@@ -275,9 +287,9 @@ export function SidebarDrawer({
         type="button"
         aria-label="Close menu"
         onClick={onClose}
-        className="absolute inset-0 bg-black/40"
+        className="animate-backdrop-in absolute inset-0 bg-black/40"
       />
-      <div className="absolute inset-y-0 left-0 w-64 border-r border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-lift)]">
+      <div className="animate-drawer-in absolute inset-y-0 left-0 w-64 overflow-y-auto border-r border-[var(--border)] bg-[var(--card)] shadow-[var(--shadow-lift)]">
         <SidebarContent onNavigate={onClose} onClose={onClose} />
       </div>
     </div>

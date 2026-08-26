@@ -6,9 +6,11 @@ import { TaskActions } from "@/components/run/task-actions"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
+import { SkeletonRows } from "@/components/ui/skeleton"
 import { relativeTime } from "@/lib/format"
 import { isRemembered, runsQuery } from "@/lib/queries"
 import { PHASE_LABELS, STATUS_LABELS, STATUS_TOKEN } from "@/lib/pipeline"
+import { runDetailChunk } from "@/lib/route-chunks"
 import type { RunStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -88,7 +90,7 @@ export function HistoryRoute() {
           )}
         </div>
         <Button variant="brand" size="sm" asChild>
-          <Link to="/new">New carousel</Link>
+          <Link to="/new" viewTransition>New carousel</Link>
         </Button>
       </div>
 
@@ -115,16 +117,7 @@ export function HistoryRoute() {
         })}
       </div>
 
-      {firstLoad && (
-        <div className="space-y-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-20 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]"
-            />
-          ))}
-        </div>
-      )}
+      {firstLoad && <SkeletonRows rows={4} />}
 
       {!firstLoad && items.length === 0 && (
         <Card className="p-10 text-center">
@@ -136,7 +129,7 @@ export function HistoryRoute() {
           </p>
           {filter === "all" && (
             <Button variant="brand" className="mt-4" asChild>
-              <Link to="/new">Make one</Link>
+              <Link to="/new" viewTransition>Make one</Link>
             </Button>
           )}
         </Card>
@@ -145,7 +138,15 @@ export function HistoryRoute() {
       <div className="space-y-2">
         {items.map((run) => (
           <Card key={run.run_id} glide className="p-4">
-            <Link to={`/tasks/${run.run_id}`} className="block">
+            <Link
+              to={`/tasks/${run.run_id}`}
+              viewTransition
+              // Every row leads to the same screen, so the first hover
+              // anywhere in the list downloads it for all of them - the
+              // module resolves once and the rest are free.
+              onPointerEnter={() => void runDetailChunk().catch(() => undefined)}
+              className="block"
+            >
               <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
@@ -174,7 +175,7 @@ export function HistoryRoute() {
                     asChild
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Link to={`/tasks/${run.run_id}?tab=review`}>Review</Link>
+                    <Link to={`/tasks/${run.run_id}?tab=review`} viewTransition>Review</Link>
                   </Button>
                 ) : (
                   <TaskActions

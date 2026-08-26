@@ -14,7 +14,7 @@ export function NotFoundRoute() {
           There is nothing at this address.
         </p>
         <Button variant="brand" className="mt-5" asChild>
-          <Link to="/new">Go to the console</Link>
+          <Link to="/new" viewTransition>Go to the console</Link>
         </Button>
       </Card>
     </div>

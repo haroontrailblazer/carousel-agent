@@ -2,20 +2,66 @@ import {
   createBrowserRouter,
   Navigate,
   Outlet,
+  ScrollRestoration,
   useLocation,
   useParams,
 } from "react-router"
 
 import { AppShell } from "@/components/layout/app-shell"
-import { useAuth } from "@/hooks/use-auth"
-import { HistoryRoute } from "@/routes/history"
+import { AppShellSkeleton } from "@/components/layout/app-shell-skeleton"
+import { RouteProgress } from "@/components/layout/route-progress"
+import { Spinner } from "@/components/ui/spinner"
+import { hadSession, useAuth } from "@/hooks/use-auth"
+import {
+  historyChunk,
+  newRunChunk,
+  newsroomChunk,
+  profileChunk,
+  resetPasswordChunk,
+  runDetailChunk,
+} from "@/lib/route-chunks"
 import { LoginRoute } from "@/routes/login"
-import { NewRunRoute } from "@/routes/new-run"
-import { NewsroomRoute } from "@/routes/newsroom"
-import { ProfileRoute } from "@/routes/profile"
 import { NotFoundRoute } from "@/routes/not-found"
-import { ResetPasswordRoute } from "@/routes/reset-password"
-import { RunDetailRoute } from "@/routes/run-detail"
+
+/**
+ * The frame every screen renders inside.
+ *
+ * It owns the two things that are about NAVIGATION rather than about any one
+ * page: the bar that appears when a screen is taking a moment to arrive, and
+ * scroll restoration. Both have to sit inside the data router to see its
+ * state, and both have to be rendered exactly once - which is what a pathless
+ * root route is for.
+ */
+function RootLayout() {
+  return (
+    <>
+      <RouteProgress />
+      {/* Going back to a long task list used to land at the top of it, so the
+          row you were reading had to be found again. */}
+      <ScrollRestoration />
+      <Outlet />
+    </>
+  )
+}
+
+/**
+ * What is on screen while the first chunk of the app is still arriving.
+ *
+ * Screens are downloaded on demand now, which means the very first navigation
+ * has one thing to fetch before it can render anything. React Router shows the
+ * nearest ancestor's HydrateFallback while that happens; without one it
+ * renders null, and a white page is indistinguishable from a broken app.
+ *
+ * The same mark and spinner as the signed-in loading state on purpose - the
+ * boot sequence should look like one continuous wait, not two different ones.
+ */
+function BootSplash() {
+  return (
+    <div className="grid min-h-dvh place-items-center">
+      <Spinner label="Loading" />
+    </div>
+  )
+}
 
 /**
  * Guard every screen behind a signed-in session.
@@ -31,12 +77,20 @@ function RequireAuth() {
   if (status === "pending") {
     // Not the login screen. Rendering it here would flash sign-in on every
     // reload before the existing session finishes loading.
-    return (
+    //
+    // Which placeholder depends on what this browser has done before.
+    // Confirming the session is a round trip, and for someone who was signed
+    // in a minute ago it will almost certainly come back "yes" - so they get
+    // the console's own layout, drawn empty, and the wait reads as the app
+    // laying itself out instead of as a blank page with a spinner on it.
+    // Someone arriving for the first time gets the spinner, because a console
+    // they are about to be redirected away from is a worse thing to show them
+    // than nothing.
+    return hadSession() ? (
+      <AppShellSkeleton />
+    ) : (
       <div className="grid min-h-dvh place-items-center">
-        <div
-          className="size-6 rounded-full border-2 border-[var(--border)] border-t-[var(--brand)] animate-spin-slow"
-          aria-label="Loading"
-        />
+        <Spinner label="Loading" />
       </div>
     )
   }
@@ -66,30 +120,68 @@ function LegacyRunRedirect({ review = false }: { review?: boolean }) {
 }
 
 export const router = createBrowserRouter([
-  // PUBLIC. Every landing page named in an auth email must be listed here -
-  // Oreag's proxy.ts documents what happens otherwise: the links in every
-  // password-reset mail dead-end on the sign-in screen.
-  { path: "/login", element: <LoginRoute /> },
-  { path: "/reset-password", element: <ResetPasswordRoute /> },
-
   {
-    element: <RequireAuth />,
+    id: "root",
+    Component: RootLayout,
+    // Every lazy route below resolves under this, so this is the one fallback
+    // that has to exist.
+    HydrateFallback: BootSplash,
     children: [
-      { path: "/", element: <Navigate to="/new" replace /> },
-      { path: "/new", element: <NewRunRoute /> },
-      { path: "/newsroom", element: <NewsroomRoute /> },
-      { path: "/tasks", element: <HistoryRoute /> },
-      { path: "/profile", element: <ProfileRoute /> },
-      // Legacy paths. These screens were called "runs" before, and links to
-      // them exist in browser history and in anything already shared. Keeping
-      // the redirects costs three lines and means an old bookmark lands where
-      // it should instead of on a 404 that looks like the app is broken.
-      { path: "/runs", element: <Navigate to="/tasks" replace /> },
-      { path: "/runs/:runId", element: <LegacyRunRedirect /> },
-      { path: "/runs/:runId/review", element: <LegacyRunRedirect review /> },
-      { path: "/tasks/:runId", element: <RunDetailRoute /> },
-      { path: "/tasks/:runId/review", element: <LegacyRunRedirect review /> },
+      // PUBLIC. Every landing page named in an auth email must be listed here -
+      // Oreag's proxy.ts documents what happens otherwise: the links in every
+      // password-reset mail dead-end on the sign-in screen.
+      //
+      // Sign-in is the ONE screen loaded eagerly, in the main bundle. It is
+      // small, and it is the screen a signed-out visitor is guaranteed to
+      // need - putting it behind its own download would trade a smaller
+      // bundle for a second round trip on the very first paint.
+      { path: "/login", element: <LoginRoute /> },
+      {
+        path: "/reset-password",
+        lazy: async () => ({
+          Component: (await resetPasswordChunk()).ResetPasswordRoute,
+        }),
+      },
+
+      {
+        element: <RequireAuth />,
+        children: [
+          { path: "/", element: <Navigate to="/new" replace /> },
+          {
+            path: "/new",
+            lazy: async () => ({ Component: (await newRunChunk()).NewRunRoute }),
+          },
+          {
+            path: "/newsroom",
+            lazy: async () => ({
+              Component: (await newsroomChunk()).NewsroomRoute,
+            }),
+          },
+          {
+            path: "/tasks",
+            lazy: async () => ({ Component: (await historyChunk()).HistoryRoute }),
+          },
+          {
+            path: "/profile",
+            lazy: async () => ({ Component: (await profileChunk()).ProfileRoute }),
+          },
+          // Legacy paths. These screens were called "runs" before, and links to
+          // them exist in browser history and in anything already shared. Keeping
+          // the redirects costs three lines and means an old bookmark lands where
+          // it should instead of on a 404 that looks like the app is broken.
+          { path: "/runs", element: <Navigate to="/tasks" replace /> },
+          { path: "/runs/:runId", element: <LegacyRunRedirect /> },
+          { path: "/runs/:runId/review", element: <LegacyRunRedirect review /> },
+          {
+            path: "/tasks/:runId",
+            lazy: async () => ({
+              Component: (await runDetailChunk()).RunDetailRoute,
+            }),
+          },
+          { path: "/tasks/:runId/review", element: <LegacyRunRedirect review /> },
+        ],
+      },
+      { path: "*", element: <NotFoundRoute /> },
     ],
   },
-  { path: "*", element: <NotFoundRoute /> },
 ])

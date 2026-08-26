@@ -14,7 +14,7 @@
  * bundle; the only server is FastAPI, and it verifies tokens itself.
  */
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 export type AuthConfig = {
   supabase_url: string
@@ -49,6 +49,20 @@ export async function getSupabase(): Promise<SupabaseClient> {
       "Sign-in is not configured: set SUPABASE_URL and SUPABASE_ANON_KEY on the server.",
     )
   }
+  // Imported HERE rather than at the top of the file, which is what keeps the
+  // SDK out of the first paint.
+  //
+  // Everything in the app reaches the API through lib/api.ts, and lib/api.ts
+  // needs this module for one thing: clearing a dead token on the way to the
+  // sign-in screen. A static import at the top therefore put 56 KB of
+  // gzipped SDK on the critical path of every screen, to be ready for
+  // something most page loads never do.
+  //
+  // Nothing is delayed that was not already waiting: this function is async
+  // regardless, because the project URL and anon key have to be fetched from
+  // the backend before a client can exist at all. The download now happens
+  // alongside that fetch instead of before the app renders.
+  const { createClient } = await import("@supabase/supabase-js")
   client = createClient(config.supabase_url, config.supabase_anon_key, {
     auth: {
       persistSession: true,
@@ -81,6 +95,21 @@ export const supabase = {
     async getSession() {
       const c = await getSupabase()
       return c.auth.getSession()
+    },
+    /**
+     * The user as the SERVER currently has them, not as this browser
+     * remembers them.
+     *
+     * `getSession()` hands back the JWT sitting in localStorage, and
+     * `user_metadata` - the display name and the avatar URL - is baked into
+     * that token when it is issued. So changing your picture on a phone
+     * updated Supabase and left every other signed-in browser showing the old
+     * one until its token happened to refresh. `getUser()` asks Supabase,
+     * which is the only way one device learns what another one did.
+     */
+    async getUser() {
+      const c = await getSupabase()
+      return c.auth.getUser()
     },
     async signInWithPassword(credentials: { email: string; password: string }) {
       const c = await getSupabase()

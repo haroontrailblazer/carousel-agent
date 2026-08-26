@@ -143,6 +143,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     // The session lives in an httpOnly cookie, so it must be sent explicitly.
     // The same cookie is what lets the ADK dev UI and EventSource work at all.
     credentials: "include",
+    // Never let the HTTP cache answer for the API.
+    //
+    // React Query decides when this app re-asks a question; the browser cache
+    // deciding a second time, on rules we do not set, is how a settings screen
+    // ends up insisting Telegram is disconnected after it was connected on
+    // another device. These responses carry no Cache-Control, which does not
+    // mean "do not cache" - it means the browser is free to guess from
+    // Last-Modified, and it does. Nothing is given up by opting out: an API
+    // answer we deliberately re-requested is one we want from the server.
+    cache: "no-store",
     headers: {
       Accept: "application/json",
       ...(init.body ? { "Content-Type": "application/json" } : {}),
@@ -194,6 +204,7 @@ export const postBytes = <T>(path: string, body: Blob) =>
 export async function probe<T>(path: string): Promise<T | null> {
   const response = await fetch(path, {
     credentials: "include",
+    cache: "no-store",
     headers: { Accept: "application/json" },
   })
   if (response.status === 401 || response.status === 403) return null

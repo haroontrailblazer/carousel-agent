@@ -132,7 +132,19 @@ export function PhaseRail({ phase, live }: { phase: Phase; live: boolean }) {
  * carries the detail - full arguments and the response - which you want only
  * once you have found the pill worth looking at.
  */
-function ToolPill({ tool }: { tool: ToolCall }) {
+/**
+ * One tool call, with its arguments and result behind a tooltip.
+ *
+ * Memoised because there are a lot of these - a finished run has dozens - and
+ * each one mounts a Radix tooltip. While a run is live the trace is refetched
+ * every three seconds, so without this every pill in the history rebuilds its
+ * tooltip on every poll to render exactly what it rendered before.
+ *
+ * The default shallow comparison is the right one here: React Query does
+ * structural sharing, so a `tool` object that did not change between two
+ * responses comes back as the SAME object, and this bails out.
+ */
+const ToolPill = React.memo(function ToolPill({ tool }: { tool: ToolCall }) {
   const tone =
     tool.status === "error"
       ? "failed"
@@ -200,7 +212,7 @@ function ToolPill({ tool }: { tool: ToolCall }) {
       </TooltipContent>
     </Tooltip>
   )
-}
+})
 
 /** The run's cost and duration at a glance, above the per-agent detail. */
 export function TraceSummaryBar({
@@ -325,22 +337,46 @@ function groupStat(events: RunEvent[]): GroupStat {
   }
 }
 
+/**
+ * A string that changes whenever anything a block RENDERS changes.
+ *
+ * Paired with the memo on AgentGroup - see the comment there for why the
+ * events array itself cannot be the comparison.
+ */
+function blockSignature(
+  author: string,
+  events: RunEvent[],
+  stat: GroupStat,
+): string {
+  let textChars = 0
+  let toolChars = 0
+  for (const event of events) {
+    textChars += event.text?.length ?? 0
+    for (const tool of event.tools ?? []) {
+      toolChars +=
+        tool.name.length + (tool.args?.length ?? 0) + (tool.result?.length ?? 0)
+    }
+  }
+  return [
+    author,
+    events[0]?.seq ?? "",
+    events[events.length - 1]?.seq ?? "",
+    events.length,
+    stat.ms ?? "",
+    stat.tokens.total,
+    stat.toolCalls,
+    textChars,
+    toolChars,
+  ].join("|")
+}
+
 function ShimmerBar() {
   return (
     <span aria-hidden className="animate-shimmer block h-0.5 w-full rounded-full" />
   )
 }
 
-function AgentGroup({
-  author,
-  events,
-  stat,
-  slowestMs,
-  occurrence,
-  totalOccurrences,
-  active,
-  defaultOpen,
-}: {
+type AgentGroupProps = {
   author: string
   events: RunEvent[]
   stat: GroupStat
@@ -349,15 +385,39 @@ function AgentGroup({
   totalOccurrences: number
   active: boolean
   defaultOpen: boolean
-}) {
+  /** Everything about this block that can change. See the memo below. */
+  signature: string
+}
+
+function AgentGroupImpl({
+  author,
+  events,
+  stat,
+  slowestMs,
+  occurrence,
+  totalOccurrences,
+  active,
+  signature,
+  defaultOpen,
+}: AgentGroupProps) {
   const [open, setOpen] = React.useState(defaultOpen)
-  const failed = events.some((e) => e.kind === "error")
+  // Derived from the events, so they are recomputed when the events change and
+  // not once per poll. `signature` is the dependency rather than `events`:
+  // grouping rebuilds its arrays every time, so the array identity changes
+  // even when not one frame in it did.
+  const { failed, tools } = React.useMemo(
+    () => ({
+      failed: events.some((e) => e.kind === "error"),
+      tools: events.flatMap((e) => e.tools ?? []),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [signature],
+  )
   const base = AGENT_LABELS[author] ?? author
   // An agent that runs more than once (the orchestrator between every child,
   // or any agent in a rework round) needs its passes told apart.
   const label =
     totalOccurrences > 1 ? `${base} · pass ${occurrence}` : base
-  const tools = events.flatMap((e) => e.tools ?? [])
 
   // A proportional bar makes "which agent ate the run" readable at a glance,
   // which a column of numbers does not.
@@ -509,6 +569,34 @@ function AgentGroup({
 }
 
 /**
+ * Re-render a block only when something about IT changed.
+ *
+ * This is the hot path of the whole console. While a run is live the trace is
+ * refetched every three seconds for up to fifteen minutes, and each response
+ * carries the entire history - so by the end of a run, a poll that adds one
+ * frame was re-rendering every agent group and every tool pill that came
+ * before it, several hundred times over.
+ *
+ * `events` cannot drive the comparison: grouping allocates a fresh array per
+ * response, so the props are never shallow-equal and `React.memo` alone would
+ * bail out of nothing. `signature` is built in `AgentTrace` from the things
+ * that actually identify a block - which agent, which frames, how long, how
+ * many tokens - and a trace is append-only, so a block whose signature is
+ * unchanged genuinely rendered the same content.
+ *
+ * `defaultOpen` is deliberately not compared. It seeds `useState` on mount and
+ * is ignored afterwards, so a change to it can never affect what is on screen,
+ * and including it would defeat the memo on every append.
+ */
+const AgentGroup = React.memo(AgentGroupImpl, (prev, next) => {
+  return (
+    prev.signature === next.signature &&
+    prev.slowestMs === next.slowestMs &&
+    prev.active === next.active
+  )
+})
+
+/**
  * The run trace.
  *
  * Frames come from ADK's own event transcript - the same log the /dev
@@ -540,11 +628,26 @@ export function AgentTrace({
     for (const g of grouped) counts[g.author] = (counts[g.author] ?? 0) + 1
     return grouped.map((g) => {
       seen[g.author] = (seen[g.author] ?? 0) + 1
+      const stat = groupStat(g.events)
       return {
         ...g,
-        stat: groupStat(g.events),
+        stat,
         occurrence: seen[g.author],
         totalOccurrences: counts[g.author],
+        // What this block IS, as a string that changes if any of it changes.
+        //
+        // Sequence numbers bound the frames and the count catches anything
+        // inserted between them, which covers the ordinary case: a trace is
+        // append-only and ADK never renumbers.
+        //
+        // The two lengths cover the case that is not append-only. A frame can
+        // be REVISED in place - text streamed in against a seq that already
+        // exists, or a tool call whose result lands after the call itself was
+        // recorded. Neither moves a sequence number or a count, so without
+        // these the memo would hold a half-written frame on screen and never
+        // correct it. Summing lengths is O(1) per string and catches any edit
+        // that changes what is rendered.
+        signature: blockSignature(g.author, g.events, stat),
       }
     })
   }, [events])
@@ -600,6 +703,7 @@ export function AgentTrace({
               slowestMs={slowestMs}
               occurrence={block.occurrence}
               totalOccurrences={block.totalOccurrences}
+              signature={block.signature}
               active={live && index === blocks.length - 1}
               defaultOpen={index === blocks.length - 1}
             />

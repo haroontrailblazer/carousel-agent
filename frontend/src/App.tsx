@@ -2,6 +2,7 @@ import {
   MutationCache,
   QueryClient,
   QueryClientProvider,
+  focusManager,
 } from "@tanstack/react-query"
 import { RouterProvider } from "react-router"
 import { Toaster } from "sonner"
@@ -27,6 +28,54 @@ const mutationCache = new MutationCache({
   },
 })
 
+/**
+ * Treat "the user is looking at this tab again" as the moment to revalidate.
+ *
+ * React Query listens for `visibilitychange` out of the box, which covers a
+ * tab switch and nothing else. Two cases it misses are exactly the ones that
+ * made this console show stale data:
+ *
+ *  - `pageshow` with `persisted` set. Going back, or reopening a laptop onto
+ *    a page the browser froze into its back/forward cache, restores the whole
+ *    JavaScript heap - timers, caches and all - WITHOUT firing
+ *    visibilitychange. Every number on screen is then as old as the freeze.
+ *  - `focus`. Some mobile browsers return from the app switcher with a focus
+ *    event and a visibility state that never changed.
+ *
+ * This is the fix for the reported bug in its general form: a change made on
+ * a phone appears on the laptop when the laptop is next looked at, rather
+ * than only after a hard refresh.
+ */
+focusManager.setEventListener((handleFocus) => {
+  if (typeof window === "undefined") return () => undefined
+
+  // Called with NO ARGUMENT, which is load-bearing and was got wrong once.
+  //
+  // Passing a boolean routes into React Query's `setFocused`, which compares
+  // against the focus state it is already holding and does nothing when they
+  // match. That silently disables the two cases this exists for: after a
+  // bfcache restore the page was never marked unfocused, and a `focus` event
+  // often arrives while the document was never hidden - so `handleFocus(true)`
+  // is a no-op precisely when the data is most likely to be stale. Calling it
+  // with nothing notifies unconditionally and lets `isFocused()` read
+  // `document.visibilityState` itself, which is also the only reading that
+  // cannot drift out of step with the actual tab.
+  const notify = () => handleFocus()
+  const onPageShow = (event: PageTransitionEvent) => {
+    if (event.persisted) notify()
+  }
+
+  window.addEventListener("visibilitychange", notify, false)
+  window.addEventListener("focus", notify, false)
+  window.addEventListener("pageshow", onPageShow, false)
+
+  return () => {
+    window.removeEventListener("visibilitychange", notify)
+    window.removeEventListener("focus", notify)
+    window.removeEventListener("pageshow", onPageShow)
+  }
+})
+
 const queryClient = new QueryClient({
   mutationCache,
   defaultOptions: {
@@ -42,6 +91,9 @@ const queryClient = new QueryClient({
         return failureCount < 2
       },
       refetchOnWindowFocus: true,
+      // A laptop that slept through a Wi-Fi change comes back with a cache
+      // full of answers from before the gap.
+      refetchOnReconnect: true,
     },
   },
 })

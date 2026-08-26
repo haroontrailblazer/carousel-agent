@@ -270,6 +270,7 @@ export function NewRunRoute() {
           </div>
           <Link
             to={`/tasks/${runId}`}
+            viewTransition
             className="grid size-9 shrink-0 place-items-center rounded-[10px] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
             title="Open full task details"
           >

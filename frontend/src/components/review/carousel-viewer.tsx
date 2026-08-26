@@ -1,4 +1,5 @@
 import * as React from "react"
+import { preload } from "react-dom"
 import { Check, Copy, ImageOff, Play } from "lucide-react"
 import { toast } from "sonner"
 
@@ -70,7 +71,14 @@ function SlideFrame({
       <img
         src={artifact.url}
         alt={alt}
-        loading="lazy"
+        // NOT lazy. Exactly one slide is mounted at a time - the one being
+        // reviewed - so this is always the largest visible thing on the
+        // screen, and `loading="lazy"` was telling the browser to deprioritise
+        // the only image the page exists to show. The thumbnail rail below is
+        // where lazy belongs, and still uses it.
+        loading="eager"
+        fetchPriority="high"
+        decoding="async"
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
         className="slide-frame w-full rounded-[var(--radius-md)] border border-[var(--border)]"
@@ -236,6 +244,30 @@ export function CarouselViewer({
     ],
     [artifacts.slides],
   )
+
+  // Fetch the slides either side of this one, so Prev and Next are instant.
+  //
+  // Reviewing a carousel means stepping through six or seven slides in a row,
+  // and only one is mounted at a time - so before this, every step was a fresh
+  // download of a full-resolution render while the reviewer looked at a grey
+  // box. The neighbours are the two the user is overwhelmingly likely to ask
+  // for next, and one of them is usually the one they just came from.
+  //
+  // React's `preload` emits a <link rel="preload"> and deduplicates by href,
+  // so re-running this on every step costs nothing for slides already fetched,
+  // and the browser treats it as lower priority than the image on screen.
+  React.useEffect(() => {
+    const urlAt = (i: number): string | null | undefined => {
+      if (i < 0 || i >= frames.length) return undefined
+      if (i === 0) return artifacts.cover.poster?.url
+      if (i === frames.length - 1) return artifacts.cta?.url
+      return artifacts.slides[i - 1]?.url
+    }
+    for (const neighbour of [index + 1, index - 1]) {
+      const url = urlAt(neighbour)
+      if (url) preload(url, { as: "image" })
+    }
+  }, [index, frames.length, artifacts])
 
   const captionLength = artifacts.caption.length
   const overLimit = captionLength > IG_CAPTION_LIMIT

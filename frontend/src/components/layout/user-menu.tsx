@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/hooks/use-auth"
 import { useProfile } from "@/hooks/use-profile"
+import { prefetchRouteChunk } from "@/lib/route-chunks"
 
 /**
  * The account control at the foot of the sidebar.
@@ -81,7 +82,15 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem asChild>
-          <Link to="/profile" onClick={() => onNavigate?.()}>
+          <Link
+            to="/profile"
+            viewTransition
+            // Same trick as the sidebar: the screen is downloading while the
+            // menu is still open, so the click lands on something ready.
+            onPointerEnter={() => prefetchRouteChunk("/profile")}
+            onFocus={() => prefetchRouteChunk("/profile")}
+            onClick={() => onNavigate?.()}
+          >
             <User className="size-4" /> Profile and settings
           </Link>
         </DropdownMenuItem>

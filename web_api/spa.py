@@ -11,6 +11,14 @@ any screen but the root would break. Unmatched GETs fall back to the shell.
 ``npm run build``, and on a deploy where the frontend build step failed the
 useful outcome is a page that says so, not a stack trace or a bare 404 that
 looks like a routing bug.
+
+**Caching.** ``StaticFiles`` sends ``ETag`` and ``Last-Modified`` but no
+``Cache-Control`` at all, which is not the same as saying "do not cache" - it
+leaves the browser to guess, and what it guesses is a revalidation request for
+every file on every load. Vite already content-hashes everything under
+``/assets/``, so those filenames can never mean two different things and are
+safe to keep forever; ``index.html`` is the opposite and must be re-checked
+every time or a deploy never reaches anyone. See ``_cache_control``.
 """
 
 from __future__ import annotations
@@ -55,6 +63,60 @@ _PLACEHOLDER = """<!doctype html>
     and the ADK dev UI at <code>/dev</code>.</p>
 </div></body></html>
 """
+
+
+#: One year. The convention for "as long as you like" - HTTP caps the useful
+#: value around here and every CDN and browser understands it as forever.
+_IMMUTABLE = "public, max-age=31536000, immutable"
+
+#: Ten minutes for the handful of files whose names do NOT carry a hash (the
+#: brand mark, robots.txt). Long enough to stop re-requesting them all session,
+#: short enough that replacing one reaches people the same day.
+_SHORT = "public, max-age=600"
+
+#: Always ask. The shell names the hashed bundles, so a cached copy of it
+#: pins every user to the previous deploy - which is exactly the failure the
+#: hashes were meant to make impossible.
+_REVALIDATE = "no-cache"
+
+
+def _cache_control(path: str) -> str:
+    r"""How long this file may be reused without asking again.
+
+    The split is by whether the FILENAME identifies the contents. Vite writes
+    ``index-DtipvlfQ.js``; change one character of source and the name changes,
+    so the old name can never refer to the new file and there is nothing to
+    revalidate. ``index.html`` keeps its name across every deploy and is the
+    file that names the hashed ones, so it is the single thing that has to be
+    checked - and it is 1.5 KB, which makes that check nearly free.
+
+    A path with no extension is the shell too, not just one ending ``.html``.
+    A request for ``/`` reaches here as the empty string and is answered with
+    ``index.html`` by ``html=True``; anything else without a dot either does
+    the same or 404s into the SPA fallback below. Missing that case would have
+    given the site's front door a ten-minute cache and pinned every visitor to
+    the previous deploy for ten minutes after each release - the one outcome
+    this function exists to prevent.
+
+    Decided from the path alone, deliberately. Reading the response's
+    content-type would be the more direct question and is not answerable: a
+    304 carries almost no headers, and a Not Modified response is exactly the
+    moment the browser is being told whether to ask again.
+
+    The separators are normalised first because Starlette hands this an OS
+    path, not a URL path - ``StaticFiles.get_path`` runs the URL through
+    ``os.path.normpath``, so on Windows ``/assets/index-abc.js`` arrives as
+    ``assets\index-abc.js``. ``PurePosixPath`` then reads that as a single
+    filename with no directory, every asset silently misses the rule, and the
+    bug shows up only on the platform the developer is not deploying to.
+    """
+    posix = PurePosixPath(path.replace("\\", "/"))
+    name = posix.name
+    if "." not in name or name.endswith(".html"):
+        return _REVALIDATE
+    if posix.parts[:1] == ("assets",):
+        return _IMMUTABLE
+    return _SHORT
 
 
 def _is_navigation(scope: Scope) -> bool:
@@ -107,13 +169,20 @@ class SPAStaticFiles(StaticFiles):
             return HTMLResponse(_PLACEHOLDER, status_code=200)
 
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except HTTPException as exc:
             # Starlette RAISES for a missing file rather than returning a 404
             # response, so inspecting response.status_code never fires.
             if exc.status_code != 404:
                 raise
             not_found = exc
+        else:
+            # Set on the 304 as well as the 200: a conditional request that
+            # comes back Not Modified is the browser's chance to learn it did
+            # not need to ask, and dropping the header there means it asks
+            # again next time anyway.
+            response.headers["Cache-Control"] = _cache_control(path)
+            return response
 
         # A missing ASSET is a real 404. Answering index.html for a stale
         # script tag hands the browser HTML where it expects JavaScript, and
@@ -136,7 +205,9 @@ class SPAStaticFiles(StaticFiles):
 
         # Anything else is a client-side route (/runs/run-1a2b3c): the SPA
         # router owns it and the filesystem has never heard of it.
-        return await super().get_response("index.html", scope)
+        shell = await super().get_response("index.html", scope)
+        shell.headers["Cache-Control"] = _cache_control("index.html")
+        return shell
 
 
 __all__ = ["SPAStaticFiles"]

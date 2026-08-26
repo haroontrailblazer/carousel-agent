@@ -107,6 +107,7 @@ export function AgentConversation({
             </div>
             <Link
               to={`/tasks/${runId}?tab=review`}
+              viewTransition
               className="rounded-[10px] bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-[var(--brand-foreground)] hover:bg-[var(--brand-hover)]"
             >
               Review carousel

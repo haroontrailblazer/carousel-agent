@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useProfile } from "@/hooks/use-profile"
 import { useTheme } from "@/hooks/use-theme"
 import { ApiError, del, get, post, postBytes } from "@/lib/api"
@@ -57,20 +58,26 @@ function Section({
 /** Name and picture. */
 function IdentitySection() {
   const { profile, save } = useProfile()
-  const [name, setName] = React.useState("")
+  const [name, setName] = React.useState(profile.name)
   const [preview, setPreview] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const fileInput = React.useRef<HTMLInputElement>(null)
 
-  // Seed the name once the profile arrives, and never again - re-seeding from
-  // a live hook would fight whatever is being typed.
-  const seeded = React.useRef(false)
+  // Track whether this field has been TYPED IN rather than seeding it once and
+  // freezing it.
+  //
+  // The profile is now a shared query that revalidates on focus, so its value
+  // legitimately changes under this component - a rename on a phone lands here
+  // while the page is open. Seeding once meant the sidebar showed the new name
+  // and this box still showed the old one. Mirroring it unconditionally would
+  // be worse: it would overwrite whatever is half-typed the moment a refetch
+  // returned. So the server wins until the user touches the field, and the
+  // user wins from then until the save lands.
+  const [dirty, setDirty] = React.useState(false)
   React.useEffect(() => {
-    if (seeded.current || !profile.email) return
-    seeded.current = true
-    setName(profile.name)
-  }, [profile.email, profile.name])
+    if (!dirty) setName(profile.name)
+  }, [profile.name, dirty])
 
   // An object URL is a live handle into browser memory; letting it leak means
   // the decoded image is never freed.
@@ -136,6 +143,9 @@ function IdentitySection() {
     setBusy(true)
     try {
       await save({ name })
+      // The field now matches the server again, so let the live value drive
+      // it once more.
+      setDirty(false)
       toast.success("Profile saved")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save that.")
@@ -171,7 +181,10 @@ function IdentitySection() {
               id="display-name"
               value={name}
               placeholder={profile.email.split("@")[0]}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setDirty(true)
+                setName(event.target.value)
+              }}
             />
           </div>
 
@@ -283,6 +296,11 @@ function TelegramSection() {
   const status = useQuery({
     queryKey: ["telegram"],
     queryFn: () => get<TelegramStatus>("/api/settings/telegram"),
+    // Opening this screen always re-asks. Connecting the bot is the kind of
+    // thing done once, from whichever device is to hand - so the answer this
+    // browser happens to be holding is exactly the one likely to be wrong,
+    // and it is one small request to be certain instead.
+    refetchOnMount: "always",
   })
 
   const refresh = () => {
@@ -325,6 +343,10 @@ function TelegramSection() {
   })
 
   const data = status.data
+  // First visit to this screen has nothing cached, and the section rendered
+  // its "not connected" instructions while the answer was still in flight -
+  // telling a connected user to go and make a bot. Hold the space instead.
+  const unknown = status.isLoading && !data
   const connected = !!data?.connected
   const fromConsole = data?.source === "console"
   // Say so BEFORE someone types a bearer token into a form that will refuse
@@ -336,7 +358,16 @@ function TelegramSection() {
       title="Telegram"
       description="Where carousel reviews are announced. The message carries the slides and a button that opens the review screen."
     >
-      {connected && (
+      {unknown && (
+        <div className="space-y-3">
+          <Skeleton className="h-6 w-32 rounded-full" />
+          <Skeleton className="h-4 w-full max-w-md" />
+          <Skeleton className="h-4 w-full max-w-sm" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      )}
+
+      {!unknown && connected && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Chip tone="done" dot>
             Connected
@@ -360,7 +391,7 @@ function TelegramSection() {
         </p>
       )}
 
-      {connected && fromConsole ? (
+      {unknown ? null : connected && fromConsole ? (
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-mono text-xs text-[var(--muted-foreground)]">
             {data?.token_masked}

@@ -104,6 +104,7 @@ export function AgentAssetRail({
         <div className="border-t border-[var(--border)] p-4">
           <Link
             to={`/tasks/${runId}?tab=review`}
+            viewTransition
             className="flex w-full items-center justify-center rounded-[10px] bg-[var(--foreground)] px-3 py-2 text-xs font-medium text-[var(--background)] transition-opacity hover:opacity-85"
           >
             Open carousel review
@@ -132,7 +133,7 @@ export function AgentAssetStrip({
         <p className="text-xs font-medium text-[var(--muted-foreground)]">
           Assets · {items.length}{artifacts?.expected_count ? ` of ${artifacts.expected_count}` : ""} ready
         </p>
-        {items.length > 0 && <Link to={`/tasks/${runId}?tab=review`} className="text-xs text-[var(--link)] hover:underline">Open review</Link>}
+        {items.length > 0 && <Link to={`/tasks/${runId}?tab=review`} viewTransition className="text-xs text-[var(--link)] hover:underline">Open review</Link>}
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {items.map((item) => (

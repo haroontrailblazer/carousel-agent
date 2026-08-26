@@ -4,6 +4,7 @@ import { useLocation } from "react-router"
 
 import { SidebarContent, SidebarDrawer } from "@/components/layout/sidebar"
 import { Button } from "@/components/ui/button"
+import { prefetchLikelyRoutes } from "@/lib/route-chunks"
 
 /**
  * The signed-in layout: a fixed sidebar on desktop, a drawer on small screens.
@@ -18,6 +19,42 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = React.useState(false)
   const location = useLocation()
   const isAgentWorkspace = location.pathname === "/new"
+
+  // Once this screen has settled, quietly fetch the ones next to it in the
+  // sidebar. Hover already covers a mouse; nothing covered a thumb, which is
+  // where switching screens felt slowest.
+  //
+  // Keyed on the path so it re-arms after each navigation: by then the
+  // likely NEXT screen is a different one.
+  React.useEffect(
+    () => prefetchLikelyRoutes(location.pathname),
+    [location.pathname],
+  )
+
+  /**
+   * Put the cursor at the top of the new screen after a navigation.
+   *
+   * A single-page app changes the whole page without the browser knowing a
+   * page changed, so nothing moves the focus ring or a screen reader's
+   * position - both stay wherever they were, which after clicking a sidebar
+   * link is the sidebar. The next Tab then walks the navigation again instead
+   * of entering the screen that was just opened, and a screen reader announces
+   * nothing at all.
+   *
+   * `preventScroll` because scroll position is already decided, by
+   * ScrollRestoration; focusing must not fight it. The first render is skipped
+   * deliberately - taking focus on page load steals it from whatever the
+   * browser restored, including the address bar.
+   */
+  const mainRef = React.useRef<HTMLElement>(null)
+  const navigated = React.useRef(false)
+  React.useEffect(() => {
+    if (!navigated.current) {
+      navigated.current = true
+      return
+    }
+    mainRef.current?.focus({ preventScroll: true })
+  }, [location.pathname])
 
   return (
     <div className="min-h-dvh bg-[var(--background)]">
@@ -45,10 +82,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Button>
 
         <main
+          ref={mainRef}
+          // -1 so it can be focused programmatically after a navigation but
+          // never lands in the Tab order itself.
+          tabIndex={-1}
           className={
-            isAgentWorkspace
+            (isAgentWorkspace
               ? "agent-main"
-              : "mx-auto max-w-5xl px-4 pb-8 pt-14 md:px-8 md:py-8"
+              : "mx-auto max-w-5xl px-4 pb-8 pt-14 md:px-8 md:py-8") +
+            // The focus is a position, not a selection - it should not draw a
+            // ring around the entire page.
+            " outline-none"
           }
         >
           {children}

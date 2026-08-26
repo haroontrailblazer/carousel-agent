@@ -12,6 +12,7 @@ import { TaskActions } from "@/components/run/task-actions"
 import { AgentTrace, PhaseRail } from "@/components/run/trace"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Chip, MutedChip } from "@/components/ui/chip"
 import { TabPanel, Tabs } from "@/components/ui/tabs"
 import { PULSE_KEY } from "@/hooks/use-pulse"
@@ -141,7 +142,22 @@ export function RunDetailRoute() {
   }, [stream.gapped, queryClient, runId])
 
   if (run.isLoading) {
-    return <div className="h-64 animate-pulse rounded-[var(--radius)] bg-[var(--muted)]" />
+    // Laid out like the header, tab bar and body that are about to replace it,
+    // so the page does not visibly rearrange itself the moment data lands.
+    return (
+      <div className="space-y-6">
+        <header className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Skeleton className="h-6 w-24 rounded-full" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+          <Skeleton className="h-7 w-2/3" />
+          <Skeleton className="h-4 w-40" />
+        </header>
+        <Skeleton className="h-9 w-56" />
+        <Skeleton className="h-64 rounded-[var(--radius)]" />
+      </div>
+    )
   }
   if (run.isError || !run.data) {
     return (
@@ -151,7 +167,7 @@ export function RunDetailRoute() {
           It may have been removed, or the id is wrong.
         </p>
         <Button className="mt-4" variant="ghost" asChild>
-          <Link to="/tasks">Back to tasks</Link>
+          <Link to="/tasks" viewTransition>Back to tasks</Link>
         </Button>
       </Card>
     )

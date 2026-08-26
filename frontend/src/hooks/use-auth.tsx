@@ -26,6 +26,43 @@ import type { Identity } from "@/lib/types"
 
 type AuthStatus = "pending" | "in" | "out"
 
+/**
+ * Whether this BROWSER has ever completed a sign-in - not whether the session
+ * is still valid, which only the server can say.
+ *
+ * Confirming a session is a round trip, and until it answers the app has to
+ * render something. What it should render depends entirely on which way that
+ * answer is likely to go, and this is the only evidence available before it
+ * arrives. A returning user gets the console's own layout, drawn empty; a
+ * first-time visitor gets a plain spinner, because showing them a console
+ * they are about to be redirected away from would be worse than showing them
+ * nothing.
+ *
+ * A hint, never a decision. Nothing is unlocked by it and nothing is shown
+ * because of it that was not going to be public anyway - it chooses between
+ * two loading screens. Setting this key by hand buys you a different
+ * placeholder for 300ms.
+ */
+const SESSION_HINT_KEY = "carousel-had-session"
+
+export function hadSession(): boolean {
+  try {
+    return localStorage.getItem(SESSION_HINT_KEY) === "1"
+  } catch {
+    // Private mode or blocked storage: fall back to the spinner.
+    return false
+  }
+}
+
+function rememberSession(known: boolean): void {
+  try {
+    if (known) localStorage.setItem(SESSION_HINT_KEY, "1")
+    else localStorage.removeItem(SESSION_HINT_KEY)
+  } catch {
+    /* the app works without it; only the placeholder changes */
+  }
+}
+
 type AuthValue = {
   status: AuthStatus
   identity: Identity | null
@@ -49,9 +86,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (me) {
       setIdentity(me)
       setStatus("in")
+      rememberSession(true)
     } else {
       setIdentity(null)
       setStatus("out")
+      // Clear it here rather than only on an explicit sign-out: an expired
+      // session must stop this browser claiming to be a returning user, or it
+      // gets the console's layout on every load right up to the redirect.
+      rememberSession(false)
     }
   }, [])
 
@@ -62,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return onSessionExpired(() => {
       setIdentity(null)
       setStatus("out")
+      rememberSession(false)
     })
   }, [refresh])
 
@@ -104,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut({ scope: "local" })
     setIdentity(null)
     setStatus("out")
+    rememberSession(false)
   }, [])
 
   const value = React.useMemo(
