@@ -59,10 +59,11 @@ from app.review.resume import drain_resume_tasks
 from app.runs.recovery import reconcile_on_startup, release_stuck_queue_items
 from app.runs.service import drain_run_tasks
 from app.scheduler import shutdown_scheduler, start_scheduler
-from app.services import db
+from app.services import db, telegram_config
 from web_api.auth import AuthMiddleware, build_verifier, validate_session_secret
 from web_api.routes_auth import router as auth_router
 from web_api.routes_runs import router as runs_router
+from web_api.routes_settings import router as settings_router
 from web_api.spa import SPAStaticFiles
 
 
@@ -132,6 +133,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # nothing live still claims it.
         await reconcile_on_startup()
         await release_stuck_queue_items()
+        # Load whatever Telegram credentials the console stored, so the
+        # review dispatcher can send without a restart after someone connects
+        # a bot from the profile page.
+        await telegram_config.load()
         try:
             seeded = await db.seed_app_users(list(settings.auth_bootstrap_emails))
             if seeded:
@@ -181,6 +186,7 @@ def build_app() -> ASGIApp:
 
     root.include_router(auth_router, prefix="/api/auth", tags=["auth"])
     root.include_router(runs_router, prefix="/api", tags=["runs"])
+    root.include_router(settings_router, prefix="/api", tags=["settings"])
 
     # Registered LAST: it is the catch-all, and anything mounted after it would
     # never be reached.

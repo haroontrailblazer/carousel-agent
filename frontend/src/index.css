@@ -245,6 +245,13 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.55; transform: scale(0.86); }
 }
+/* A live "something is happening" dot: a solid core with a halo breathing out
+   of it. Two elements rather than a box-shadow so the glow can be any phase
+   colour without mixing alpha into a custom property. */
+@keyframes dot-ping {
+  0%        { transform: scale(1);   opacity: 0.55; }
+  70%, 100% { transform: scale(2.6); opacity: 0; }
+}
 @keyframes rail-fill {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
@@ -267,6 +274,7 @@
 }
 .animate-line-reveal { animation: line-reveal 260ms ease-out both; }
 .animate-pip-pulse { animation: pip-pulse 1.4s ease-in-out infinite; }
+.animate-dot-ping { animation: dot-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
 .animate-rail-fill { animation: rail-fill 400ms ease-out both; transform-origin: left; }
 .animate-spin-slow { animation: spin-slow 1.1s linear infinite; }
 
@@ -283,6 +291,7 @@
   .animate-shimmer,
   .animate-line-reveal,
   .animate-pip-pulse,
+  .animate-dot-ping,
   .animate-rail-fill,
   .animate-spin-slow {
     animation: none !important;

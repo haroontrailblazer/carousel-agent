@@ -168,6 +168,33 @@ export type QueueItem = {
   created_at: string | null
 }
 
+/**
+ * The whole console in five numbers, for the sidebar dots.
+ *
+ * `stopped` is failed + interrupted over a window of recent runs, not all
+ * time - see PULSE_WINDOW in app/services/db.py for why.
+ */
+export type Pulse = {
+  running: number
+  awaiting_review: number
+  stopped: number
+  queued: number
+  /** A feed check is polling the sources right now. */
+  fetching: boolean
+}
+
+export type QueueResponse = {
+  items: QueueItem[]
+  /**
+   * A feed check is running right now - from the cron tick or from someone
+   * pressing "check now".
+   *
+   * NOT the same as the schedule's `running`, which reports whether the timer
+   * itself is alive. This one says whether it is doing something.
+   */
+  fetching?: boolean
+}
+
 export type Meta = {
   agents: string[]
   reworkable_agents: string[]

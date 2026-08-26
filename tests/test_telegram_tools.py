@@ -32,22 +32,55 @@ def _settings(
     )
 
 
+def _creds(token: str = "bot-token", chat: str = "12345") -> dict:
+    """What telegram_config.credentials() returns."""
+    return {
+        "bot_token": token,
+        "chat_id": chat,
+        "bot_username": "",
+        "connected_by": "",
+        "connected_at": "",
+    }
+
+
 class ConfigGuardTests(unittest.TestCase):
-    def test_missing_token_names_botfather(self) -> None:
-        with patch.object(tg, "settings", _settings(token="")):
+    """Credentials come from telegram_config now, not straight from settings.
+
+    They used to be read from the frozen Settings singleton, which meant
+    connecting a bot was a file edit and a restart. They are now stored in
+    app_config and set from the profile page, with .env as the fallback - so
+    these guards have to be exercised through that accessor.
+    """
+
+    def test_missing_token_points_at_the_console(self) -> None:
+        with patch.object(tg.telegram_config, "credentials", lambda: _creds(token="")):
             with self.assertRaises(RuntimeError) as ctx:
                 tg._api_base()
-        self.assertIn("BotFather", str(ctx.exception))
+        message = str(ctx.exception)
+        self.assertIn("profile page", message)
+        self.assertIn("TELEGRAM_BOT_TOKEN", message)  # the fallback still named
 
-    def test_missing_chat_id_explains_how_to_find_it(self) -> None:
-        with patch.object(tg, "settings", _settings(chat="")):
+    def test_missing_chat_id_says_it_is_discovered_for_you(self) -> None:
+        """The old message told people to read getUpdates by hand."""
+        with patch.object(tg.telegram_config, "credentials", lambda: _creds(chat="")):
             with self.assertRaises(RuntimeError) as ctx:
                 tg._chat_id()
-        self.assertIn("getUpdates", str(ctx.exception))
+        self.assertIn("discovers", str(ctx.exception))
 
     def test_api_base_embeds_the_token(self) -> None:
-        with patch.object(tg, "settings", _settings()):
+        with patch.object(tg.telegram_config, "credentials", lambda: _creds()):
             self.assertEqual(tg._api_base(), "https://api.telegram.org/botbot-token")
+
+    def test_the_console_value_wins_over_the_environment(self) -> None:
+        """The whole point of moving it: setting a bot here takes effect."""
+        from app.services import telegram_config
+
+        with patch.object(telegram_config, "_cache", {"bot_token": "from-console",
+                                                      "chat_id": "999"}):
+            creds = telegram_config.credentials()
+        self.assertEqual(creds["bot_token"], "from-console")
+        self.assertEqual(creds["chat_id"], "999")
+        self.assertEqual(telegram_config.source(), "environment")  # cache patched out again
 
 
 class ReviewUrlTests(unittest.TestCase):

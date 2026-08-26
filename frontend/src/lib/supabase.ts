@@ -90,9 +90,36 @@ export const supabase = {
       const c = await getSupabase()
       return c.auth.resetPasswordForEmail(email, options)
     },
-    async updateUser(attributes: { password?: string }) {
+    async updateUser(attributes: {
+      password?: string
+      /** user_metadata - where the display name and avatar live. */
+      data?: Record<string, unknown>
+    }) {
       const c = await getSupabase()
       return c.auth.updateUser(attributes)
+    },
+    /**
+     * Subscribe to auth changes.
+     *
+     * Returns an unsubscribe function rather than Supabase's nested
+     * `{data:{subscription}}`, because the client is fetched asynchronously -
+     * callers cannot hold the subscription object at effect-setup time.
+     * Unsubscribing before the client resolves is honoured.
+     */
+    onAuthStateChange(handler: () => void): () => void {
+      let cancelled = false
+      let unsubscribe: (() => void) | undefined
+      void getSupabase()
+        .then((c) => {
+          if (cancelled) return
+          const { data } = c.auth.onAuthStateChange(() => handler())
+          unsubscribe = () => data.subscription.unsubscribe()
+        })
+        .catch(() => undefined)
+      return () => {
+        cancelled = true
+        unsubscribe?.()
+      }
     },
   },
 }

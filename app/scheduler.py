@@ -41,6 +41,24 @@ _FETCH_LOCK_ID = 0x0CA1_0F01
 
 _scheduler: Any = None
 
+#: How many fetches are in flight right now.
+#:
+#: A counter rather than a flag: a manual "check now" can overlap the cron
+#: tick, and a flag would be cleared by whichever finished first while the
+#: other was still working - so the console would stop showing "checking"
+#: while a check was still running.
+_fetch_in_flight = 0
+
+
+def fetch_in_progress() -> bool:
+    """Whether a feed check is running right now, from any trigger.
+
+    Exposed for the console: the newsroom shows a live dot while the sources
+    are being polled. Note this is NOT ``scheduler_state()["running"]``, which
+    says whether the timer itself is alive - a very different question.
+    """
+    return _fetch_in_flight > 0
+
 
 async def load_schedule() -> dict:
     """The current schedule, falling back to the default."""
@@ -68,7 +86,9 @@ async def run_fetch_once() -> dict:
     Returns a summary rather than raising: this runs on a timer with nobody
     watching, and a feed being down for an hour is not an incident.
     """
+    global _fetch_in_flight
     lock_held = False
+    _fetch_in_flight += 1
     try:
         pool = await db.get_pool()
         lock_held = bool(
@@ -101,6 +121,7 @@ async def run_fetch_once() -> dict:
         logger.exception("Scheduled fetch failed: %s", exc)
         return {"error": str(exc)}
     finally:
+        _fetch_in_flight -= 1
         if lock_held:
             try:
                 pool = await db.get_pool()
@@ -213,6 +234,7 @@ def shutdown_scheduler() -> None:
 __all__ = [
     "CONFIG_KEY",
     "DEFAULT_SCHEDULE",
+    "fetch_in_progress",
     "load_schedule",
     "reschedule",
     "run_fetch_once",

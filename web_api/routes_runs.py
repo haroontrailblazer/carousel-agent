@@ -778,8 +778,17 @@ async def list_queue(
     limit: int = Query(50, ge=1, le=200),
     _identity: Identity = Depends(current_identity),
 ) -> dict:
-    """Stories the scheduler has fetched but nobody has turned into a carousel."""
-    return {"items": await db.list_queued_news(limit=limit)}
+    """Stories the scheduler has fetched but nobody has turned into a carousel.
+
+    ``fetching`` rides along so the console can show a live dot while the
+    sources are being polled - from the cron tick as well as from a manual
+    check. It is deliberately NOT ``scheduler_state()["running"]``, which says
+    whether the timer is alive, not whether it is doing anything.
+    """
+    return {
+        "items": await db.list_queued_news(limit=limit),
+        "fetching": _fetching_now(),
+    }
 
 
 @router.post("/queue", status_code=status.HTTP_201_CREATED)
@@ -794,6 +803,20 @@ async def enqueue(
     except RunRefused as exc:
         raise HTTPException(400, {"code": exc.code, "message": exc.detail}) from exc
     return await db.enqueue_news(item)
+
+
+@router.get("/pulse")
+async def pulse(_identity: Identity = Depends(current_identity)) -> dict:
+    """Everything the sidebar dots need, in one small response.
+
+    Separate from ``/runs`` and ``/queue`` on purpose. Those return fifty rows
+    with payloads each and take a second or two against a remote database,
+    which is why the dots used to appear late after a reload and lag behind
+    what the pipeline was doing. This is five values, so the console can ask
+    for it on a short timer and after every action.
+    """
+    counts = await db.pulse_counts()
+    return {**counts, "fetching": _fetching_now()}
 
 
 @router.get("/meta")
@@ -888,6 +911,19 @@ async def put_schedule(
 _fetch_tasks: set = set()
 
 
+def _fetching_now() -> bool:
+    """True while any feed check is running, however it was triggered.
+
+    Two sources because they cover different windows: the scheduler's counter
+    is set once ``run_fetch_once`` is actually executing, while a task created
+    here is pending for a tick before that. Checking both means a manual check
+    reports itself immediately rather than blinking on a moment later.
+    """
+    from app.scheduler import fetch_in_progress
+
+    return fetch_in_progress() or any(not t.done() for t in _fetch_tasks)
+
+
 @router.post("/schedule/run-now", status_code=status.HTTP_202_ACCEPTED)
 async def fetch_now(_identity: Identity = Depends(current_identity)) -> dict:
     """Poll the sources now, in the background.
@@ -903,7 +939,10 @@ async def fetch_now(_identity: Identity = Depends(current_identity)) -> dict:
     """
     from app.scheduler import run_fetch_once
 
-    if any(not t.done() for t in _fetch_tasks):
+    # Covers the cron tick too, not just a second click here: starting a fetch
+    # on top of one already running only ever ended in the advisory lock
+    # dropping it, while the console said "checking your feeds".
+    if _fetching_now():
         return {"status": "already_running"}
 
     task = asyncio.get_running_loop().create_task(run_fetch_once(), name="fetch-now")

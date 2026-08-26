@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
 import { TabPanel, Tabs } from "@/components/ui/tabs"
+import { PULSE_KEY } from "@/hooks/use-pulse"
 import { useRunStream } from "@/hooks/use-run-stream"
 import { get } from "@/lib/api"
 import { elapsed, relativeTime } from "@/lib/format"
@@ -81,10 +82,14 @@ export function RunDetailRoute() {
       // The bundle is written at a phase boundary, and rework rewrites it.
       // Without this the Review tab keeps showing the previous round.
       void queryClient.invalidateQueries({ queryKey: ["artifacts", runId] })
+      // Reaching review is the moment the sidebar dot has to change, and the
+      // stream knows before any poll does.
+      void queryClient.invalidateQueries({ queryKey: PULSE_KEY })
     },
     onEnd: () => {
       void queryClient.invalidateQueries({ queryKey: ["run", runId] })
       void queryClient.invalidateQueries({ queryKey: ["runs"] })
+      void queryClient.invalidateQueries({ queryKey: PULSE_KEY })
     },
   })
 

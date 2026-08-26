@@ -691,6 +691,52 @@ async def list_runs(
     return [_run_row(r) for r in rows]
 
 
+#: How many recent runs the sidebar dots look at.
+#:
+#: A window, not the whole table: "something failed" is worth a dot for as
+#: long as it is recent work, but a red dot lit forever by a failure from
+#: three months ago is just a red dot people stop seeing. Anything running or
+#: awaiting review is by definition inside this window - those are the newest
+#: rows there are.
+PULSE_WINDOW = 50
+
+
+async def pulse_counts() -> dict:
+    """The four numbers behind the sidebar dots, in ONE round trip.
+
+    Its own query rather than counting the history list in the browser: the
+    dots are the first thing on screen after a reload and the history list is
+    fifty full rows with payloads, which is a second or two against a remote
+    database. This is four integers and can be polled hard without anyone
+    noticing.
+    """
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        f"""
+        WITH recent AS (
+            SELECT status FROM runs ORDER BY created_at DESC LIMIT {PULSE_WINDOW}
+        )
+        SELECT
+            count(*) FILTER (WHERE status = $1) AS running,
+            count(*) FILTER (WHERE status = $2) AS awaiting_review,
+            count(*) FILTER (WHERE status IN ($3, $4)) AS stopped,
+            (SELECT count(*) FROM news_queue WHERE status = $5) AS queued
+        FROM recent
+        """,
+        RUN_STATUS_RUNNING,
+        RUN_STATUS_AWAITING_REVIEW,
+        RUN_STATUS_FAILED,
+        RUN_STATUS_INTERRUPTED,
+        STATUS_QUEUED,
+    )
+    return {
+        "running": int(row["running"] or 0),
+        "awaiting_review": int(row["awaiting_review"] or 0),
+        "stopped": int(row["stopped"] or 0),
+        "queued": int(row["queued"] or 0),
+    }
+
+
 async def count_runs_since(since: str) -> int:
     """How many runs were created since an ISO timestamp.
 

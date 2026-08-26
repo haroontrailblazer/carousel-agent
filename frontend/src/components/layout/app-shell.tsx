@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button"
  * The signed-in layout: a fixed sidebar on desktop, a drawer on small screens.
  *
  * A sidebar rather than a top bar because the console has a persistent piece
- * of state worth keeping in view - how many runs are waiting on a human. A run
- * at review blocks the whole pipeline until someone decides, so that count
- * belongs somewhere permanent rather than behind a click.
+ * of state worth keeping in view - whether anything is waiting on a human. A
+ * task at review blocks the whole pipeline until someone decides, so that
+ * signal belongs somewhere permanent rather than behind a click. It is a dot,
+ * not a number: the count changes nothing about what you do next.
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = React.useState(false)

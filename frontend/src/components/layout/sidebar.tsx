@@ -1,21 +1,16 @@
 import * as React from "react"
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { NavLink, useLocation } from "react-router"
 import {
   Layers,
-  LogOut,
-  Moon,
   Newspaper,
   PanelLeftClose,
   Sparkles,
-  Sun,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { BrandLogo } from "@/components/layout/brand-logo"
-import { useAuth } from "@/hooks/use-auth"
-import { get } from "@/lib/api"
-import { useRuns } from "@/routes/history"
+import { UserMenu } from "@/components/layout/user-menu"
+import { usePulse } from "@/hooks/use-pulse"
 import { cn } from "@/lib/utils"
 
 const NAV = [
@@ -24,24 +19,6 @@ const NAV = [
   { to: "/tasks", label: "Tasks", icon: Layers, end: false },
 ] as const
 
-function useTheme() {
-  const [dark, setDark] = React.useState(() =>
-    document.documentElement.classList.contains("dark"),
-  )
-  const toggle = React.useCallback(() => {
-    setDark((previous) => {
-      const next = !previous
-      document.documentElement.classList.toggle("dark", next)
-      try {
-        localStorage.setItem("carousel-theme", next ? "dark" : "light")
-      } catch {
-        /* blocked storage: the class is what matters for this session */
-      }
-      return next
-    })
-  }, [])
-  return { dark, toggle }
-}
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -66,55 +43,108 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 }
 
 /**
- * The count of runs waiting on a human.
+ * A dot, never a number.
  *
- * This is the one number worth putting in permanent view: a run sitting at
- * review is blocked on a person, and nothing else in the pipeline moves until
- * someone decides. Everything else can wait for the Runs screen.
+ * The exact count does not change what anyone does next - you open the screen
+ * either way - so the sidebar carries the SIGNAL and the screen carries the
+ * detail. The number is still there on hover, for the moment someone actually
+ * wants it.
+ *
+ * The colours are the phase families, so a dot here means the same thing a
+ * chip means on the task itself: blue is working, orange is waiting on a
+ * person, red is stopped and going nowhere on its own.
+ *
+ * `live` adds the halo. It goes on the two states that are asking for
+ * attention right now - work in flight, and work blocked on a decision - and
+ * never on a state that is simply true, or the animation stops meaning
+ * anything.
  */
-function ReviewBadge() {
-  // useRuns() is the SAME cache entry the Tasks page uses, so this badge costs
-  // no request of its own. It previously fetched its own filtered list on
-  // every page, which meant two round trips to a remote database before
-  // anything rendered.
-  const runs = useRuns()
-  const count = (runs.data?.items ?? []).filter(
-    (r) => r.status === "awaiting_review",
-  ).length
-  if (!count) return null
+function Dot({
+  tone,
+  label,
+  live = false,
+}: {
+  tone: string
+  label: string
+  live?: boolean
+}) {
+  const colour = `var(--phase-${tone})`
   return (
     <span
-      className="ml-auto inline-flex min-w-5 items-center justify-center rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[11px] font-semibold leading-none"
-      style={{
-        background: "var(--phase-review-soft)",
-        color: "var(--phase-review-fg)",
-      }}
-      title={`${count} task(s) waiting for your review`}
+      role="img"
+      aria-label={label}
+      title={label}
+      className="relative flex size-2 shrink-0"
     >
-      {count}
+      {live && (
+        <span
+          aria-hidden
+          className="absolute inset-0 rounded-full animate-dot-ping"
+          style={{ background: colour }}
+        />
+      )}
+      <span
+        aria-hidden
+        className="relative size-2 rounded-full"
+        style={{ background: colour }}
+      />
     </span>
   )
 }
 
-
-/** How many fetched stories are waiting to be picked. */
-function QueueBadge() {
-  const queue = useQuery({
-    queryKey: ["queue"],
-    queryFn: () => get<{ items: unknown[] }>("/api/queue"),
-    placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    refetchInterval: 120_000,
-  })
-  const count = queue.data?.items.length ?? 0
-  if (!count) return null
+/**
+ * Up to three dots on Tasks: work in flight, work waiting on a decision, and
+ * work that has stopped. Left to right in pipeline order.
+ *
+ * Cancelled is deliberately not counted - somebody meant that, and a standing
+ * red dot for a decision already taken is noise that trains people to ignore
+ * the dot that matters.
+ */
+function TaskDots() {
+  const { data } = usePulse()
+  const running = data?.running ?? 0
+  const review = data?.awaiting_review ?? 0
+  const stopped = data?.stopped ?? 0
+  if (!running && !review && !stopped) return null
   return (
-    <span
-      className="ml-auto inline-flex min-w-5 items-center justify-center rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[11px] font-semibold leading-none"
-      style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}
-      title={`${count} story(ies) waiting in the newsroom`}
-    >
-      {count}
+    <span className="ml-auto flex shrink-0 items-center gap-1.5">
+      {running > 0 && (
+        <Dot tone="generate" live label={`${running} task(s) working now`} />
+      )}
+      {review > 0 && (
+        <Dot
+          tone="review"
+          live
+          label={`${review} task(s) waiting for your review`}
+        />
+      )}
+      {stopped > 0 && (
+        <Dot tone="failed" label={`${stopped} task(s) failed or interrupted`} />
+      )}
+    </span>
+  )
+}
+
+/**
+ * One dot for the newsroom: stories are waiting, and it glows while the feeds
+ * are actually being checked.
+ */
+function QueueDot() {
+  const { data } = usePulse()
+  const queued = data?.queued ?? 0
+  const fetching = !!data?.fetching
+  if (!queued && !fetching) return null
+  return (
+    <span className="ml-auto flex shrink-0 items-center">
+      <Dot
+        tone="generate"
+        live={fetching}
+        label={
+          fetching
+            ? "Checking your feeds for new stories"
+            : `${queued} story(ies) waiting in the newsroom`
+        }
+      />
     </span>
   )
 }
@@ -127,8 +157,6 @@ export function SidebarContent({
   /** Drawer only. When given, the close control sits in the brand row. */
   onClose?: () => void
 }) {
-  const { identity, signOut } = useAuth()
-  const { dark, toggle } = useTheme()
 
   return (
     <div className="flex h-full flex-col gap-1 p-3">
@@ -171,48 +199,18 @@ export function SidebarContent({
           >
             <Icon className="size-4 shrink-0" />
             <span className="truncate">{label}</span>
-            {to === "/tasks" && <ReviewBadge />}
-          {to === "/newsroom" && <QueueBadge />}
+            {to === "/tasks" && <TaskDots />}
+            {to === "/newsroom" && <QueueDot />}
           </NavLink>
         ))}
       </nav>
 
-      <div className="mt-auto space-y-1 border-t border-[var(--border)] pt-3">
-        <button
-          type="button"
-          onClick={toggle}
-          className="flex w-full items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-        >
-          {dark ? <Sun className="size-4 shrink-0" /> : <Moon className="size-4 shrink-0" />}
-          <span className="truncate">{dark ? "Light mode" : "Dark mode"}</span>
-        </button>
-
-        <div className="flex items-center gap-2 rounded-[var(--radius-md)] px-2.5 py-2">
-          <span
-            aria-hidden
-            className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--muted)] text-[11px] font-semibold uppercase"
-          >
-            {(identity?.email ?? "?").slice(0, 2)}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-medium">
-              {identity?.email}
-            </span>
-            <span className="block truncate text-[11px] text-[var(--muted-foreground)]">
-              {identity?.role}
-            </span>
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 shrink-0"
-            onClick={() => void signOut()}
-            title="Sign out"
-          >
-            <LogOut className="size-3.5" />
-            <span className="sr-only">Sign out</span>
-          </Button>
-        </div>
+      {/* The theme control moved to Profile -> Appearance, where the two
+          options are shown as a choice rather than a toggle whose label has
+          to describe the state you are NOT in. The sidebar keeps navigation
+          and the account. */}
+      <div className="mt-auto border-t border-[var(--border)] pt-2">
+        <UserMenu onNavigate={onNavigate} />
       </div>
     </div>
   )

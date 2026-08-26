@@ -31,6 +31,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.config import settings
+from app.services import telegram_config
 
 logger = logging.getLogger(__name__)
 
@@ -43,26 +44,33 @@ MESSAGE_LIMIT = 4096  # characters per sendMessage
 
 
 def _api_base() -> str:
-    """Bot API base URL, or a RuntimeError naming what to configure."""
-    if not settings.telegram_bot_token:
+    """Bot API base URL, or a RuntimeError naming what to configure.
+
+    Credentials come from ``app.services.telegram_config``, which prefers what
+    the console stored over what ``.env`` holds - so connecting a bot is a
+    thing the reviewer does on the profile page, not a file edit and a
+    restart. The env vars still work as a fallback.
+    """
+    token = telegram_config.credentials()["bot_token"]
+    if not token:
         raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN is not set - cannot send the review message. "
-            "Create a bot by messaging @BotFather on Telegram and put the "
-            "token it gives you in .env."
+            "No Telegram bot is connected - cannot send the review message. "
+            "Connect one from the console's profile page (Account -> Profile), "
+            "or set TELEGRAM_BOT_TOKEN in .env."
         )
-    return f"https://api.telegram.org/bot{settings.telegram_bot_token}"
+    return f"https://api.telegram.org/bot{token}"
 
 
 def _chat_id() -> str:
     """Destination chat; fail loudly if none configured."""
-    if not settings.telegram_chat_id:
+    chat_id = telegram_config.credentials()["chat_id"]
+    if not chat_id:
         raise RuntimeError(
-            "TELEGRAM_CHAT_ID is not set - cannot send the review message. "
-            "Send your bot any message, then read the id from "
-            "https://api.telegram.org/bot<TOKEN>/getUpdates "
-            '(result[0].message.chat.id).'
+            "No Telegram chat is connected - cannot send the review message. "
+            "Connect the bot from the console's profile page, which discovers "
+            "the chat id for you, or set TELEGRAM_CHAT_ID in .env."
         )
-    return settings.telegram_chat_id
+    return chat_id
 
 
 def _request(

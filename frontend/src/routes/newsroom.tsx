@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card"
 import { MutedChip } from "@/components/ui/chip"
 import { ApiError, get, post } from "@/lib/api"
 import { relativeTime } from "@/lib/format"
-import type { QueueItem } from "@/lib/types"
+import type { QueueResponse } from "@/lib/types"
 
 /**
  * The Newsroom: stories the scheduler has fetched, waiting for someone to
@@ -30,7 +30,7 @@ export function NewsroomRoute() {
 
   const queue = useQuery({
     queryKey: ["queue"],
-    queryFn: () => get<{ items: QueueItem[] }>("/api/queue"),
+    queryFn: () => get<QueueResponse>("/api/queue"),
     // Shared cache entry with the sidebar badge, and never blanks on refetch.
     placeholderData: keepPreviousData,
     staleTime: 30_000,
@@ -47,6 +47,10 @@ export function NewsroomRoute() {
       toast.success("Checking your feeds", {
         description: "New stories will appear here as they arrive.",
       })
+      // Immediately, so the sidebar dot starts glowing on the click rather
+      // than on the next poll - the response is the only thing that knows a
+      // check just started.
+      void queryClient.invalidateQueries({ queryKey: ["queue"] })
       // The server answers immediately and keeps working; polling a few times
       // is what makes new arrivals show up without the user reloading.
       ;[8000, 20000, 45000, 90000].forEach((delay) =>

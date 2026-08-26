@@ -1,11 +1,34 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import {
+  MutationCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query"
 import { RouterProvider } from "react-router"
 import { Toaster } from "sonner"
 
 import { AuthProvider } from "@/hooks/use-auth"
+import { PULSE_KEY } from "@/hooks/use-pulse"
 import { router } from "@/router"
 
+/**
+ * Every successful mutation refreshes the sidebar dots.
+ *
+ * One rule here instead of a line in each of the dozen places that start,
+ * cancel, delete, approve or fetch something - and, more importantly, one
+ * that a new mutation cannot forget. Starting a task is meant to light the
+ * blue dot on the click, not on the next poll.
+ *
+ * `queryClient` is referenced before it is declared and that is fine: this
+ * only ever runs long after the module has finished evaluating.
+ */
+const mutationCache = new MutationCache({
+  onSuccess: () => {
+    void queryClient.invalidateQueries({ queryKey: PULSE_KEY })
+  },
+})
+
 const queryClient = new QueryClient({
+  mutationCache,
   defaultOptions: {
     queries: {
       // The console shows live agent runs; a stale snapshot is misleading in a

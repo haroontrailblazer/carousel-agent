@@ -12,6 +12,7 @@ import { HistoryRoute } from "@/routes/history"
 import { LoginRoute } from "@/routes/login"
 import { NewRunRoute } from "@/routes/new-run"
 import { NewsroomRoute } from "@/routes/newsroom"
+import { ProfileRoute } from "@/routes/profile"
 import { NotFoundRoute } from "@/routes/not-found"
 import { ResetPasswordRoute } from "@/routes/reset-password"
 import { RunDetailRoute } from "@/routes/run-detail"
@@ -78,6 +79,7 @@ export const router = createBrowserRouter([
       { path: "/new", element: <NewRunRoute /> },
       { path: "/newsroom", element: <NewsroomRoute /> },
       { path: "/tasks", element: <HistoryRoute /> },
+      { path: "/profile", element: <ProfileRoute /> },
       // Legacy paths. These screens were called "runs" before, and links to
       // them exist in browser history and in anything already shared. Keeping
       // the redirects costs three lines and means an old bookmark lands where
