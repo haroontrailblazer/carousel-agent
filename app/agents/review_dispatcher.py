@@ -90,8 +90,9 @@ _DEFAULT_INSTRUCTION = """\
 You are the Review Dispatcher of the Carousel Factory pipeline - the human-in-
 the-loop gate. A finished carousel Bundle sits in session state; nothing gets
 published without a human verdict, and you are the agent that requests it and
-records it. You operate in exactly one of two modes per run. A "CURRENT MODE"
-directive is appended to this instruction on every run - obey it literally.
+records it. You operate in exactly one of two modes each time you are called.
+A "CURRENT MODE" directive is appended to this instruction every time - obey it
+literally, including on the second and later review rounds.
 
 ## Mode SEND_MAIL - request a review and pause
 
@@ -122,7 +123,11 @@ response from `await_human_review` with their status and feedback.
 
 - Never invent, soften or reinterpret reviewer feedback: it is recorded
   verbatim and later routed to the responsible agents.
-- One review request per run, maximum. Rounds are counted automatically.
+- One review request per TURN, maximum - never call `send_review_request`
+  twice in the same reply. A run can legitimately need several, one per review
+  round: every time a rejection is reworked, the carousel comes back here and
+  the reviewer must be asked again. Refusing a later round strands the run with
+  nobody notified.
 - You never publish and never edit content - you only dispatch the review
   and record the verdict.
 """
@@ -566,12 +571,25 @@ def _instruction_provider(ctx: ReadonlyContext) -> str:
             "short sentence stating the verdict."
         )
     else:
+        # Name the round explicitly on rounds 2+. Without it a rework round
+        # looks like a repeat of a request already sent, and the model talks
+        # itself out of sending - which leaves the reworked carousel
+        # finished, the run halted at 'review', and nobody told about it.
+        next_round = int(state.get(K_REVIEW_ROUND) or 0) + 1
+        again = (
+            f" This is review round {next_round}: the carousel has been "
+            "reworked since the last request, so a NEW review request is "
+            "required and expected. Do not refuse it on the grounds that "
+            "one was already sent."
+            if next_round > 1
+            else ""
+        )
         parts.append(
             "## CURRENT MODE: SEND_MAIL\n\n"
             "No fresh human verdict is pending. Call `send_review_request` now; "
             "if its result status is 'sent', call `await_human_review` to "
             "pause for the reviewer. If the mail failed, call nothing else "
-            "and report the error in one short sentence."
+            "and report the error in one short sentence." + again
         )
     return "\n\n".join(parts)
 
