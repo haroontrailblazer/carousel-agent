@@ -1,6 +1,15 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Check, ExternalLink, Moon, Send, Sun, Unplug } from "lucide-react"
+import {
+  Check,
+  ExternalLink,
+  Moon,
+  Send,
+  Sun,
+  Trash2,
+  Unplug,
+  Upload,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { UserAvatar } from "@/components/layout/user-avatar"
@@ -10,7 +19,8 @@ import { Chip, MutedChip } from "@/components/ui/chip"
 import { Input } from "@/components/ui/input"
 import { useProfile } from "@/hooks/use-profile"
 import { useTheme } from "@/hooks/use-theme"
-import { ApiError, del, get, post } from "@/lib/api"
+import { ApiError, del, get, post, postBytes } from "@/lib/api"
+import { compressAvatar } from "@/lib/image"
 
 type TelegramStatus = {
   connected: boolean
@@ -46,11 +56,13 @@ function Section({
 function IdentitySection() {
   const { profile, save } = useProfile()
   const [name, setName] = React.useState("")
-  const [avatar, setAvatar] = React.useState("")
+  const [preview, setPreview] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
+  const [uploading, setUploading] = React.useState(false)
+  const fileInput = React.useRef<HTMLInputElement>(null)
 
-  // Seed the fields once the profile arrives, and never again - re-seeding
-  // from a live hook would fight whatever is being typed.
+  // Seed the name once the profile arrives, and never again - re-seeding from
+  // a live hook would fight whatever is being typed.
   const seeded = React.useRef(false)
   React.useEffect(() => {
     if (seeded.current || !profile.email) return
@@ -58,10 +70,70 @@ function IdentitySection() {
     setName(profile.name)
   }, [profile.email, profile.name])
 
-  async function onSave() {
+  // An object URL is a live handle into browser memory; letting it leak means
+  // the decoded image is never freed.
+  React.useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview)
+    }
+  }, [preview])
+
+  async function onPick(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    // Clear immediately, so choosing the SAME file again still fires change.
+    event.target.value = ""
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const image = await compressAvatar(file)
+      setPreview((old) => {
+        if (old) URL.revokeObjectURL(old)
+        return image.objectUrl
+      })
+      const { url } = await postBytes<{ url: string }>(
+        "/api/profile/avatar",
+        image.blob,
+      )
+      await save({ avatarUrl: url })
+      toast.success("Picture updated", {
+        description:
+          `Compressed to ${Math.max(1, Math.round(image.blob.size / 1024))} KB ` +
+          `from ${Math.max(1, Math.round(file.size / 1024))} KB.`,
+      })
+    } catch (error) {
+      setPreview(null)
+      toast.error(
+        error instanceof Error ? error.message : "Could not use that image.",
+      )
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function onRemove() {
+    setUploading(true)
+    try {
+      await del("/api/profile/avatar")
+      await save({ avatarUrl: null })
+      setPreview((old) => {
+        if (old) URL.revokeObjectURL(old)
+        return null
+      })
+      toast.success("Picture removed")
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not remove that.",
+      )
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function onSaveName() {
     setBusy(true)
     try {
-      await save({ name, avatarUrl: avatar.trim() || null })
+      await save({ name })
       toast.success("Profile saved")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save that.")
@@ -70,18 +142,24 @@ function IdentitySection() {
     }
   }
 
+  const shown = preview ?? profile.avatarUrl
+
   return (
     <Section
       title="You"
       description="How you appear in the console, and against the verdicts you record."
     >
       <div className="flex flex-wrap items-start gap-4">
-        <UserAvatar
-          key={avatar || profile.avatarUrl || "none"}
-          src={avatar || profile.avatarUrl}
-          name={name || profile.displayName}
-          className="size-14 text-lg"
-        />
+        <div className="space-y-2">
+          <UserAvatar
+            key={shown ?? "none"}
+            src={shown}
+            name={name || profile.displayName}
+            seed={profile.email}
+            className="size-16 text-xl"
+          />
+        </div>
+
         <div className="min-w-0 flex-1 space-y-3">
           <div className="space-y-1.5">
             <label htmlFor="display-name" className="block text-xs font-medium">
@@ -94,28 +172,52 @@ function IdentitySection() {
               onChange={(event) => setName(event.target.value)}
             />
           </div>
+
           <div className="space-y-1.5">
-            <label htmlFor="avatar-url" className="block text-xs font-medium">
-              Picture URL
-            </label>
-            <Input
-              id="avatar-url"
-              value={avatar}
-              placeholder="https://..."
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => setAvatar(event.target.value)}
-            />
+            <span className="block text-xs font-medium">Picture</span>
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => void onPick(event)}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={uploading}
+                onClick={() => fileInput.current?.click()}
+              >
+                <Upload /> {uploading ? "Working..." : "Upload"}
+              </Button>
+              {shown && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={uploading}
+                  onClick={() => void onRemove()}
+                >
+                  <Trash2 /> Remove
+                </Button>
+              )}
+            </div>
             <p className="text-[11px] leading-4 text-[var(--muted-foreground)]">
-              A link, not an upload - the console stores no files of its own.
-              Leave it empty to use your Gravatar, which falls back to an
-              initial when you have none.
+              Resized and compressed in your browser before it is sent, so a
+              camera photo does not become a multi-megabyte upload. With no
+              picture set, one is generated from your email.
             </p>
           </div>
         </div>
       </div>
+
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button variant="brand" size="sm" onClick={() => void onSave()} disabled={busy}>
+        <Button
+          variant="brand"
+          size="sm"
+          onClick={() => void onSaveName()}
+          disabled={busy}
+        >
           {busy ? "Saving..." : "Save"}
         </Button>
         <span className="text-xs text-[var(--muted-foreground)]">{profile.email}</span>

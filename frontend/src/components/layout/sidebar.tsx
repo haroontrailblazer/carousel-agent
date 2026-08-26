@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { NavLink, useLocation } from "react-router"
 import {
   Layers,
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { BrandLogo } from "@/components/layout/brand-logo"
 import { UserMenu } from "@/components/layout/user-menu"
 import { usePulse } from "@/hooks/use-pulse"
+import { queueQuery, runsQuery } from "@/lib/queries"
 import { cn } from "@/lib/utils"
 
 const NAV = [
@@ -157,6 +159,24 @@ export function SidebarContent({
   /** Drawer only. When given, the close control sits in the brand row. */
   onClose?: () => void
 }) {
+  const queryClient = useQueryClient()
+
+  /**
+   * Warm a screen's list before it is asked for.
+   *
+   * Worth the four lines: the database is far enough away that a list is a
+   * visible wait, and hovering a link is the one moment we know a screen is
+   * about to be opened. `prefetchQuery` respects staleTime, so a fresh list
+   * is not re-fetched just because the pointer crossed the link.
+   */
+  const prefetch = React.useCallback(
+    (to: string) => {
+      if (to === "/tasks") void queryClient.prefetchQuery(runsQuery())
+      if (to === "/newsroom") void queryClient.prefetchQuery(queueQuery())
+    },
+    [queryClient],
+  )
+
 
   return (
     <div className="flex h-full flex-col gap-1 p-3">
@@ -188,6 +208,11 @@ export function SidebarContent({
             to={to}
             end={end}
             onClick={onNavigate}
+            // The list is already on its way by the time the click lands.
+            // Pointer-enter, not mouse-enter, so a phone gets it too: it
+            // fires on touch just before the tap.
+            onPointerEnter={() => prefetch(to)}
+            onFocus={() => prefetch(to)}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm font-medium transition-colors",

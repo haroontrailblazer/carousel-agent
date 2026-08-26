@@ -1,15 +1,15 @@
 import * as React from "react"
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 
 import { TaskActions } from "@/components/run/task-actions"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
-import { get } from "@/lib/api"
 import { relativeTime } from "@/lib/format"
+import { isRemembered, runsQuery } from "@/lib/queries"
 import { PHASE_LABELS, STATUS_LABELS, STATUS_TOKEN } from "@/lib/pipeline"
-import type { RunStatus, RunSummary } from "@/lib/types"
+import type { RunStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const FILTERS: { label: string; value: RunStatus | "all" }[] = [
@@ -37,16 +37,13 @@ const FILTERS: { label: string; value: RunStatus | "all" }[] = [
  * "needs review" badge can read the SAME cache entry instead of issuing its
  * own request on every page.
  */
-export const RUNS_QUERY_KEY = ["runs", "recent"] as const
-
 export function useRuns() {
   return useQuery({
-    queryKey: RUNS_QUERY_KEY,
-    queryFn: () => get<{ items: RunSummary[] }>("/api/runs?limit=50"),
-    // Keep showing the previous list while refetching, so a background poll
-    // never blanks the page the user is reading.
-    placeholderData: keepPreviousData,
-    staleTime: 10_000,
+    // Query and snapshot both live in lib/queries.ts, so the sidebar can
+    // prefetch EXACTLY what this page is about to ask for. A second copy of
+    // these options here would prefetch a different cache entry and warm
+    // nothing.
+    ...runsQuery(),
     refetchInterval: (query) =>
       query.state.data?.items.some((r) =>
         ["running", "awaiting_review"].includes(r.status),
@@ -80,7 +77,16 @@ export function HistoryRoute() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">Tasks</h1>
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-xl font-semibold tracking-tight">Tasks</h1>
+          {/* Only while the remembered list is on screen unconfirmed - not on
+              every background poll, which would be a permanent flicker. */}
+          {isRemembered(runs) && (
+            <span className="text-xs text-[var(--muted-foreground)]">
+              refreshing…
+            </span>
+          )}
+        </div>
         <Button variant="brand" size="sm" asChild>
           <Link to="/new">New carousel</Link>
         </Button>

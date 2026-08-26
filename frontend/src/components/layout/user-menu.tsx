@@ -43,6 +43,7 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
             key={profile.avatarUrl ?? "none"}
             src={profile.avatarUrl}
             name={profile.displayName}
+            seed={profile.email}
             className="size-7 text-[11px]"
           />
           <span className="min-w-0 flex-1">
@@ -63,6 +64,7 @@ export function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
               key={profile.avatarUrl ?? "none"}
               src={profile.avatarUrl}
               name={profile.displayName}
+              seed={profile.email}
               className="size-8 text-xs"
             />
             <span className="min-w-0">

@@ -15,10 +15,10 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from app.services import telegram_config
+from app.services import avatar_store, telegram_config
 from app.services.telegram_connect import (
     ConnectError,
     discover_chat,
@@ -136,6 +136,72 @@ async def telegram_disconnect(
     await telegram_config.clear()
     logger.info("Telegram credentials cleared by %s.", identity.email)
     return {"result": "disconnected", **_status()}
+
+
+@router.post("/profile/avatar")
+async def upload_avatar(
+    request: Request, identity: Identity = Depends(current_identity)
+) -> dict:
+    """Store the signed-in person's profile picture.
+
+    The BROWSER compresses before sending - a phone camera photo is several
+    megabytes and an avatar is displayed at 56px, so shipping the original
+    would waste the upload, the storage and every page load afterwards. This
+    end only enforces the ceiling.
+
+    The returned URL is one of ours, not a storage URL: the media bucket is
+    private, and a presigned link would expire long before a profile picture
+    should.
+    """
+    payload = await request.body()
+    try:
+        await avatar_store.save(identity.email, payload)
+    except ValueError as exc:
+        raise HTTPException(400, {"code": "bad_image", "message": str(exc)}) from exc
+    except Exception as exc:
+        logger.exception("Storing the avatar for %s failed.", identity.email)
+        raise HTTPException(
+            502,
+            {"code": "storage_error", "message": f"Could not store that image: {exc}"},
+        ) from exc
+
+    key = avatar_store.key_for(identity.email)
+    digest = key.rsplit("/", 1)[-1].removesuffix(".webp")
+    # The cache-buster is what makes a re-upload visible: the URL is otherwise
+    # stable per person, so browsers would keep showing the previous face.
+    return {"url": f"/api/profile/avatar/{digest}?v={len(payload)}"}
+
+
+@router.get("/profile/avatar/{digest}")
+async def get_avatar(
+    digest: str, _identity: Identity = Depends(current_identity)
+) -> Response:
+    """Serve a stored avatar from the private bucket."""
+    if not digest.isalnum() or len(digest) != 64:
+        raise HTTPException(404, {"code": "not_found", "message": "No such avatar."})
+    try:
+        payload = await avatar_store.load(f"{avatar_store.PREFIX}/{digest}.webp")
+    except Exception as exc:
+        logger.warning("Reading avatar %s failed: %s", digest, exc)
+        raise HTTPException(
+            502, {"code": "storage_error", "message": "Could not read that image."}
+        ) from exc
+    if payload is None:
+        raise HTTPException(404, {"code": "not_found", "message": "No such avatar."})
+    return Response(
+        content=payload,
+        media_type=avatar_store.CONTENT_TYPE,
+        # Private: these are behind the login and must not sit in a shared
+        # proxy. Immutable within a version because the URL carries ?v=.
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@router.delete("/profile/avatar")
+async def delete_avatar(identity: Identity = Depends(current_identity)) -> dict:
+    """Remove the stored picture; the generated default takes over again."""
+    await avatar_store.delete(identity.email)
+    return {"result": "removed"}
 
 
 __all__ = ["router"]

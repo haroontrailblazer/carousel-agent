@@ -169,6 +169,19 @@ export const post = <T>(path: string, body?: unknown) =>
 export const del = <T>(path: string) => api<T>(path, { method: "DELETE" })
 
 /**
+ * POST raw bytes (an already-compressed image, not a form).
+ *
+ * Deliberately not multipart: there is exactly one part, and multipart would
+ * add a boundary, a parser dependency on the server and nothing else.
+ */
+export const postBytes = <T>(path: string, body: Blob) =>
+  api<T>(path, {
+    method: "POST",
+    body,
+    headers: { "Content-Type": body.type || "application/octet-stream" },
+  })
+
+/**
  * Ask a question about auth state WITHOUT the answer causing a navigation.
  *
  * `api()` treats 401 as "your session expired, go sign in". That is right for

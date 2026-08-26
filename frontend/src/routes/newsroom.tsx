@@ -1,5 +1,5 @@
 import * as React from "react"
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router"
 import { ExternalLink, Newspaper, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
@@ -7,9 +7,9 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { MutedChip } from "@/components/ui/chip"
-import { ApiError, get, post } from "@/lib/api"
+import { ApiError, post } from "@/lib/api"
 import { relativeTime } from "@/lib/format"
-import type { QueueResponse } from "@/lib/types"
+import { isRemembered, queueQuery } from "@/lib/queries"
 
 /**
  * The Newsroom: stories the scheduler has fetched, waiting for someone to
@@ -29,12 +29,14 @@ export function NewsroomRoute() {
   const [claiming, setClaiming] = React.useState<string | null>(null)
 
   const queue = useQuery({
-    queryKey: ["queue"],
-    queryFn: () => get<QueueResponse>("/api/queue"),
-    // Shared cache entry with the sidebar badge, and never blanks on refetch.
-    placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    refetchInterval: 120_000,
+    // Options live in lib/queries.ts: this list is remembered between visits
+    // so the page paints instantly instead of waiting on a round trip to a
+    // database that is half a world away, and the sidebar can prefetch the
+    // very same cache entry on hover.
+    ...queueQuery(),
+    // While a check is running, ask often enough that arriving stories show
+    // up on their own. Idle, hourly fetches do not deserve a heartbeat.
+    refetchInterval: (query) => (query.state.data?.fetching ? 5_000 : 120_000),
   })
 
   const fetchNow = useMutation({
@@ -117,7 +119,14 @@ export function NewsroomRoute() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Newsroom</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">Newsroom</h1>
+            {isRemembered(queue) && (
+              <span className="text-xs text-[var(--muted-foreground)]">
+                refreshing…
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
             Stories fetched from your feeds, waiting to be made into carousels.
           </p>
