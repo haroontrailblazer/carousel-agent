@@ -8,7 +8,9 @@ import {
   ToolChipList,
 } from "@/components/agent/agent-activity"
 import { AgentAssetStrip } from "@/components/agent/agent-assets"
+import { UserAvatar } from "@/components/layout/user-avatar"
 import type { LoadingVariant } from "@/components/agent/loading-state"
+import { useProfile } from "@/hooks/use-profile"
 import { AGENT_LABELS, PHASE_LABELS } from "@/lib/pipeline"
 import type { RunArtifacts, RunDetail, RunEvent, TraceSummary } from "@/lib/types"
 
@@ -57,6 +59,9 @@ export function AgentConversation({
   // anyone, so attributing "Create a carousel about X" to the reader invents a
   // message they never sent. Those get a source line instead, which is true.
   const typed = prompt || (startedFromComposer(run) ? reconstructPrompt(run) : "")
+  // Shared cache: the sidebar and the account menu are reading the same entry,
+  // so this costs no request and cannot show a different face from them.
+  const { profile } = useProfile()
 
   return (
     <div className="space-y-6">
@@ -65,9 +70,23 @@ export function AgentConversation({
           <div className="max-w-[82%] rounded-[16px] bg-[var(--muted)] px-4 py-3 text-sm leading-6">
             {typed}
           </div>
-          <span className="mt-1 grid size-8 shrink-0 place-items-center rounded-full bg-[var(--foreground)] text-[11px] font-semibold text-[var(--background)]">
-            You
-          </span>
+          {/* The person's actual picture, not the word "You".
+              
+              Every other place the signed-in user appears - the sidebar
+              account row, the menu, the profile screen - shows their face,
+              and this was the one that spelled out their pronoun in a black
+              circle. `UserAvatar` falls through the same three steps as
+              everywhere else: uploaded picture, then Gravatar, then a
+              monogram generated from the email. So a user with no picture
+              still gets the same coloured initial here as in the sidebar,
+              rather than a different placeholder in each place. */}
+          <UserAvatar
+            key={profile.avatarUrl ?? "none"}
+            src={profile.avatarUrl}
+            name={profile.displayName}
+            seed={profile.email}
+            className="mt-1 size-8 text-[11px]"
+          />
         </div>
       ) : (
         <p className="text-xs text-[var(--muted-foreground)]">

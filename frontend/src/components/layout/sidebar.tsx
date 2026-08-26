@@ -9,7 +9,9 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Dot } from "@/components/ui/dot"
 import { BrandLogo } from "@/components/layout/brand-logo"
+import { ChatList } from "@/components/layout/chat-list"
 import { UserMenu } from "@/components/layout/user-menu"
 import { usePulse } from "@/hooks/use-pulse"
 import { queueQuery, runsQuery } from "@/lib/queries"
@@ -41,56 +43,6 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
           </span>
         </span>
       )}
-    </span>
-  )
-}
-
-/**
- * A dot, never a number.
- *
- * The exact count does not change what anyone does next - you open the screen
- * either way - so the sidebar carries the SIGNAL and the screen carries the
- * detail. The number is still there on hover, for the moment someone actually
- * wants it.
- *
- * The colours are the phase families, so a dot here means the same thing a
- * chip means on the task itself: blue is working, orange is waiting on a
- * person, red is stopped and going nowhere on its own.
- *
- * `live` adds the halo. It goes on the two states that are asking for
- * attention right now - work in flight, and work blocked on a decision - and
- * never on a state that is simply true, or the animation stops meaning
- * anything.
- */
-function Dot({
-  tone,
-  label,
-  live = false,
-}: {
-  tone: string
-  label: string
-  live?: boolean
-}) {
-  const colour = `var(--phase-${tone})`
-  return (
-    <span
-      role="img"
-      aria-label={label}
-      title={label}
-      className="relative flex size-2 shrink-0"
-    >
-      {live && (
-        <span
-          aria-hidden
-          className="absolute inset-0 rounded-full animate-dot-ping"
-          style={{ background: colour }}
-        />
-      )}
-      <span
-        aria-hidden
-        className="relative size-2 rounded-full"
-        style={{ background: colour }}
-      />
     </span>
   )
 }
@@ -161,6 +113,19 @@ export function SidebarContent({
   onClose?: () => void
 }) {
   const queryClient = useQueryClient()
+  const location = useLocation()
+
+  /**
+   * "New carousel" is only current when it really is a NEW one.
+   *
+   * `/new` is two screens: the empty composer, and - with `?run=` - an
+   * existing chat. NavLink decides `isActive` from the path alone, so opening
+   * a chat from the list lit up both the chat's own row AND "New carousel",
+   * which says the user is in two places at once and, worse, that the thing
+   * they are reading is unsaved.
+   */
+  const composingNew =
+    location.pathname === "/new" && !new URLSearchParams(location.search).has("run")
 
   /**
    * Warm a screen before it is asked for - both halves of it.
@@ -209,7 +174,7 @@ export function SidebarContent({
         )}
       </div>
 
-      <nav className="flex flex-col gap-0.5">
+      <nav className="flex shrink-0 flex-col gap-0.5">
         {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -228,7 +193,7 @@ export function SidebarContent({
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm font-medium transition-colors",
-                isActive
+                (to === "/new" ? composingNew : isActive)
                   ? "bg-[var(--muted)] text-[var(--foreground)]"
                   : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
               )
@@ -242,11 +207,20 @@ export function SidebarContent({
         ))}
       </nav>
 
+      {/* Every task, as a chat. It reads the same cache entry Tasks reads, so
+          it costs no request of its own - and a rename or a new task shows in
+          both places at once because there is only one copy of the answer. */}
+      <ChatList onNavigate={onNavigate} />
+
       {/* The theme control moved to Profile -> Appearance, where the two
           options are shown as a choice rather than a toggle whose label has
           to describe the state you are NOT in. The sidebar keeps navigation
-          and the account. */}
-      <div className="mt-auto border-t border-[var(--border)] pt-2">
+          and the account.
+
+          `mt-auto` is gone: the chat list above is the flexible element now,
+          so the footer is pushed down by a list that grows into the space
+          rather than by a spacer. */}
+      <div className="shrink-0 border-t border-[var(--border)] pt-2">
         <UserMenu onNavigate={onNavigate} />
       </div>
     </div>

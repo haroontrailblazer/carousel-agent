@@ -219,6 +219,38 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+
+  /* No scrollbars, anywhere.
+   *
+   * Every scrollable region in the console - the page, the conversation, the
+   * chat list, the asset rails, the tool-output blocks - scrolls without
+   * drawing one. Wheel, trackpad, touch, keyboard and programmatic scrolling
+   * are all unaffected; only the painted bar is gone.
+   *
+   * Three declarations because three engines answer to different names, and
+   * all three are needed: `scrollbar-width` is the standard property that
+   * Firefox implements, `-ms-overflow-style` is what old Edge and IE read,
+   * and the WebKit pseudo-element is what Chrome, Edge and Safari read. Miss
+   * one and the app looks deliberate on your machine and unfinished on
+   * somebody else's.
+   *
+   * Two consequences worth knowing, both accepted deliberately:
+   *
+   *  - Nothing indicates that a region scrolls, or how far through it you
+   *    are. The overflowing content itself is the only cue.
+   *  - Nothing is draggable. Scrolling is wheel, touch or keyboard only.
+   *
+   * A side effect that is pure gain: the page scrollbar used to occupy about
+   * 15px on Windows, and only on pages long enough to scroll - so navigating
+   * between a short screen and a long one shifted the entire layout sideways.
+   * With no bar to reserve, every screen is the same width. */
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -442,18 +474,23 @@
   overflow: hidden;
 }
 
+/* Not a bar any more - a thin row of controls above the conversation.
+ *
+ * It was 6.75rem tall with a rule under it, and on a screen whose entire job
+ * is a scrolling conversation that is a lot of permanent height spent on a
+ * title that is also the first thing in the sidebar. The border went with it:
+ * a line across the top drew a box around the chat, and there is nothing on
+ * the other side of it to separate the chat FROM. */
 .agent-workspace-header {
   display: flex;
-  min-height: 6.75rem;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  border-bottom: 1px solid var(--border);
+  gap: 0.75rem;
   /* Extra left padding on phones so the run title clears the floating
      drawer button, which sits at 0.5rem/0.5rem and is 2.25rem square. The
      md rule below resets padding-inline once the sidebar is permanent and
      the button is gone. */
-  padding: 1.65rem 1.25rem 1rem 3.25rem;
+  padding: 0.75rem 1rem 0.5rem 3.25rem;
 }
 
 .agent-conversation-scroll {
@@ -461,7 +498,11 @@
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  /* `scrollbar-gutter: stable` was here to stop the conversation jumping
+     sideways when it grew long enough to scroll. There is no bar to reserve
+     room for any more (see the base layer), and the property is defined to do
+     nothing when `scrollbar-width` is `none` - so it stayed as a line that
+     described the opposite of what happens. */
 }
 
 .agent-asset-rail {

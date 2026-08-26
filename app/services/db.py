@@ -658,6 +658,36 @@ async def set_run_meta(
     )
 
 
+async def rename_run(run_id: str, title: str) -> bool:
+    """Set a run's title to exactly what a person typed.
+
+    Separate from ``set_run_meta`` for two reasons, both of which would be
+    bugs if this were folded into it.
+
+    ``set_run_meta`` coalesces an empty value away so that a later automated
+    call cannot blank a title an earlier one set. That is right for the
+    pipeline and wrong for a person: clearing the name is a thing a user is
+    allowed to do, and it means "go back to the generated title".
+
+    And it deliberately does NOT move ``updated_at``. That column is how
+    liveness is inferred - ``interrupted_run_candidates`` reads it to decide
+    which runs died in a redeploy - so touching it here would make renaming a
+    dead task look like the task waking up, and startup recovery would leave
+    it stranded for another idle window.
+
+    Returns False when there is no such run, so the route can 404 rather than
+    reporting success for a rename that went nowhere.
+    """
+    pool = await get_pool()
+    result = await pool.execute(
+        "UPDATE runs SET title = NULLIF($2, '') WHERE run_id = $1",
+        str(run_id),
+        title.strip(),
+    )
+    # asyncpg returns the command tag, e.g. "UPDATE 1".
+    return result.rsplit(" ", 1)[-1] != "0"
+
+
 async def set_run_status(run_id: str, status: str) -> None:
     """Set the run's lifecycle status.
 

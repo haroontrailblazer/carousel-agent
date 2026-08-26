@@ -126,6 +126,13 @@ class EnqueueRequest(BaseModel):
     url: str
 
 
+class RenameRunRequest(BaseModel):
+    #: Capped rather than unbounded: this is rendered in a sidebar row, sent
+    #: in Telegram notifications and stored per run. An empty string is
+    #: allowed and means "drop my name, use the generated one again".
+    title: str = Field("", max_length=200)
+
+
 # ---------------------------------------------------------------------------
 # Session reading
 # ---------------------------------------------------------------------------
@@ -813,6 +820,36 @@ async def delete_run(
     counts = await db.delete_run(settings.app_name, PIPELINE_USER_ID, run_id)
     logger.info("Run %s deleted by %s: %s", run_id, identity.email, counts)
     return {"result": "deleted", "run_id": run_id, "deleted": counts}
+
+
+@router.patch("/runs/{run_id}")
+async def rename_run(
+    run_id: str,
+    payload: RenameRunRequest,
+    identity: Identity = Depends(current_identity),
+) -> dict:
+    """Rename a task.
+
+    PATCH rather than PUT: this changes one field and leaves every other one
+    alone, which is exactly the distinction the two methods carry. A PUT here
+    would imply the body is the whole run.
+
+    Unlike delete, this is allowed while the task is running. A name is not
+    part of the pipeline's state - nothing reads it to decide what to do next -
+    so renaming a live task cannot disturb it, and the moment you most want to
+    label a task is usually while you are watching it work.
+
+    An empty title is a deliberate outcome, not a validation failure: it
+    clears the custom name and lets the generated one show through again.
+    """
+    if not await db.rename_run(run_id, payload.title):
+        raise HTTPException(404, {"code": "no_such_run", "message": "Unknown task."})
+
+    run = await db.get_run(run_id)
+    logger.info(
+        "Run %s renamed by %s to %r", run_id, identity.email, payload.title.strip()
+    )
+    return {"result": "renamed", "run_id": run_id, "title": (run or {}).get("title")}
 
 
 @router.post("/runs/{run_id}/cancel")

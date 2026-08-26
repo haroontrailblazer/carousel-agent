@@ -1,9 +1,16 @@
 import * as React from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router"
-import { ExternalLink, Images, ListTree, MessagesSquare, WifiOff } from "lucide-react"
+import {
+  ArrowUpRight,
+  ExternalLink,
+  Images,
+  ListTree,
+  MessagesSquare,
+  WifiOff,
+} from "lucide-react"
 
-import { startedFromComposer } from "@/components/agent/agent-conversation"
-import { AgentWorkspace, NewChatButton } from "@/components/agent/agent-workspace"
+import { NewChatButton } from "@/components/agent/agent-workspace"
+import { chatPath } from "@/components/layout/chat-list"
 import { ReviewPanel } from "@/components/review/review-panel"
 import { TaskActions } from "@/components/run/task-actions"
 import { AgentTrace, PhaseRail } from "@/components/run/trace"
@@ -17,7 +24,7 @@ import { elapsed, relativeTime } from "@/lib/format"
 import { PHASE_LABELS, STATUS_LABELS, STATUS_TOKEN } from "@/lib/pipeline"
 import type { RunStatus } from "@/lib/types"
 
-type TaskTab = "trace" | "chat" | "review"
+type TaskTab = "trace" | "review"
 
 /**
  * Which view a task opens on.
@@ -51,11 +58,19 @@ export function RunDetailRoute() {
   const [params, setParams] = useSearchParams()
   const urlTab = params.get("tab")
   const [tab, setTab] = React.useState<TaskTab | null>(
-    urlTab === "review" || urlTab === "trace" || urlTab === "chat"
-      ? urlTab
-      : null,
+    urlTab === "review" || urlTab === "trace" ? urlTab : null,
   )
   const status = run.data?.status
+
+  // `?tab=chat` was a real view on this page until the conversation moved to
+  // its own screen. Those links are in browser history and in anything already
+  // shared, so they land on the chat rather than silently falling back to the
+  // trace - which would look like the link had simply stopped working.
+  React.useEffect(() => {
+    if (urlTab === "chat" && runId) {
+      navigate(chatPath(runId), { replace: true, viewTransition: true })
+    }
+  }, [urlTab, runId, navigate])
 
   React.useEffect(() => {
     if (tab || !status) return
@@ -237,18 +252,6 @@ export function RunDetailRoute() {
             onChange={selectTab}
             items={[
               { value: "trace", label: "Trace", icon: <ListTree /> },
-              // Only for tasks that were actually typed into the composer.
-              // A queue or scheduled run had no conversation, and an empty
-              // "Chat" tab would be a promise the task cannot keep.
-              ...(startedFromComposer(data)
-                ? [
-                    {
-                      value: "chat" as const,
-                      label: "Chat",
-                      icon: <MessagesSquare />,
-                    },
-                  ]
-                : []),
               {
                 value: "review",
                 label: "Review",
@@ -266,12 +269,32 @@ export function RunDetailRoute() {
               },
             ]}
           />
-          {active === "trace" && (
-            <div className="flex gap-2 text-xs text-[var(--muted-foreground)]">
-              {tokens.llm_calls != null && <span>{tokens.llm_calls} LLM calls</span>}
-              {tokens.image_calls != null && <span>· {tokens.image_calls} images</span>}
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {active === "trace" && (
+              <div className="flex gap-2 text-xs text-[var(--muted-foreground)]">
+                {tokens.llm_calls != null && <span>{tokens.llm_calls} LLM calls</span>}
+                {tokens.image_calls != null && (
+                  <span>· {tokens.image_calls} images</span>
+                )}
+              </div>
+            )}
+            {/* A link, not a tab.
+                
+                Trace and Review are two views OF this page; the conversation
+                is a different screen, at its own URL, with the composer docked
+                to the viewport. It used to be embedded here as a third tab,
+                which meant the chat you were working in existed in two places
+                at slightly different sizes. Now there is one chat screen and
+                this is the way to it - and the arrow says so before the click
+                rather than after it. */}
+            <Button variant="ghost" size="sm" asChild>
+              <Link to={chatPath(runId!)} viewTransition>
+                <MessagesSquare />
+                Open chat
+                <ArrowUpRight className="size-3.5 opacity-70" />
+              </Link>
+            </Button>
+          </div>
         </div>
 
         <TabPanel value="trace" selected={active === "trace"}>
@@ -281,24 +304,6 @@ export function RunDetailRoute() {
             live={live}
             synced={stream.synced}
           />
-        </TabPanel>
-
-        <TabPanel value="chat" selected={active === "chat"}>
-          {/* The same workspace as the New carousel screen, minus its own
-              header and viewport-docked composer - this page supplies both.
-              Opening Chat should give you the screen you were just working
-              in, not a read-only transcript of it. */}
-          <Card className="p-5">
-            <AgentWorkspace
-              runId={runId}
-              workspace={workspace}
-              variant="embedded"
-              // No prompt in local state here: this task may have been started
-              // in another session entirely, so the component reconstructs it
-              // from the run itself.
-              onReset={() => navigate("/new", { viewTransition: true })}
-            />
-          </Card>
         </TabPanel>
 
         <TabPanel value="review" selected={active === "review"}>

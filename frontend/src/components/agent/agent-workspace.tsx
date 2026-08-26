@@ -21,16 +21,18 @@
  * state of one task.
  */
 
+import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "react-router"
-import { MoreHorizontal, Plus } from "lucide-react"
+import { ListTree, Pencil, Plus } from "lucide-react"
 import { toast } from "sonner"
 
 import { PixelLoader } from "@/components/agent/agent-activity"
 import { AgentAssetRail, AgentAssetStrip } from "@/components/agent/agent-assets"
 import { AgentComposer, type ComposerState } from "@/components/agent/agent-composer"
 import { AgentConversation } from "@/components/agent/agent-conversation"
-import { AgentActivityStatus } from "@/components/agent/agent-workspace-status"
+import { InlineEdit } from "@/components/ui/inline-edit"
+import { useRenameRun } from "@/hooks/use-rename-run"
 import { invalidateRun, type RunWorkspace } from "@/hooks/use-run-workspace"
 import { ApiError, post } from "@/lib/api"
 import { AGENT_LABELS, PHASE_LABELS } from "@/lib/pipeline"
@@ -76,6 +78,85 @@ export function composerStateFor(
   return ["awaiting_review", "done", "cancelled"].includes(run.data.status)
     ? "complete"
     : "failed"
+}
+
+/**
+ * The chat's name, renameable in place.
+ *
+ * A task is named by the pipeline the moment it starts, from whatever was
+ * typed or fetched, and those names are serviceable rather than yours - "the
+ * new viral news in AI" is what you asked for, not what you would call it a
+ * week later when you are looking for it in a list of forty.
+ *
+ * Editing happens where the name is, at the size it is displayed, rather than
+ * in a dialog: what you type is what will be there. The heading keeps its
+ * exact type while being edited for the same reason.
+ *
+ * Only for a task that exists. There is nothing to rename before one has been
+ * started, and the empty composer's heading is a greeting, not a name.
+ */
+function ChatTitle({
+  runId,
+  run,
+  isError,
+}: {
+  runId: string | null
+  run: RunDetail | undefined
+  isError: boolean
+}) {
+  const rename = useRenameRun()
+  const [editing, setEditing] = React.useState(false)
+
+  const shown =
+    run?.title || run?.news.title || (isError ? "Task unavailable" : "New carousel")
+  // Small, and in the interface font rather than the display serif.
+  //
+  // This used to be a 31px Georgia headline, which made sense when it sat in
+  // a tall bar of its own. Without the bar it is a label on a row of controls,
+  // and the same name is already the highlighted row in the sidebar two
+  // inches to the left - so restating it in the largest type on the screen was
+  // spending the page's most valuable line on something the user just clicked.
+  const typography = "truncate text-sm font-semibold tracking-tight"
+
+  if (!run || !runId) return <h1 className={typography}>{shown}</h1>
+
+  if (editing) {
+    return (
+      <h1 className={typography}>
+        <InlineEdit
+          value={run.title ?? ""}
+          placeholder={run.news.title || runId}
+          label="Rename this chat"
+          onCommit={(next) => {
+            if (next.trim() !== (run.title ?? "").trim()) {
+              rename.mutate({ runId, title: next })
+            }
+            setEditing(false)
+          }}
+          onCancel={() => setEditing(false)}
+          className="w-full"
+        />
+      </h1>
+    )
+  }
+
+  return (
+    <h1 className={typography}>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        title="Rename this chat"
+        className="group/title inline-flex max-w-full items-center gap-2 text-left"
+      >
+        <span className="truncate">{shown}</span>
+        <Pencil
+          aria-hidden
+          className="size-4 shrink-0 text-[var(--muted-foreground)] opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-visible/title:opacity-100 [@media(hover:none)]:opacity-60"
+        />
+        <span className="sr-only">Rename this chat</span>
+      </button>
+    </h1>
+  )
 }
 
 export function AgentWorkspace({
@@ -184,41 +265,33 @@ export function AgentWorkspace({
     <div className="agent-workspace-grid">
       <section className="agent-conversation-pane">
         <header className="agent-workspace-header">
+          {/* The title alone. The activity line that used to sit under it -
+              "Your carousel is ready for review", "Connecting to the carousel
+              agent" - is not lost: the conversation below says all three of
+              those things already, in its own status row, its loader and its
+              error card. In the header it was a second copy of whatever the
+              top of the transcript was saying. */}
           <div className="min-w-0">
-            <h1 className="truncate font-[Georgia,serif] text-2xl font-normal tracking-[-0.025em] sm:text-[31px]">
-              {run.data?.title || run.data?.news.title || (run.isError ? "Task unavailable" : "New carousel")}
-            </h1>
-            {run.data ? (
-              <AgentActivityStatus
-                status={run.data.status}
-                label={activityLabel(run.data, stream.events)}
-                connected={stream.connected}
-              />
-            ) : run.isError ? (
-              // A permanent 404 is not a slow connection. Pulsing "connecting"
-              // at someone forever, above a body that already says the task
-              // could not be loaded, is the page arguing with itself.
-              <p className="mt-1.5 text-xs text-[var(--muted-foreground)]">
-                This task could not be loaded.
-              </p>
-            ) : (
-              <p className="mt-1 flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
-                <span className="size-1.5 rounded-full bg-[var(--brand)] animate-pip-pulse" />
-                Connecting to the carousel agent
-              </p>
-            )}
+            <ChatTitle runId={runId} run={run.data} isError={run.isError} />
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
             <NewChatButton />
+            {/* The trace, named as the trace.
+                
+                This was a three-dot overflow control, which promises "more
+                options" and delivered one destination. The same icon the task
+                page uses for its Trace tab says where the click goes before
+                it is made, and `?tab=trace` opens on that tab rather than on
+                whichever one the task's status would have chosen. */}
             <Link
-              to={`/tasks/${runId}`}
+              to={`/tasks/${runId}?tab=trace`}
               viewTransition
               className="grid size-9 shrink-0 place-items-center rounded-[10px] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-              title="Open the full task - trace, chat and review"
+              title="Open the agent trace"
             >
-              <MoreHorizontal className="size-5" />
-              <span className="sr-only">Open full task details</span>
+              <ListTree className="size-4.5" />
+              <span className="sr-only">Open the agent trace</span>
             </Link>
           </div>
         </header>
