@@ -14,17 +14,20 @@ import { cn } from "@/lib/utils"
  * lands, and reading out a scaffold in the meantime is noise. The screens
  * announce their own waiting state in words where it matters.
  *
- * `motion-reduce:animate-none` rather than a media query in the stylesheet,
- * so the exception travels with the component instead of needing a matching
- * entry in a list somewhere else that a new skeleton would be left out of.
+ * The shimmer itself lives in `.skeleton` in index.css - a sweep needs a
+ * pseudo-element, which utilities cannot express - and that rule carries its
+ * own `prefers-reduced-motion` exception, so a new skeleton cannot be left out
+ * of it by forgetting to add a class here.
  */
 export function Skeleton({ className }: { className?: string }) {
   return (
     <div
       aria-hidden
       className={cn(
-        "animate-pulse rounded-[var(--radius-md)] bg-[var(--muted)]",
-        "motion-reduce:animate-none",
+        // `.skeleton` (index.css) draws the block and sweeps a highlight
+        // across it. It is a class rather than utilities because the sweep
+        // needs a pseudo-element, and it carries its own reduced-motion rule.
+        "skeleton rounded-[var(--radius-md)]",
         className,
       )}
     />

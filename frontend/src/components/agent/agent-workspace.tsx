@@ -27,10 +27,10 @@ import { Link, useNavigate } from "react-router"
 import { ListTree, Pencil, Plus } from "lucide-react"
 import { toast } from "sonner"
 
-import { PixelLoader } from "@/components/agent/agent-activity"
 import { AgentAssetRail, AgentAssetStrip } from "@/components/agent/agent-assets"
 import { AgentComposer, type ComposerState } from "@/components/agent/agent-composer"
 import { AgentConversation } from "@/components/agent/agent-conversation"
+import { Skeleton } from "@/components/ui/skeleton"
 import { InlineEdit } from "@/components/ui/inline-edit"
 import { useRenameRun } from "@/hooks/use-rename-run"
 import { invalidateRun, type RunWorkspace } from "@/hooks/use-run-workspace"
@@ -75,6 +75,12 @@ export function composerStateFor(
   if (starting || run.isLoading) return "starting"
   if (isLive) return "running"
   if (run.isError || !run.data) return "failed"
+  // `pending_review`, not the status: it is the authoritative "is a decision
+  // still wanted?" flag, and it is NOT monotonic - a failed resume restores
+  // the pending row. This is the only state where a typed message has a
+  // paused tool call to answer, so it has to be read from the flag that
+  // actually tracks one.
+  if (run.data.pending_review) return "review"
   return ["awaiting_review", "done", "cancelled"].includes(run.data.status)
     ? "complete"
     : "failed"
@@ -107,8 +113,7 @@ function ChatTitle({
   const rename = useRenameRun()
   const [editing, setEditing] = React.useState(false)
 
-  const shown =
-    run?.title || run?.news.title || (isError ? "Task unavailable" : "New carousel")
+  const shown = run?.title || run?.news.title || "Task unavailable"
   // Small, and in the interface font rather than the display serif.
   //
   // This used to be a 31px Georgia headline, which made sense when it sat in
@@ -118,7 +123,14 @@ function ChatTitle({
   // spending the page's most valuable line on something the user just clicked.
   const typography = "truncate text-sm font-semibold tracking-tight"
 
-  if (!run || !runId) return <h1 className={typography}>{shown}</h1>
+  // Nothing is known yet: hold the line's space and say nothing. Falling back
+  // to "New carousel" here was the bug - it named a task that already has a
+  // name, for as long as the request took.
+  if (!run) {
+    if (isError) return <h1 className={typography}>Task unavailable</h1>
+    return <Skeleton className="h-5 w-64 max-w-full" />
+  }
+  if (!runId) return <h1 className={typography}>{shown}</h1>
 
   if (editing) {
     return (
@@ -156,6 +168,44 @@ function ChatTitle({
         <span className="sr-only">Rename this chat</span>
       </button>
     </h1>
+  )
+}
+
+/**
+ * The chat, before any of it has arrived.
+ *
+ * Shaped like what replaces it - a prompt bubble on the right, then the
+ * agent's status line, its thinking panel and the first steps under it - so
+ * the page does not rearrange itself the moment the data lands.
+ *
+ * It deliberately contains NO text. The old loading state said "Connecting to
+ * the task transcript…" above a heading that read "New carousel", and both
+ * were guesses: the task is already connected as far as the user is concerned
+ * (they clicked a chat that exists), and its name is whatever the server is
+ * about to say, not "New carousel". Showing a wrong title and then correcting
+ * it is worse than showing no title at all, because the wrong one is
+ * indistinguishable from a real answer for as long as it is up.
+ */
+function ChatSkeleton() {
+  return (
+    <div className="space-y-6" aria-hidden>
+      <div className="flex justify-end gap-3">
+        <Skeleton className="h-12 w-[62%] rounded-[16px]" />
+        <Skeleton className="size-8 shrink-0 rounded-full" />
+      </div>
+
+      <div className="space-y-5">
+        <Skeleton className="h-4 w-56" />
+        <Skeleton className="h-40 rounded-[14px]" />
+        <div className="flex flex-wrap gap-2">
+          <Skeleton className="h-7 w-32 rounded-full" />
+          <Skeleton className="h-7 w-28 rounded-full" />
+          <Skeleton className="h-7 w-36 rounded-full" />
+        </div>
+        <Skeleton className="h-4 w-[70%]" />
+        <Skeleton className="h-4 w-[54%]" />
+      </div>
+    </div>
   )
 }
 
@@ -201,10 +251,95 @@ export function AgentWorkspace({
 
   const state = composerStateFor(workspace, false)
 
+  /**
+   * What happens to a message typed after the agents have stopped.
+   *
+   * Two destinations, and which one it is depends entirely on whether the
+   * pipeline still has a paused step to answer.
+   *
+   * **Waiting on review.** The orchestrator is suspended inside
+   * `await_human_review`. Rejecting with feedback answers that call, and the
+   * rework phase runs `learner` and `feedback_router` over the text before
+   * re-running only the agents it names. So a sentence typed here genuinely
+   * reaches the agents and changes the carousel - it is the same channel the
+   * Reject box on the review tab uses, which is why it posts the same verdict
+   * rather than inventing a second path to keep in step with it.
+   *
+   * **Anything after that.** Published, failed or cancelled runs have no
+   * suspended call left, and the root agent is a phase state machine rather
+   * than a chat partner - handed text at `done` it emits its closing summary
+   * and stops. So a message here starts a NEW carousel, which is what someone
+   * typing a fresh topic into a finished chat means anyway.
+   */
+  const [followUp, setFollowUp] = React.useState("")
+
+  const rework = useMutation({
+    mutationFn: (feedback: string) =>
+      post(`/api/runs/${runId}/verdict`, { status: "rejected", feedback }),
+    onSuccess: () => {
+      setFollowUp("")
+      invalidateRun(queryClient, runId)
+      toast.success("Sent to the agents", {
+        description: "Reworking the carousel with your notes.",
+      })
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Could not send that.",
+      ),
+  })
+
+  const startAnother = useMutation({
+    mutationFn: (text: string) =>
+      post<{ run_id: string; title: string }>(
+        "/api/runs",
+        /^https?:\/\/\S+$/i.test(text)
+          ? { source: "url", url: text }
+          : { source: "topic", topic: text },
+      ),
+    onSuccess: (data) => {
+      setFollowUp("")
+      void queryClient.invalidateQueries({ queryKey: ["runs"] })
+      // Pushed, not replaced: the chat that was on screen is a real place the
+      // user may want to go back to.
+      navigate(`/new?run=${encodeURIComponent(data.run_id)}`, {
+        viewTransition: true,
+      })
+      toast.success("Your carousel is cooking", { description: data.title })
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : "Could not start that.",
+      ),
+  })
+
+  const sendFollowUp = React.useCallback(() => {
+    const text = followUp.trim()
+    if (text.length < 3 || rework.isPending || startAnother.isPending) return
+    if (state === "review") rework.mutate(text)
+    else startAnother.mutate(text)
+  }, [followUp, state, rework, startAnother])
+
+
+  /**
+   * Nothing real goes on screen until everything real is here.
+   *
+   * "Everything" is the run AND its trace. The run alone gives the title and
+   * the status, but the body of the page is the transcript - so rendering as
+   * soon as the run lands produced a titled, empty chat that then filled in,
+   * which is two loading states in a row rather than one.
+   *
+   * Artifacts are deliberately NOT waited on. That endpoint 404s for most of a
+   * run's life by design - the carousel is only assembled at the end - so
+   * waiting for it would hold the skeleton up for fifteen minutes on a task
+   * that is working perfectly.
+   */
+  const booting = !run.isError && (!run.data || !stream.synced)
+
   const conversation = (
     <>
-      {run.isLoading ? (
-        <PixelLoader label="Connecting to the task transcript…" live />
+      {booting ? (
+        <ChatSkeleton />
       ) : run.isError || !run.data ? (
         <div className="rounded-[14px] border border-[var(--phase-failed)]/35 bg-[var(--phase-failed-soft)] p-4 text-sm text-[var(--phase-failed-fg)]">
           <p className="font-medium">This task could not be loaded.</p>
@@ -237,15 +372,14 @@ export function AgentWorkspace({
 
   const composer = (
     <AgentComposer
-      value=""
-      onChange={() => undefined}
-      onSubmit={() => undefined}
+      value={followUp}
+      onChange={setFollowUp}
+      onSubmit={sendFollowUp}
       // Stop stays available for the whole time the agents are up, including
       // the seconds before the first snapshot arrives - a run you cannot
       // cancel because the page has not finished loading is the worst moment
       // to be told to wait.
       onStop={() => cancel.mutate()}
-      onReset={onReset}
       state={state}
       stopping={cancel.isPending}
     />

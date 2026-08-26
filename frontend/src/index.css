@@ -332,6 +332,45 @@
   .glide:hover { transform: none; }
 }
 
+/* A skeleton that sweeps rather than blinks.
+ *
+ * `animate-pulse` fades a whole block in and out, which at a glance reads as
+ * something flashing at you; a highlight travelling across it reads as
+ * loading. The sweep is a pseudo-element moved with `transform`, so it runs on
+ * the compositor - a background-position animation would repaint the block on
+ * every frame, and a loading screen full of them is the worst place to do
+ * that.
+ *
+ * `color-mix` against --foreground rather than a fixed white: on the dark
+ * theme a white sweep is a bright bar crossing a dark page. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--muted);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--foreground) 7%, transparent),
+    transparent
+  );
+  animation: skeleton-sweep 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+}
+
 /* ---------------------------------------------------------------------------
    Navigation motion.
 
@@ -518,6 +557,53 @@
 
 .agent-composer {
   transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+/* The composer collapses to a thin bar once there is a task.
+ *
+ * A two-line text box you are not allowed to type into is a large piece of
+ * the screen promising something it will not do. Once the agents are working
+ * the only thing that bar is still for is Stop - so it shrinks to exactly the
+ * height of that button plus the padding around it, and stays there for the
+ * rest of the task, including after it finishes or fails.
+ *
+ * `grid-template-rows: 1fr -> 0fr` is the mechanism. Animating `height`
+ * requires knowing the height, and this one depends on how many lines the
+ * textarea grew to; `max-height` needs a magic number large enough for the
+ * biggest case, which then eases through the empty space and reads as a lag
+ * before anything moves. A grid row measures its own content and animates
+ * between that and nothing.
+ *
+ * This DOES animate a layout property, which the motion section above avoids
+ * on purpose - but that rule is about continuous, per-frame interactions like
+ * hover, where the cost repeats. This fires once per task, over 260ms, on a
+ * subtree of two elements. */
+.agent-composer-field {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.agent-composer-field > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agent-composer--thin .agent-composer-field {
+  grid-template-rows: 0fr;
+}
+
+/* The control row carries the composer's bottom padding on its own when the
+   field above it has collapsed, so the bar closes to button + padding exactly
+   rather than to button + padding + a leftover gap. */
+.agent-composer--thin .agent-composer-controls {
+  padding-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-composer-field {
+    transition: none;
+  }
 }
 
 .agent-composer:focus-within {
