@@ -286,8 +286,23 @@ def _sanitize_rework_plan(
         )
         plan = ReworkPlan()
 
-    if not plan.feedback:
-        plan.feedback = effective_feedback
+    # The reviewer's own words win, always. This used to fill the field only
+    # when the model left it empty, so a router that summarised instead of
+    # copying got the last word - and its summary is what the re-run agents
+    # read as their highest-priority instruction, because _phase_rework
+    # prefers plan.feedback over verdict.feedback when writing
+    # K_REWORK_FEEDBACK.
+    #
+    # "the price is wrong, the model is $20/M not $200/M" became "pricing
+    # figure incorrect", so research re-ran without the correct value, emitted
+    # the same wrong number, passed QA (which does not check facts), and the
+    # identical carousel went back to the reviewer - round after round, to the
+    # cap. Both this module's docstring and the dispatcher's hard rules promise
+    # feedback is carried verbatim; this is where that promise is kept.
+    #
+    # The model's text is still used to ROUTE (targets below), and is kept as
+    # the feedback only when there is no reviewer text to prefer.
+    plan.feedback = effective_feedback or plan.feedback
 
     # Normalize targets, preserving order and dropping duplicates/unknowns.
     normalized: list[str] = []

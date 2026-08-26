@@ -38,8 +38,18 @@ export function ReviewPanel({ run }: { run: RunDetail }) {
     // this key, but a running task is polled anyway in case the stream is
     // down.
     refetchInterval: (query) => {
-      if (query.state.data) return 15 * 60_000
-      return run.status === "running" ? 20_000 : false
+      // Having the carousel is not a reason to stop asking for it. A rework
+      // rewrites the bundle and every slide artifact, so a task that is
+      // working can invalidate what is on screen at any moment - and the push
+      // channel that was supposed to cover it (onPhase invalidating this key)
+      // rides on the SSE stream, which carries nothing for a leg resumed by a
+      // verdict. Rejecting a task and then watching this tab showed the slides
+      // you had just rejected, with Approve enabled, for up to a quarter of an
+      // hour.
+      if (run.status === "running") return 20_000
+      // Idle: the only reason left to refetch is signed-URL expiry, and the
+      // URLs last an hour.
+      return query.state.data ? 15 * 60_000 : false
     },
   })
 

@@ -679,6 +679,11 @@ async def post_verdict(
 
     codes = {
         "not_pending": 409,
+        # The decision was recorded; only the automatic restart did not
+        # happen (a run cap, or a leg already in flight). 409 so the console
+        # branches on the code and offers Resume, rather than telling the
+        # reviewer their verdict failed - it did not.
+        "not_started": 409,
         "feedback_required": 400,
         "invalid_status": 400,
         "incomplete": 500,
@@ -757,6 +762,38 @@ async def rerun(
 
     logger.info("Re-ran %s in place for %s.", run_id, identity.email)
     return {"result": "restarting", "run_id": run_id}
+
+
+@router.delete("/runs/{run_id}")
+async def delete_run(
+    run_id: str, identity: Identity = Depends(current_identity)
+) -> dict:
+    """Erase a finished task, its trace and its media.
+
+    ``db.delete_run`` deliberately does not check the run's status - it is also
+    the cleanup path for runs whose process is already gone - so the refusal
+    lives here, where there is a person to answer. A running task must be
+    stopped first: deleting the row out from under a live driver leaves it
+    writing events for a run that no longer exists.
+    """
+    run = await db.get_run(run_id)
+    if run is None:
+        raise HTTPException(404, {"code": "no_such_run", "message": "Unknown task."})
+
+    if run_id in active_run_ids() or (
+        str(run.get("status") or "") == db.RUN_STATUS_RUNNING
+    ):
+        raise HTTPException(
+            409,
+            {
+                "code": "run_is_active",
+                "message": "Stop this task before deleting it.",
+            },
+        )
+
+    counts = await db.delete_run(settings.app_name, PIPELINE_USER_ID, run_id)
+    logger.info("Run %s deleted by %s: %s", run_id, identity.email, counts)
+    return {"result": "deleted", "run_id": run_id, "deleted": counts}
 
 
 @router.post("/runs/{run_id}/cancel")

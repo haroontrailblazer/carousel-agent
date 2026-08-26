@@ -95,26 +95,40 @@ class RunBus:
         own event loop, so a browser that has stopped reading must not be able
         to stall the run that is feeding it.
 
-        A full queue drops its OLDEST event and pushes a ``gap`` marker, so the
+        A full queue drops its OLDEST events and pushes a ``gap`` marker, so the
         client learns it missed something and can re-fetch from the database
         instead of silently rendering an incomplete trace. Dropping the newest
         instead would be worse: the newest events are the ones the viewer is
         actually waiting for.
+
+        Which is why room is made for BOTH items before either is pushed. An
+        earlier version freed a single slot and then pushed two - the marker
+        and the event - so the second ``put_nowait`` raised ``QueueFull`` and
+        was swallowed by the handler below. The subscriber received the gap
+        marker and lost the very event the marker was warning it about, which
+        is exactly the behaviour this docstring promises not to have.
         """
         for queue in list(self._subscribers.get(event.run_id, ())):
             try:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
+                gap = RunEvent(
+                    run_id=event.run_id,
+                    seq=event.seq,
+                    kind=KIND_GAP,
+                    text="Some events were dropped; reload to see the full trace.",
+                )
                 try:
-                    queue.get_nowait()  # discard the oldest
-                    queue.put_nowait(
-                        RunEvent(
-                            run_id=event.run_id,
-                            seq=event.seq,
-                            kind=KIND_GAP,
-                            text="Some events were dropped; reload to see the full trace.",
-                        )
-                    )
+                    # Two slots for two items. maxsize is 256, so this cannot
+                    # exhaust the queue; the guard is for a pathological one.
+                    for _ in range(2):
+                        if queue.qsize() + 2 <= QUEUE_MAXSIZE:
+                            break
+                        try:
+                            queue.get_nowait()  # discard the oldest
+                        except asyncio.QueueEmpty:  # pragma: no cover
+                            break
+                    queue.put_nowait(gap)
                     queue.put_nowait(event)
                 except Exception:  # pragma: no cover - the reader is gone
                     logger.debug(

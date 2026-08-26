@@ -62,7 +62,12 @@ K_QA_REPORT = "qa_report"            # QAReport dict
 K_VERDICT = "review_verdict"         # Verdict dict (written on resume)
 K_REWORK_PLAN = "rework_plan"        # ReworkPlan dict
 K_REWORK_FEEDBACK = "rework_feedback"  # str - injected into re-run agents' context
-K_REWORK_ROUND = "rework_round"      # int
+K_REWORK_ROUND = "rework_round"      # int - human-driven rework rounds
+#: Automatic QA-driven rework rounds. Counted SEPARATELY from
+#: K_REWORK_ROUND: a machine retrying a bad render is not the reviewer
+#: spending one of their chances, and sharing one counter meant a few
+#: flaky renders could exhaust the budget before a human saw anything.
+K_QA_ROUND = "qa_round"              # int - automatic QA retry rounds
 K_REVIEW_ROUND = "review_round"      # int - how many review mails sent
 K_REVIEW_NOTICE_FAILED = "review_notice_failed"  # bool - carousel ready,
                                      # but the reviewer could not be told

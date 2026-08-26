@@ -357,4 +357,11 @@ def build_cta_agent() -> LlmAgent:
         ),
         instruction=instruction,
         tools=[FunctionTool(render_cta_slide)],
+        # Orchestrator-driven pipeline node: never LLM-transfer elsewhere.
+        # See the same block in template_design - without both flags,
+        # google-adk 2.7 gives this agent AutoFlow and a transfer_to_agent
+        # tool, and a transfer is indistinguishable from a completed stage
+        # to the orchestrator's phase loop.
+        disallow_transfer_to_parent=True,
+        disallow_transfer_to_peers=True,
     )

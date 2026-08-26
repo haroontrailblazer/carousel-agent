@@ -33,6 +33,7 @@ from typing import Any, Optional
 from app.runs.bus import (
     BUS,
     KIND_ERROR,
+    KIND_TERMINAL,
     KIND_PHASE,
     KIND_PROGRESS,
     KIND_TOOL,
@@ -131,6 +132,57 @@ def classify_event(event: Any) -> tuple[str, dict]:
         return KIND_PROGRESS, data
 
     return KIND_PROGRESS, data
+
+
+
+# ---------------------------------------------------------------------------
+# Merging the two records of what happened
+# ---------------------------------------------------------------------------
+#: Kinds that exist ONLY in run_events. record_event synthesises these outside
+#: any ADK invocation, so ADK's transcript has no idea they happened.
+_LIFECYCLE_KINDS = (KIND_TERMINAL, KIND_ERROR)
+
+
+async def _lifecycle_frames(run_id: str, limit: int) -> list[dict]:
+    """The endings and restarts that live only in ``run_events``.
+
+    Six timeline entries are written by ``record_event`` from outside an
+    invocation, so ADK never sees them: ``_drive_run``'s terminal line,
+    ``_finish_badly``'s "Run failed: {exc}" and "Run cancelled.",
+    ``resume_interrupted_run``'s "Resuming interrupted run at phase ...",
+    ``cancel_run``'s stale-stop notice, and recovery's "the service restarted".
+
+    They are the only record of WHY a task died, which is exactly what the
+    console opens a failed task's trace tab to show.
+    """
+    try:
+        rows = await db.load_run_events(run_id, after=0, limit=limit)
+    except Exception as exc:
+        logger.warning("Could not read run_events for %s: %s", run_id, exc)
+        return []
+    return [r for r in rows if str(r.get("kind") or "") in _LIFECYCLE_KINDS]
+
+
+def _merge_by_time(frames: list[dict], extra: list[dict]) -> list[dict]:
+    """Interleave two already-sorted frame lists on ``created_at``.
+
+    Sequence numbers are reassigned across the merged result, because the two
+    sources count different things and a client that dedupes on ``seq`` has to
+    be handed one coherent space. Frames with no usable timestamp sort last
+    rather than being dropped - an ending with a missing timestamp is still
+    the answer to "what happened to my carousel".
+    """
+    if not extra:
+        return frames
+
+    def key(frame: dict) -> tuple[int, float]:
+        parsed = _parse_ts(frame.get("created_at") or frame.get("ts"))
+        return (0, parsed.timestamp()) if parsed else (1, 0.0)
+
+    merged = sorted([*frames, *extra], key=key)
+    for index, frame in enumerate(merged, start=1):
+        frame["seq"] = index
+    return merged
 
 
 async def record_event(
@@ -394,16 +446,26 @@ async def load_trace(run_id: str, after: int = 0, limit: int = 2000) -> list[dic
     except Exception:  # pragma: no cover - import wiring
         PIPELINE_USER_ID = "pipeline"
 
+    rows: list[dict] = []
     try:
         rows = await db.load_adk_events(
-            settings.app_name, PIPELINE_USER_ID, run_id, after=after, limit=limit
+            settings.app_name, PIPELINE_USER_ID, run_id, after=0, limit=limit
         )
-        if rows:
-            return [adk_event_to_frame(r) for r in rows]
     except Exception as exc:
         logger.warning("Could not read the ADK transcript for %s: %s", run_id, exc)
 
-    return await db.load_run_events(run_id, after=after, limit=limit)
+    if not rows:
+        return await db.load_run_events(run_id, after=after, limit=limit)
+
+    # Merge, do not choose. ADK's transcript is the better source for what the
+    # agents did, but it cannot contain the lifecycle lines - so preferring it
+    # exclusively meant a failed task showed a red chip above a trace that
+    # simply stopped, with the exception text sitting unread in run_events.
+    frames = _merge_by_time(
+        [adk_event_to_frame(r) for r in rows],
+        await _lifecycle_frames(run_id, limit),
+    )
+    return frames[after : after + limit]
 
 
 # ---------------------------------------------------------------------------
@@ -697,14 +759,22 @@ async def load_trace_with_summary(
     except Exception:  # pragma: no cover - import wiring
         PIPELINE_USER_ID = "pipeline"
 
+    rows: list[dict] = []
     try:
         rows = await db.load_adk_events(
-            settings.app_name, PIPELINE_USER_ID, run_id, after=after, limit=limit
+            settings.app_name, PIPELINE_USER_ID, run_id, after=0, limit=limit
         )
-        if rows:
-            return build_trace(rows)
     except Exception as exc:
         logger.warning("Could not read the ADK transcript for %s: %s", run_id, exc)
+
+    if rows:
+        frames, summary = build_trace(rows)
+        # Same merge as load_trace. This is the endpoint the console reads for
+        # history, so a lifecycle line missing here is missing everywhere.
+        # The summary is unaffected: these frames carry no tokens or tools.
+        frames = _merge_by_time(frames, await _lifecycle_frames(run_id, limit))
+        summary["event_count"] = len(frames)
+        return frames[after : after + limit], summary
 
     frames = await db.load_run_events(run_id, after=after, limit=limit)
     return frames, {"tokens": None, "ms": None, "agents": [], "event_count": len(frames)}

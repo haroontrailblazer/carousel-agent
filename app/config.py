@@ -40,6 +40,12 @@ class Settings:
     # --- app ---
     app_name: str = os.getenv("APP_NAME", _ADK_APP_NAME)
     max_rework_rounds: int = int(os.getenv("MAX_REWORK_ROUNDS", "5"))
+    # Automatic QA retries get their own, tighter budget. They are the
+    # machine correcting itself - a missing artifact, an undersized
+    # render - and if three attempts have not fixed it, a fourth will
+    # not either. Sharing max_rework_rounds meant flaky renders could
+    # spend the reviewer's whole allowance before they saw a carousel.
+    max_qa_rounds: int = int(os.getenv("MAX_QA_ROUNDS", "3"))
     max_carousel_slides: int = int(os.getenv("MAX_CAROUSEL_SLIDES", "10"))  # IG limit
 
     # --- models (LLM) ---

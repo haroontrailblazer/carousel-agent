@@ -801,8 +801,8 @@ async def rewind_session_for_restart(
     What "Re-run" needs in order to mean "try the rework again" rather than
     "start a brand new task":
 
-    * ``rework_round`` back to 0, so the round cap that stopped the run is not
-      still exhausted the instant it restarts.
+    * ``rework_round`` AND ``qa_round`` back to 0, so whichever cap stopped
+      the run is not still exhausted the instant it restarts.
     * ``phase`` back to where the work actually stopped. The rework hard stop
       writes DONE into session state because that is what ends the
       orchestrator's loop - so without this the resumed invocation would read
@@ -822,8 +822,11 @@ async def rewind_session_for_restart(
         UPDATE sessions
         SET state = jsonb_set(
                         jsonb_set(
-                            COALESCE(state, '{}'::jsonb),
-                            '{rework_round}', '0'::jsonb, true
+                            jsonb_set(
+                                COALESCE(state, '{}'::jsonb),
+                                '{rework_round}', '0'::jsonb, true
+                            ),
+                            '{qa_round}', '0'::jsonb, true
                         ),
                         '{phase}', to_jsonb($4::text), true
                     ),
@@ -852,8 +855,23 @@ async def set_session_verdict(
     routing"), so putting one there and re-entering the run is a supported
     path rather than a trick.
 
+    This is also the single-winner gate for that path, which is why the WHERE
+    clause tests for an absent verdict. Both Telegram and the console can
+    decide the same run, and the paused path serialises them with a
+    ``DELETE ... RETURNING`` on ``pending_reviews``; a halted run has no
+    pending row to claim, so the exclusivity has to come from here. An
+    unconditional UPDATE returned True to every concurrent caller, and each
+    then re-entered the run - two invocations driving one session, with
+    last-write-wins deciding which verdict survived.
+
+    Postgres serialises the two statements, so exactly one sees a NULL
+    ``review_verdict`` and updates; the loser gets False and resumes nothing.
+    The orchestrator clears the key on every transition out of review, so a
+    later round is free to write again.
+
     Returns:
-        True when a session row was updated.
+        True when this caller wrote the verdict; False when the row is
+        missing, or when another caller had already recorded one.
     """
     import json as _json
 
@@ -867,6 +885,7 @@ async def set_session_verdict(
                     ),
             update_time = now()
         WHERE app_name = $1 AND user_id = $2 AND id = $3
+          AND COALESCE(state -> 'review_verdict', 'null'::jsonb) = 'null'::jsonb
         RETURNING id
         """,
         str(app_name),

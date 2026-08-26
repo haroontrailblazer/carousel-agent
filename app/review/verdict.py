@@ -51,6 +51,7 @@ VerdictSource = Literal["telegram", "web", "api"]
 
 VerdictResult = Literal[
     "accepted",           # the caller won the claim; a resume is under way
+    "not_started",        # verdict recorded, but the run was not re-entered
     "not_pending",        # unknown run, already decided, or lost the race
     "invalid_status",     # neither "approved" nor "rejected"
     "feedback_required",  # rejected with no feedback text
@@ -126,9 +127,35 @@ async def _decide_without_pause(
     reviewer: str,
     source: VerdictSource,
 ) -> VerdictOutcome:
-    """Record a verdict into session state and re-enter the run."""
+    """Record a verdict into session state and re-enter the run.
+
+    The paused path is single-winner because ``claim_pending_review`` is a
+    ``DELETE ... RETURNING``. A halted run has no pending row to claim, so the
+    exclusivity comes from ``set_session_verdict``, whose UPDATE now matches
+    only a session with no verdict recorded yet. Exactly one concurrent caller
+    writes; the rest are told the run was already decided, and re-enter
+    nothing.
+
+    Re-entry is refused outright while a leg is already running. The window is
+    real: "Send again" re-enters the review phase and spends seconds inside the
+    Telegram send, during which state still reads notice-failed at phase
+    review. Approving there used to write the session row directly - bumping
+    ``update_time``, the value ADK uses as its concurrency marker, so the live
+    leg died on its next ``append_event`` - and then report success for a
+    resume that never started.
+    """
     from app.config import settings
-    from app.runs.service import resume_interrupted_run
+    from app.runs.service import RunRefused, active_run_ids, resume_interrupted_run
+
+    if run_id in active_run_ids():
+        return VerdictOutcome(
+            result="not_pending",
+            run_id=run_id,
+            detail=(
+                "That task is working right now - it may be retrying the "
+                "review notice. Wait for it to settle, then decide."
+            ),
+        )
 
     # Any pending row here is stale - it belongs to a round whose function call
     # was already answered. Drop it so a later submit cannot resume against it.
@@ -152,7 +179,10 @@ async def _decide_without_pause(
         return VerdictOutcome(
             result="not_pending",
             run_id=run_id,
-            detail="That task has no session to decide.",
+            detail=(
+                "That task has already been decided, or has no session to "
+                "decide."
+            ),
         )
 
     try:
@@ -162,7 +192,28 @@ async def _decide_without_pause(
     except Exception as exc:
         logger.warning("record_verdict failed for run %s: %s", run_id, exc)
 
-    started = await resume_interrupted_run(run_id, requested_by=reviewer)
+    # The caps exist to stop new carousels being STARTED. This run's images and
+    # reasoning are already paid for, and refusing to finish it would strand a
+    # ready carousel - so a refusal here is reported, not raised.
+    try:
+        started = await resume_interrupted_run(run_id, requested_by=reviewer)
+    except RunRefused as exc:
+        logger.warning(
+            "Verdict '%s' recorded for run %s but it could not be re-entered "
+            "(%s): %s",
+            status,
+            run_id,
+            exc.code,
+            exc.detail,
+        )
+        return VerdictOutcome(
+            result="not_started",
+            run_id=run_id,
+            status=status,
+            feedback=feedback,
+            detail=exc.detail,
+        )
+
     logger.info(
         "Verdict '%s' recorded for run %s from %s without a pause; re-entered: %s.",
         status,
@@ -170,6 +221,20 @@ async def _decide_without_pause(
         source,
         started,
     )
+    if not started:
+        # The verdict IS recorded, so this is not a failure the reviewer must
+        # redo - but saying "accepted" would claim a pipeline is running when
+        # none is. Naming it lets the console offer Resume instead.
+        return VerdictOutcome(
+            result="not_started",
+            run_id=run_id,
+            status=status,
+            feedback=feedback,
+            detail=(
+                "Your decision was recorded, but the task could not be "
+                "restarted automatically. Use Resume to pick it up."
+            ),
+        )
     return VerdictOutcome(
         result="accepted", run_id=run_id, status=status, feedback=feedback
     )

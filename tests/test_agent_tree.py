@@ -278,6 +278,118 @@ class FrontendVocabularyTests(unittest.TestCase):
             "publish - until the user reloads or re-focuses the window.",
         )
 
+    def test_no_status_strands_the_user_without_an_action(self) -> None:
+        """Every state a task can rest in needs a way out of it.
+
+        ``TaskActions`` gates on status: running->Stop; interrupted->Resume;
+        failed->Re-run; cancelled->Resume+Re-run; done->Delete. Nothing at
+        all for ``awaiting_review`` - it returns null.
+
+        That is the status a run is stranded in when a verdict's background
+        resume dies before ``restore_pending_review`` runs: the
+        ``pending_reviews`` row is already deleted, so no surface can decide
+        it; the phase is ``review``, which ``ACTIVE_PHASES`` excludes, so
+        startup reconcile skips it. The console renders the ApprovalCard's
+        "already decided" state with no buttons and no TaskActions in the
+        header. The server would happily re-enter it - ``resume_run`` has no
+        status guard and would mint a fresh pending row - the UI simply never
+        offers the button.
+        """
+        actions = (
+            REPO / "frontend" / "src" / "components" / "run" / "task-actions.tsx"
+        ).read_text(encoding="utf-8")
+        gates = re.search(
+            r"const canStop.*?const canDelete[^\n]*", actions, re.DOTALL
+        )
+        assert gates is not None, "the status gates were not found"
+        # A gate may name the status directly or through a flag declared
+        # earlier (`const awaitingReview = status === "awaiting_review"`), so
+        # resolve those aliases before looking.
+        resolved = gates.group(0)
+        for alias, literal in re.findall(
+            r'const (\w+) = status === "([a-z_]+)"', actions
+        ):
+            resolved = resolved.replace(alias, f'"{literal}"')
+        self.assertIn(
+            "awaiting_review",
+            resolved,
+            "awaiting_review offers no Stop, Resume, Re-run or Delete, so a "
+            "run whose verdict resume died is unrecoverable from the "
+            "console. Add it to canResume: re-entering the review phase "
+            "sends a fresh notice and writes a new pending row.",
+        )
+
+    def test_the_error_codes_the_ui_handles_are_the_ones_the_api_sends(self) -> None:
+        """Branching on a code nobody emits is the same as not branching."""
+        actions = (
+            REPO / "frontend" / "src" / "components" / "run" / "task-actions.tsx"
+        ).read_text(encoding="utf-8")
+        handled = set(re.findall(r'code === "([a-z_]+)"', actions))
+
+        backend = ""
+        for name in ("routes_runs.py",):
+            backend += (REPO / "web_api" / name).read_text(encoding="utf-8")
+        backend += (REPO / "app" / "runs" / "service.py").read_text(encoding="utf-8")
+        emitted = set(re.findall(r'"code":\s*"([a-z_]+)"', backend)) | set(
+            re.findall(r'RunRefused\(\s*"([a-z_]+)"', backend)
+        )
+
+        dead = sorted(handled - emitted)
+        self.assertEqual(
+            dead,
+            [],
+            f"the UI branches on {dead}, which no endpoint emits - dead "
+            "code that hides the fact that the real failure falls through "
+            "to a raw message",
+        )
+
+        # The reverse: codes the API sends that reach the user as raw prose.
+        actionable = {
+            "too_many_active_runs",
+            "daily_limit_reached",
+            "not_running",
+            "run_is_active",
+            "not_resumable",
+        }
+        unhandled = sorted((emitted & actionable) - handled)
+        self.assertEqual(
+            unhandled,
+            [],
+            f"{unhandled} reach the user as the raw server message. "
+            "daily_limit_reached in particular refuses Resume and Re-run "
+            "for the rest of the day and deserves an explanation, not a "
+            "sentence about MAX_RUNS_PER_DAY.",
+        )
+
+    def test_the_review_tab_refreshes_its_slides_after_a_rework(self) -> None:
+        """A rework rewrites the bundle; the Review tab must not show round 1.
+
+        ``review-panel.tsx`` drops to a 15-minute interval as soon as the
+        artifacts query has data, on the reasoning that the only reason to
+        refetch is signed-URL expiry. The other reason is a rework: the
+        bundle and every slide artifact are rewritten. The push channel that
+        was supposed to cover it - ``onPhase`` invalidating
+        ``["artifacts", runId]`` - rides on the SSE stream, which carries
+        nothing for a resumed leg because ``resume_pipeline`` never calls
+        ``record_event``.
+        """
+        panel = (
+            REPO / "frontend" / "src" / "components" / "review" / "review-panel.tsx"
+        ).read_text(encoding="utf-8")
+        block = re.search(
+            r"refetchInterval:\s*\(query\)\s*=>\s*\{(.*?)\n\s*\},", panel, re.DOTALL
+        )
+        assert block is not None, "the artifacts refetchInterval was not found"
+        self.assertIn(
+            "rework",
+            block.group(1),
+            "Once loaded, the carousel is refetched every 15 minutes. Reject "
+            "a task, let it rework, and the Review tab keeps showing the "
+            "slides you already rejected - for up to a quarter of an hour, "
+            "with Approve enabled the whole time. Key the interval on the "
+            "run's phase, or invalidate on rework_round changing.",
+        )
+
     def test_the_rework_dependency_map_matches_the_orchestrator(self) -> None:
         """The card's prediction must match what the orchestrator will do."""
         from app.orchestrator import _REWORK_DEPENDENTS

@@ -88,7 +88,19 @@ export function NewRunRoute() {
     queryKey: ["run", runId],
     queryFn: () => get<RunDetail>(`/api/runs/${runId}`),
     enabled: !!runId,
-    refetchInterval: (query) => query.state.data?.status === "running" ? 4_000 : false,
+    // React Query re-evaluates this only after a fetch settles, so returning
+    // false is permanent - there is no further fetch to reconsider it. Doing
+    // that at awaiting_review froze this screen on "ready for review" through
+    // the approval, the rework rounds and the publish, because the same status
+    // also sets isLive=false, which closes the EventSource and stops the trace
+    // poll. Nothing was left watching at the exact moment the pipeline had its
+    // remaining work to do. Mirrors run-detail.tsx.
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (status === "running") return 4_000
+      if (status === "awaiting_review") return 8_000
+      return false
+    },
     refetchIntervalInBackground: false,
   })
   const isLive = run.data?.status === "running"

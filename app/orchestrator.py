@@ -69,6 +69,7 @@ from app.state import (
     K_NEWS_ITEM,
     K_PHASE,
     K_QA_REPORT,
+    K_QA_ROUND,
     AGENT_RESEARCH,
     K_RECENT_FEEDBACK,
     K_REVIEW_ROUND,
@@ -438,6 +439,7 @@ class CarouselOrchestrator(BaseAgent):
         delta: dict[str, Any] = {
             K_RUN_ID: run_id,
             K_REWORK_ROUND: 0,
+            K_QA_ROUND: 0,
             K_REVIEW_ROUND: 0,
         }
 
@@ -619,18 +621,38 @@ class CarouselOrchestrator(BaseAgent):
     async def _phase_rework(
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]
     ) -> AsyncGenerator[Event, None]:
-        """Rework: learn + route (human rejections), re-run targets, -> qa."""
-        rounds_done = int(state.get(K_REWORK_ROUND) or 0)
-        if rounds_done >= settings.max_rework_rounds:
+        """Rework: learn + route (human rejections), re-run targets, -> qa.
+
+        Two kinds of rework arrive here and they are budgeted separately.
+        A human rejection spends ``K_REWORK_ROUND`` against
+        ``max_rework_rounds``; stitch_verify's automatic critical-QA rework
+        spends ``K_QA_ROUND`` against ``max_qa_rounds``. They shared one
+        counter once, which meant a run whose first render kept failing could
+        exhaust the budget before the reviewer had seen anything - their first
+        rejection then hit the hard stop on entry, was never routed, and (with
+        K_VERDICT cleared by the stop delta) was discarded outright. The
+        reviewer's real allowance varied run to run depending on how flaky the
+        renders happened to be.
+        """
+        verdict = _safe_model(state, K_VERDICT, Verdict)
+        human_driven = verdict is not None and verdict.status == "rejected"
+        if human_driven:
+            counter_key, cap = K_REWORK_ROUND, settings.max_rework_rounds
+            kind, cap_note = "rework", "rework round cap"
+        else:
+            counter_key, cap = K_QA_ROUND, settings.max_qa_rounds
+            kind, cap_note = "QA retry", "automatic QA retry cap"
+
+        rounds_done = int(state.get(counter_key) or 0)
+        if rounds_done >= cap:
             yield self._transition(
                 ctx,
                 PHASE_REWORK,
                 PHASE_DONE,
                 extra_delta={K_REWORK_PLAN: None, K_VERDICT: None},
                 note=(
-                    f"HARD STOP: rework round cap of "
-                    f"{settings.max_rework_rounds} reached without approval - "
-                    "manual intervention required"
+                    f"HARD STOP: {cap_note} of {cap} reached without "
+                    "approval - manual intervention required"
                 ),
                 holder=holder,
             )
@@ -650,8 +672,7 @@ class CarouselOrchestrator(BaseAgent):
             )
             return
 
-        verdict = _safe_model(state, K_VERDICT, Verdict)
-        if verdict is not None and verdict.status == "rejected":
+        if human_driven:
             # Human-driven rework: store the lesson, then map feedback to the
             # exact agents that must re-run (contract order: learner first).
             async for event in self._drive(self._child(AGENT_LEARNER), ctx, holder):
@@ -685,9 +706,9 @@ class CarouselOrchestrator(BaseAgent):
         # agents read K_REWORK_FEEDBACK as their highest-priority instruction.
         yield self._progress(
             ctx,
-            f"[rework] round {next_round}/{settings.max_rework_rounds}: "
+            f"[rework] {kind} {next_round}/{cap}: "
             f"re-running {', '.join(targets)}",
-            {K_REWORK_FEEDBACK: feedback, K_REWORK_ROUND: next_round},
+            {K_REWORK_FEEDBACK: feedback, counter_key: next_round},
             holder=holder,
         )
 
@@ -757,6 +778,7 @@ class CarouselOrchestrator(BaseAgent):
         run_id = str(state.get(K_RUN_ID) or "?")
         review_rounds = int(state.get(K_REVIEW_ROUND) or 0)
         rework_rounds = int(state.get(K_REWORK_ROUND) or 0)
+        qa_rounds = int(state.get(K_QA_ROUND) or 0)
         result = state.get(K_PUBLISH_RESULT)
         if isinstance(result, dict) and result.get("media_id"):
             outcome = f"published ({result.get('permalink') or result.get('media_id')})"
@@ -769,7 +791,8 @@ class CarouselOrchestrator(BaseAgent):
         yield self._progress(
             ctx,
             f"[done] run {run_id}: {outcome}; review mails: {review_rounds}; "
-            f"rework rounds: {rework_rounds}; {_format_token_totals(totals)}.",
+            f"rework rounds: {rework_rounds}; QA retries: {qa_rounds}; "
+            f"{_format_token_totals(totals)}.",
             tokens_delta,
         )
 

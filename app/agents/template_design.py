@@ -491,4 +491,14 @@ def build_template_design_agent() -> LlmAgent:
         ),
         instruction=instruction,
         tools=[FunctionTool(render_body_slides)],
+        # Orchestrator-driven pipeline node: never LLM-transfer elsewhere.
+        # google-adk 2.7 picks SingleFlow only when BOTH flags are set (see
+        # LlmAgent._llm_flow); without them this agent gets AutoFlow, which
+        # hands the model a transfer_to_agent tool naming every peer in the
+        # tree. CarouselOrchestrator._drive re-yields child events without
+        # checking their author, so a transfer would look like a finished
+        # stage and the phase machine would move to QA with K_BODY_SLIDES
+        # unwritten or holding the previous round's renders.
+        disallow_transfer_to_parent=True,
+        disallow_transfer_to_peers=True,
     )

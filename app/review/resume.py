@@ -154,41 +154,75 @@ async def resume_pipeline(
         status,
     )
     runner = None
+    beat = None
     try:
-        # Deferred import: building the agent tree is heavy and needs the full
+        # Deferred imports: building the agent tree is heavy and needs the full
         # agent/tool dependency stack - the API itself must start without it.
+        # consume_invocation is deferred for import-cycle reasons only.
         from app.agent import build_runner
+        from app.runs.bus import KIND_TERMINAL
+        from app.runs.service import HEARTBEAT_INTERVAL_S, _heartbeat
+        from app.runs.stream import consume_invocation, record_event
+
+        # A resumed leg runs for minutes and writes to the run row only at
+        # phase boundaries, so without this it looks idle to startup recovery
+        # for the whole of a rework. _drive_run has always heartbeated for
+        # exactly this reason; this path simply never did.
+        beat = asyncio.get_running_loop().create_task(
+            _heartbeat(run_id, deadline=RESUME_TIMEOUT_S),
+            name=f"heartbeat-{run_id}",
+        )
 
         runner = build_runner()
         content = build_resume_content(function_call_id, status, feedback)
 
-        async def _consume() -> int:
-            count = 0
-            async for event in runner.run_async(
-                user_id=PIPELINE_USER_ID,
+        result = await asyncio.wait_for(
+            consume_invocation(
+                runner,
+                run_id=run_id,
                 session_id=session_id,
+                user_id=PIPELINE_USER_ID,
                 new_message=content,
-            ):
-                count += 1
-                author = getattr(event, "author", "") or "?"
-                if getattr(event, "error_message", None):
-                    logger.warning(
-                        "Run %s event from %s reported an error: %s",
-                        run_id,
-                        author,
-                        event.error_message,
-                    )
-                elif getattr(event, "long_running_tool_ids", None):
-                    logger.info(
-                        "Run %s paused again for review (author %s).",
-                        run_id,
-                        author,
-                    )
-            return count
-
-        events = await asyncio.wait_for(_consume(), timeout=RESUME_TIMEOUT_S)
+            ),
+            timeout=RESUME_TIMEOUT_S,
+        )
         logger.info(
-            "Resume for run %s finished after %d event(s).", run_id, events
+            "Resume for run %s finished after %d event(s).",
+            run_id,
+            result["events"],
+        )
+
+        # Record how the leg ended, exactly as _drive_run does. Without this
+        # the run row keeps whatever the last phase transition wrote, and the
+        # console's onEnd - which fires on the terminal event - never runs, so
+        # the task list and the sidebar are not refreshed when the carousel
+        # actually goes live.
+        if result["paused"]:
+            end_status = db.RUN_STATUS_AWAITING_REVIEW
+            text = "Waiting for your review."
+        elif result.get("phase") == "done":
+            end_status = db.RUN_STATUS_DONE
+            text = "Run finished."
+        else:
+            current = ""
+            try:
+                row = await db.get_run(run_id)
+                current = str((row or {}).get("status") or "")
+            except Exception as exc:  # pragma: no cover - advisory read
+                logger.warning("Could not re-read status for %s: %s", run_id, exc)
+            end_status = (
+                current
+                if current and current != db.RUN_STATUS_RUNNING
+                else db.RUN_STATUS_INTERRUPTED
+            )
+            text = f"Run stopped ({end_status})."
+        await db.set_run_status(run_id, end_status)
+        await record_event(
+            run_id,
+            result["last_seq"] + 1,
+            KIND_TERMINAL,
+            text=text,
+            data={"status": end_status, "paused": result["paused"]},
         )
     except asyncio.TimeoutError:
         logger.error(
@@ -214,6 +248,8 @@ async def resume_pipeline(
         logger.exception("Resume for run %s failed.", run_id)
         await restore_pending_review(run_id, session_id, function_call_id)
     finally:
+        if beat is not None:
+            beat.cancel()
         if runner is not None:
             try:
                 await runner.close()
@@ -236,6 +272,22 @@ def spawn_resume(
     _resume_tasks.add(task)
     task.add_done_callback(_resume_tasks.discard)
 
+
+
+def active_resume_run_ids() -> set[str]:
+    """Run ids with a resume leg in flight in this process.
+
+    ``app.runs.service.active_run_ids`` folds this in, so the concurrency cap
+    and the "already being driven" guards can see a rework - which is the
+    longest and most expensive part of a review cycle, and was previously
+    invisible to both.
+    """
+    prefix = "resume-"
+    return {
+        task.get_name()[len(prefix):]
+        for task in _resume_tasks
+        if not task.done() and task.get_name().startswith(prefix)
+    }
 
 
 def cancel_resume(run_id: str) -> bool:
@@ -292,6 +344,7 @@ async def drain_resume_tasks(timeout: float = 10.0) -> None:
 
 __all__ = [
     "AWAIT_REVIEW_TOOL_NAME",
+    "active_resume_run_ids",
     "PIPELINE_USER_ID",
     "RESUME_TIMEOUT_S",
     "build_resume_content",

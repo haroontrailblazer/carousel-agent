@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -121,6 +122,14 @@ def _notice_failed_run(daily_count: int = 999):
             AsyncMock(return_value={"run_id": RUN_ID, "phase": "review"}),
         ),
         patch.object(db, "count_runs_since", AsyncMock(return_value=daily_count)),
+        # The decision now proceeds all the way into re-entering the run, so
+        # everything that path touches has to be stubbed for the test to be
+        # about the verdict rather than about the database being absent.
+        patch.object(db, "set_run_status", AsyncMock(return_value=None)),
+        patch.object(db, "max_run_seq", AsyncMock(return_value=0)),
+        patch.object(service_mod, "record_event", AsyncMock(return_value=None)),
+        patch("app.agent.build_runner", lambda: object()),
+        patch.object(service_mod, "_drive_run", AsyncMock(return_value=None)),
     )
 
 
@@ -353,6 +362,105 @@ class WhyItDiedIsVisibleTests(unittest.TestCase):
         )
 
 
+class TheReasonSurvivesRoutingTests(unittest.TestCase):
+    """What the reviewer actually said must reach the agents that re-run.
+
+    ``feedback_router``'s own module docstring and its instruction rule both
+    promise the reviewer's text is used "verbatim, never paraphrased". The
+    sanitizer computes the authoritative text into ``effective_feedback`` and
+    then only uses it when the model left the field blank::
+
+        if not plan.feedback:
+            plan.feedback = effective_feedback
+
+    So a router LLM that summarises instead of copying wins, and
+    ``_phase_rework`` prefers ``plan.feedback`` over ``verdict.feedback``
+    when building ``K_REWORK_FEEDBACK`` - the one string the re-run agents
+    read as their highest-priority instruction. The same paraphrase is also
+    what ``derive_targets_from_feedback`` keyword-matches on, so a summary
+    that drops the tell-tale words misroutes as well.
+    """
+
+    def test_the_reviewers_words_win_over_the_routers_paraphrase(self) -> None:
+        from app.agents.feedback_router import _sanitize_rework_plan
+        from app.state import K_REWORK_FEEDBACK, K_REWORK_PLAN, K_VERDICT
+
+        verbatim = "the price is wrong, the model is $20/M not $200/M"
+
+        class _Ctx:
+            state = {
+                K_VERDICT: {"status": "rejected", "feedback": verbatim},
+                K_REWORK_FEEDBACK: "",
+                # What a small utility model actually tends to emit.
+                K_REWORK_PLAN: {
+                    "targets": ["research"],
+                    "reasons": [],
+                    "feedback": "pricing figure incorrect",
+                },
+            }
+
+        ctx = _Ctx()
+        _sanitize_rework_plan(ctx)
+        routed = str((ctx.state.get(K_REWORK_PLAN) or {}).get("feedback") or "")
+
+        self.assertIn(
+            "$20/M",
+            routed,
+            "The router's paraphrase replaced the reviewer's text, so "
+            "research re-runs told only 'pricing figure incorrect' - without "
+            "the correct value. It re-emits the same wrong number, QA passes "
+            "(it does not check facts), and the identical carousel is mailed "
+            "again, round after round, to the cap. effective_feedback is "
+            "already computed one line above; it needs to overwrite rather "
+            "than fill-if-empty.",
+        )
+
+
+class ReworkBudgetsAreNotSharedTests(unittest.TestCase):
+    """Machine retries must not spend the human's five chances.
+
+    ``K_REWORK_ROUND`` is a single counter incremented in ``_phase_rework``
+    (orchestrator.py:690) and checked against ``max_rework_rounds``
+    (orchestrator.py:623). Both routes into that phase increment it: a human
+    rejection, and stitch_verify's automatic critical-QA rework - which needs
+    no human at all.
+    """
+
+    def test_qa_retries_and_human_rejections_do_not_share_one_counter(self) -> None:
+        from app.config import settings
+        from app.orchestrator import CarouselOrchestrator
+        from app.state import K_QA_ROUND, K_REWORK_ROUND
+
+        self.assertNotEqual(
+            K_REWORK_ROUND,
+            K_QA_ROUND,
+            "the two kinds of rework must be counted in different state keys",
+        )
+        self.assertTrue(
+            settings.max_qa_rounds > 0 and settings.max_rework_rounds > 0,
+            "each budget needs its own cap",
+        )
+
+        source = inspect.getsource(CarouselOrchestrator._phase_rework)
+        for key in ("K_REWORK_ROUND", "K_QA_ROUND"):
+            self.assertIn(key, source, f"_phase_rework must budget {key}")
+        self.assertIn(
+            "human_driven",
+            source,
+            "Both routes into _phase_rework must not spend the same counter. "
+            "Sharing one meant automatic QA "
+            "retries (a missing or undersized artifact, retried until it "
+            "renders) exhaust the budget before the reviewer has seen "
+            "anything. Their first rejection then hits the hard stop on "
+            "entry: it is never routed, the learner never stores it, "
+            "K_VERDICT is cleared by the stop delta so the feedback is lost "
+            "outright, and the run is recorded FAILED with 'rework round cap "
+            "of 5 reached without approval'. The human's allowance is "
+            "5 minus however many times QA happened to fail, which varies "
+            "run to run. Count them separately.",
+        )
+
+
 class RestartIsAtomicTests(unittest.TestCase):
     """A refused Re-run must leave the task exactly as it found it."""
 
@@ -370,7 +478,11 @@ class RestartIsAtomicTests(unittest.TestCase):
                 AsyncMock(return_value={"run_id": RUN_ID, "phase": "done"}),
             ),
             patch.object(db, "rewind_session_for_restart", fake_rewind),
-            patch.object(db, "count_runs_since", AsyncMock(return_value=999)),
+            # The concurrency cap is what refuses a re-run now: the daily cap
+            # deliberately no longer applies to work already paid for.
+            patch.object(
+                service_mod, "active_run_ids", lambda: {"run-something-else"}
+            ),
         ]
         for p in patches:
             p.start()

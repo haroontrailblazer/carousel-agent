@@ -81,6 +81,10 @@ AWAIT_REVIEW_TOOL_NAME = "await_human_review"
 # temp:-prefixed session keys (never durably persisted; see module docstring).
 _DIRECTIVE_KEY = "temp:review_dispatcher_directive"
 _CONSUMED_KEY = "temp:review_consumed_call_ids"
+#: The review round whose mail actually reached Telegram. await_human_review
+#: refuses to pause without a stamp for the current round, so a failed send
+#: can never strand the run waiting on a human nobody asked.
+_SENT_KEY = "temp:review_sent_round"
 _DIRECTIVE_SEND_MAIL = "send_mail"
 _DIRECTIVE_HANDLE_VERDICT = "handle_verdict"
 
@@ -343,6 +347,7 @@ async def send_review_request(tool_context: ToolContext) -> dict:
         return {"status": "error", "error": f"Review message failed: {exc}"}
 
     state[K_REVIEW_ROUND] = round_no  # count the round only after a real send
+    state[_SENT_KEY] = round_no  # ...and authorise the pause for THIS round
     logger.info(
         "Review message sent for run %s (round %s, %d preview file(s)).",
         run_id,
@@ -388,7 +393,7 @@ async def _materialize_artifact(
     return str(local_path)
 
 
-async def await_human_review(tool_context: ToolContext) -> None:
+async def await_human_review(tool_context: ToolContext) -> Optional[dict]:
     """Pause the pipeline until a human approves or rejects the carousel.
 
     Long-running operation: it returns no result now; the reviewer's decision
@@ -396,38 +401,98 @@ async def await_human_review(tool_context: ToolContext) -> None:
     pausing, the pending call is persisted (run id, session id, function call
     id) so the review API can address the resume to exactly this call.
 
+    Pausing is a commitment: the invocation ends and only a human can restart
+    it, so this tool refuses to make that commitment unless the resume will
+    actually be possible. Two preconditions, both checked here rather than
+    trusted to the instruction:
+
+    * **The reviewers were told.** ``send_review_request`` stamps the round it
+      successfully sent under a ``temp:`` key; without a stamp for the current
+      round nothing went out, and pausing would strand the run waiting for a
+      human who was never asked. The prompt says as much, but a small utility
+      model on a round-2 instruction that also insists "a NEW review request
+      is required and expected" is not a guarantee.
+    * **The pending call was persisted.** Without a ``pending_reviews`` row no
+      surface can build a ``FunctionResponse`` addressed to this call, so no
+      verdict can ever resume the run. Pausing anyway used to strand it twice
+      over, because the orchestrator clears ``K_REVIEW_NOTICE_FAILED`` on a
+      successful pause - disabling the console fallback built for exactly
+      this situation.
+
     Returns:
-        ``None`` - google-adk 2.7.0 builds no function-response event for a
-        falsy long-running result, which is what pauses the invocation.
+        ``None`` when the run may pause - google-adk 2.7.0 builds no
+        function-response event for a falsy long-running result, which is what
+        ends the invocation paused. Otherwise an error dict, which IS a
+        function response, so the invocation continues and the orchestrator
+        halts the run at 'review' with the notice recorded as failed.
     """
     state = tool_context.state
     run_id = str(state.get(K_RUN_ID) or "")
     session_id = tool_context.session.id
     call_id = tool_context.function_call_id or ""
+
+    round_no = int(state.get(K_REVIEW_ROUND) or 0)
+    sent_round = int(state.get(_SENT_KEY) or 0)
+    if not round_no or sent_round != round_no:
+        logger.error(
+            "await_human_review refused for run %s: no successful "
+            "send_review_request for review round %s (last sent round: %s). "
+            "Pausing here would wait for a human nobody notified.",
+            run_id,
+            round_no or "(unset)",
+            sent_round or "none",
+        )
+        return {
+            "status": "error",
+            "error": (
+                "The review request was not sent, so the pipeline will not "
+                "pause. Report the send failure in one short sentence; do not "
+                "call await_human_review again."
+            ),
+        }
+
     if not run_id or not call_id:
         logger.error(
             "await_human_review missing identifiers (run_id=%r, call_id=%r); "
-            "the review API will not be able to resume this run.",
+            "the review API would not be able to resume this run, so it will "
+            "not pause.",
             run_id,
             call_id,
         )
-    else:
-        try:
-            await db.save_pending_review(run_id, session_id, call_id)
-            logger.info(
-                "Pipeline paused for human review: run %s, session %s, call %s.",
-                run_id,
-                session_id,
-                call_id,
-            )
-        except Exception as exc:  # local run without DB: pause anyway, loudly
-            logger.error(
-                "Could not persist pending review for run %s (%s); the run "
-                "pauses but the review API cannot resume it until "
-                "pending_reviews is written.",
-                run_id,
-                exc,
-            )
+        return {
+            "status": "error",
+            "error": (
+                "This run cannot be paused for review: its identifiers are "
+                "missing from session state. Report the problem in one short "
+                "sentence."
+            ),
+        }
+
+    try:
+        await db.save_pending_review(run_id, session_id, call_id)
+    except Exception as exc:
+        logger.error(
+            "Could not persist pending review for run %s (%s); refusing to "
+            "pause, because a pause with no pending_reviews row can never be "
+            "resumed by any surface.",
+            run_id,
+            exc,
+        )
+        return {
+            "status": "error",
+            "error": (
+                "The pending review could not be saved, so the pipeline will "
+                "not pause on a call nobody could answer. Report the storage "
+                "failure in one short sentence."
+            ),
+        }
+
+    logger.info(
+        "Pipeline paused for human review: run %s, session %s, call %s.",
+        run_id,
+        session_id,
+        call_id,
+    )
     return None
 
 
@@ -446,12 +511,38 @@ async def set_verdict(
         feedback: The reviewer's feedback text, verbatim. Optional when
             approving; required when rejecting.
 
+    A verdict is consumed exactly once. Within a single invocation the run can
+    loop review -> rework -> review, and the round-1 function response is still
+    the invocation's ``user_content`` on the round-2 entry - so a model that
+    calls this tool during a SEND_MAIL turn would re-record the round-1
+    decision against a carousel that no longer exists. An old "approved" would
+    send the reworked carousel to publish with no human ever seeing it. The
+    consumed-id set that ``capture_verdict_on_resume`` maintains is the record
+    of what has already been acted on, and this tool now honours it.
+
     Returns:
         ``{"status": "recorded", "verdict": ..., "feedback": ...}`` or an
         ``{"status": "error", ...}`` dict describing what to correct.
     """
     state = tool_context.state
-    authoritative = _latest_review_response(tool_context.user_content)
+    latest = _latest_review_response(tool_context.user_content)
+    authoritative = _fresh_review_response(tool_context.user_content, state)
+    if latest is not None and authoritative is None:
+        logger.warning(
+            "set_verdict refused for run %s: the reviewer response %s has "
+            "already been consumed this invocation. Recording it again would "
+            "apply an old decision to a reworked carousel.",
+            state.get(K_RUN_ID),
+            latest.id,
+        )
+        return {
+            "status": "error",
+            "error": (
+                "That verdict was already recorded and acted on. You are "
+                "requesting a NEW review round, not handling a decision - "
+                "call send_review_request instead."
+            ),
+        }
     if authoritative is not None:
         verdict = _verdict_from_payload(dict(authoritative.response or {}))
         arg_status = str(status or "").strip().lower()

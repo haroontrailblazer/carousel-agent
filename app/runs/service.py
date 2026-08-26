@@ -87,12 +87,49 @@ class StartedRun:
 
 
 def active_run_ids() -> set[str]:
-    """Runs currently being driven by this process."""
-    return {rid for rid, task in _run_tasks.items() if not task.done()}
+    """Runs currently being driven by this process, from BOTH registries.
+
+    A run is driven from two places and the second is the expensive one. A
+    fresh or resumed invocation lives in ``_run_tasks`` here; the rework that
+    follows a rejection lives in ``app.review.resume._resume_tasks``. When a
+    run pauses for review its ``_drive_run`` task completes and is popped, so
+    reading only this module's registry made the process look idle while a
+    resumed leg was regenerating images and publishing to Instagram.
+
+    Everything that asks "is this run being driven?" flows through here -
+    ``_check_limits``, ``resume_interrupted_run``'s re-entry guard, the
+    console's ``is_live`` - so counting only half of it let a second run start
+    on top of a rework, and let two drivers touch one ADK session.
+    """
+    active = {rid for rid, task in _run_tasks.items() if not task.done()}
+
+    # Deferred: app.review.resume imports app.services.db, and importing it at
+    # module scope would close an import cycle through app.runs.service.
+    try:
+        from app.review.resume import active_resume_run_ids
+
+        active |= active_resume_run_ids()
+    except Exception as exc:  # pragma: no cover - import wiring
+        logger.debug("Could not read in-flight resume tasks: %s", exc)
+    return active
 
 
-async def _check_limits() -> None:
-    """Refuse a run that would exceed the concurrency or daily cap."""
+async def _check_limits(*, new_run: bool = True) -> None:
+    """Refuse work that would exceed the concurrency or daily cap.
+
+    Args:
+        new_run: True when this would START a carousel. The daily cap exists
+            so a bug or an impatient click cannot run up an invoice, which is
+            a statement about how many carousels get MADE - so it applies only
+            here. Finishing a run already in flight (approving it, resuming
+            it, re-running its rework) spends nothing new: those images and
+            that reasoning are already paid for, and refusing them left ready
+            carousels un-approvable and stopped tasks un-resumable for the
+            rest of the day.
+
+    The concurrency cap applies either way, because it is about what this one
+    small instance can do at once, not about spend.
+    """
     active = active_run_ids()
     if len(active) >= MAX_CONCURRENT_RUNS:
         raise RunRefused(
@@ -100,7 +137,7 @@ async def _check_limits() -> None:
             f"A run is already in progress ({', '.join(sorted(active))}). "
             "Wait for it to reach review before starting another.",
         )
-    if MAX_RUNS_PER_DAY > 0:
+    if new_run and MAX_RUNS_PER_DAY > 0:
         since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         try:
             started = await db.count_runs_since(since)
@@ -268,17 +305,41 @@ def spawn_run(run_id: str, *, runner: Any, first_message: str) -> "asyncio.Task[
 #: gets reclaimed while it is working.
 HEARTBEAT_INTERVAL_S = float(os.getenv("RUN_HEARTBEAT_S", "30"))
 
+#: Hard wall-clock ceiling on one invocation. Nothing else bounds it: neither
+#: app.llm.resolve_model nor the ADK/LiteLLM call it builds sets a request
+#: timeout, so a hung provider call simply never returns.
+#:
+#: Left unbounded, three facts compose into a dead service. The invocation
+#: waits forever; _heartbeat keeps touching the run row, so the 180 s idle
+#: threshold in db.interrupted_run_candidates never trips and startup recovery
+#: cannot reclaim it; and MAX_CONCURRENT_RUNS is 1, so every later run is
+#: refused behind it. The console shows a task Running with a pulsing trace and
+#: no carousel can be made again until a human notices and presses Stop.
+#:
+#: Two hours is far above a real run (minutes, including ffmpeg and image
+#: generation) and well under "nobody is coming". The resume path has always
+#: had its own ceiling in RESUME_TIMEOUT_S; this is the same idea for the path
+#: that actually starts carousels.
+RUN_TIMEOUT_S = float(os.getenv("RUN_TIMEOUT_S", "7200"))
 
-async def _heartbeat(run_id: str) -> None:
-    """Touch the run row on a timer until cancelled.
+
+async def _heartbeat(run_id: str, deadline: float = RUN_TIMEOUT_S) -> None:
+    """Touch the run row on a timer until cancelled or out of time.
 
     Runs alongside the pipeline rather than inside it, so a phase that does
     fifteen minutes of ffmpeg and image generation without a single database
     write still looks alive to startup recovery.
+
+    It stops after ``deadline`` seconds because a heartbeat is an assertion,
+    not a fact: it says "a task is driving this run", and past the run cap that
+    claim is no longer one this process can make. Beating forever meant a
+    stalled run stayed invisible to every automatic recovery path there is.
     """
-    while True:
+    elapsed = 0.0
+    while elapsed < deadline:
         try:
             await asyncio.sleep(HEARTBEAT_INTERVAL_S)
+            elapsed += HEARTBEAT_INTERVAL_S
             await db.touch_run(run_id)
         except asyncio.CancelledError:
             raise
@@ -286,6 +347,12 @@ async def _heartbeat(run_id: str) -> None:
             # A missed heartbeat is not worth killing a run over; the next one
             # is thirty seconds away.
             logger.debug("Heartbeat failed for run %s: %s", run_id, exc)
+    logger.warning(
+        "Heartbeat for run %s stopped after %.0f s; it will no longer vouch "
+        "for this run's liveness, so startup recovery can reclaim it.",
+        run_id,
+        deadline,
+    )
 
 
 async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
@@ -299,12 +366,15 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
         _heartbeat(run_id), name=f"heartbeat-{run_id}"
     )
     try:
-        result = await consume_invocation(
-            runner,
-            run_id=run_id,
-            session_id=run_id,
-            user_id=PIPELINE_USER_ID,
-            new_message=message,
+        result = await asyncio.wait_for(
+            consume_invocation(
+                runner,
+                run_id=run_id,
+                session_id=run_id,
+                user_id=PIPELINE_USER_ID,
+                new_message=message,
+            ),
+            timeout=RUN_TIMEOUT_S,
         )
         if result["paused"]:
             status = db.RUN_STATUS_AWAITING_REVIEW
@@ -346,6 +416,19 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
                 else f"Run stopped ({status})."
             ),
             data={"status": status, "paused": result["paused"]},
+        )
+    except asyncio.TimeoutError:
+        logger.error(
+            "Run %s exceeded RUN_TIMEOUT_S (%.0f s) and was stopped; a tool "
+            "or model call never returned.",
+            run_id,
+            RUN_TIMEOUT_S,
+        )
+        await _finish_badly(
+            run_id,
+            db.RUN_STATUS_INTERRUPTED,
+            f"Stopped after {RUN_TIMEOUT_S / 3600:.0f}h with no progress - a "
+            "tool or model call never returned. Resume to pick it up.",
         )
     except asyncio.CancelledError:
         await _finish_badly(run_id, db.RUN_STATUS_CANCELLED, "Run cancelled.")
@@ -392,7 +475,9 @@ async def resume_interrupted_run(run_id: str, *, requested_by: str = "") -> bool
     if run is None:
         return False
 
-    await _check_limits()
+    # Not a new carousel: this one's images and reasoning are already spent,
+    # so the daily cap does not apply. Only the concurrency cap does.
+    await _check_limits(new_run=False)
 
     from app.agent import build_runner
     from google.genai import types
@@ -448,6 +533,14 @@ async def restart_run(run_id: str, *, requested_by: str = "") -> bool:
     if run is None:
         return False
 
+    # Ask permission BEFORE changing anything. The rewind resets the rework
+    # budget and moves the recorded phase, and doing it first meant a refused
+    # re-run still mutated the task: the restart never happened, but a later
+    # Resume would re-enter at the rewound phase instead of where the work
+    # actually stopped. resume_interrupted_run checks again, which is fine -
+    # the check is cheap and idempotent.
+    await _check_limits(new_run=False)
+
     from app.review.resume import PIPELINE_USER_ID
 
     # The phase recorded on the run is where it actually stopped; session
@@ -475,6 +568,15 @@ async def cancel_run(run_id: str) -> bool:
     only the first made Stop silently do nothing during a rework - the button
     reported success and the agents kept running.
 
+    Cancelling a resume also has to FINISH the job here. A ``_run_tasks``
+    cancellation lands in ``_drive_run``'s handler, which calls
+    ``_finish_badly`` and records both the status and a terminal event.
+    ``resume_pipeline`` has no such handler - it restores the pending review
+    and re-raises - so returning as soon as ``cancel_resume`` said yes left
+    ``runs.status`` on 'running' with no terminal event: the timeline simply
+    stopped, the console kept a pulsing live task, and because Stop is only
+    offered for 'running' the only way out was to press it again.
+
     Returns False when nothing was running, which the API turns into a 409.
     """
     from app.review.resume import cancel_resume
@@ -482,10 +584,17 @@ async def cancel_run(run_id: str) -> bool:
     task = _run_tasks.get(run_id)
     stopped = False
     if task is not None and not task.done():
+        # _drive_run's CancelledError handler records the ending itself.
         task.cancel()
         stopped = True
-    if cancel_resume(run_id):
+    elif cancel_resume(run_id):
+        # Nothing else will write the ending for a resume leg, so do it here.
         stopped = True
+        await _finish_badly(
+            run_id,
+            db.RUN_STATUS_CANCELLED,
+            "Stopped while reworking. The verdict can be submitted again.",
+        )
     if stopped:
         return True
 
@@ -551,6 +660,7 @@ __all__ = [
     "HEARTBEAT_INTERVAL_S",
     "MAX_CONCURRENT_RUNS",
     "MAX_RUNS_PER_DAY",
+    "RUN_TIMEOUT_S",
     "PIPELINE_USER_ID",
     "RunRefused",
     "RunSource",

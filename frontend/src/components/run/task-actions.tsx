@@ -15,9 +15,13 @@ import type { RunStatus } from "@/lib/types"
  * Which actions appear is driven by status rather than shown-and-disabled:
  *
  *   running                     -> Stop
+ *   awaiting_review             -> Send again and Delete
  *   interrupted / cancelled     -> Resume and Delete
  *   failed / cancelled          -> Re-run and Delete
- *   anything else               -> nothing
+ *   done                        -> Delete
+ *
+ * No status is a dead end: every one of them offers a way forward or a way to
+ * clear it away.
  *
  * Resume and Re-run both continue the SAME task - neither starts a new one -
  * and the difference is the rework budget. Resume picks the phase back up with
@@ -55,6 +59,16 @@ export function TaskActions({
     void queryClient.invalidateQueries({ queryKey: ["queue"] })
   }
 
+  // awaiting_review is the one status a task can get permanently stuck in. If
+  // a verdict's background resume dies before it can restore the pending
+  // review, the row is already gone: no surface can decide the task, and
+  // startup reconcile skips it because ACTIVE_PHASES excludes "review".
+  // Re-entering the review phase re-sends the notice and writes a fresh
+  // pending row, which is exactly the way out - the server has always allowed
+  // it, the console simply never offered the button. Same endpoint as Resume,
+  // different words, because here it means "ask me again".
+  const awaitingReview = status === "awaiting_review"
+
   const fail = (error: unknown, fallback: string) => {
     const code = error instanceof ApiError ? error.code : undefined
     if (code === "too_many_active_runs") {
@@ -63,9 +77,17 @@ export function TaskActions({
       })
       return
     }
-    if (code === "nothing_to_rerun") {
-      toast.error("Nothing to re-run", {
-        description: "The original input for this task is gone.",
+    if (code === "daily_limit_reached") {
+      toast.error("Daily limit reached", {
+        description:
+          "Too many carousels have been started in the last 24 hours. This " +
+          "only blocks new ones — finishing this task is still allowed.",
+      })
+      return
+    }
+    if (code === "not_resumable") {
+      toast.info("Nothing to pick up", {
+        description: "That task is already running, or no longer exists.",
       })
       return
     }
@@ -77,7 +99,7 @@ export function TaskActions({
       })
       return
     }
-    if (code === "run_not_finished" || code === "run_is_active") {
+    if (code === "run_is_active") {
       toast.error("Still running", {
         description: "Only finished tasks can be deleted.",
       })
@@ -89,7 +111,11 @@ export function TaskActions({
   const resume = useMutation({
     mutationFn: () => post(`/api/runs/${runId}/resume`),
     onSuccess: () => {
-      toast.success("Resuming", { description: "Picking up where it stopped." })
+      toast.success(awaitingReview ? "Sending again" : "Resuming", {
+        description: awaitingReview
+          ? "Asking for the review again."
+          : "Picking up where it stopped.",
+      })
       refresh()
       void queryClient.invalidateQueries({ queryKey: ["run", runId] })
       void queryClient.invalidateQueries({ queryKey: ["trace", runId] })
@@ -137,9 +163,7 @@ export function TaskActions({
   })
 
   const canStop = status === "running"
-  // A stopped task is resumable for the same reason an interrupted one is:
-  // the orchestrator re-reads its phase from persisted state and re-enters it.
-  const canResume = status === "interrupted" || status === "cancelled"
+  const canResume = status === "interrupted" || status === "cancelled" || awaitingReview
   const canRerun = status === "failed" || status === "cancelled"
   const canDelete = canResume || canRerun || status === "done"
   if (!canStop && !canResume && !canRerun && !canDelete) return null
@@ -173,13 +197,24 @@ export function TaskActions({
           variant="default"
           size={size}
           disabled={busy}
-          title="Resume from the phase it stopped in"
+          title={
+            awaitingReview
+              ? "Ask for the review again — re-sends the notification"
+              : "Resume from the phase it stopped in"
+          }
           onClick={(e) => {
             swallow(e)
             resume.mutate()
           }}
         >
-          <RotateCcw /> {resume.isPending ? "Resuming…" : "Resume"}
+          <RotateCcw />{" "}
+          {resume.isPending
+            ? awaitingReview
+              ? "Sending…"
+              : "Resuming…"
+            : awaitingReview
+              ? "Send again"
+              : "Resume"}
         </Button>
       )}
 
