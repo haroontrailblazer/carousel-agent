@@ -174,6 +174,39 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
             public_urls,
             should_continue=lambda: not cancellation.is_requested(run_id),
         )
+    except asyncio.CancelledError:
+        # Stop cancels the driving task, and CancelledError lands HERE - at
+        # the await, long before the worker thread reaches its next
+        # checkpoint. It is a BaseException, so neither handler below sees it;
+        # without this branch the PublishAborted the thread raises moments
+        # later lands on an abandoned future and asyncio logs "exception was
+        # never retrieved" instead of anything a person could act on.
+        #
+        # The stop flag is already up (cancel_run raises it before
+        # cancelling), so the thread will abort at its next checkpoint and
+        # nothing is posted. The run's own ending is recorded by _drive_run.
+        logger.info(
+            "Run %s: publish cancelled; the upload aborts at its next "
+            "checkpoint and nothing is posted.",
+            run_id,
+        )
+        raise
+    except instagram_tools.PublishUncertain as exc:
+        logger.error(
+            "Run %s: the media_publish reply was lost; the carousel may be "
+            "live (container %s). Not retrying.",
+            run_id,
+            exc.creation_id,
+        )
+        result = {
+            "status": "error",
+            "retryable": False,
+            "message": str(exc),
+            "creation_id": exc.creation_id,
+            "public_url_count": len(public_urls),
+        }
+        state[K_PUBLISH_RESULT] = result
+        return result
     except instagram_tools.PublishAborted:
         logger.info("Run %s was stopped mid-publish; nothing posted.", run_id)
         result = {
@@ -268,9 +301,12 @@ Run id: {run_id?}
    - status "already_published": say the carousel was already live, give the
      permalink, and do NOT call the tool again.
    - status "error": reply "PUBLISH FAILED: " followed by the tool's message.
-     You may retry the tool at most ONCE, and only when the message clearly
-     looks transient (a timeout or temporary network problem) - never retry
-     validation or credential errors.
+     If the result has "retryable": false, do NOT call the tool again under
+     any circumstances - that result means the carousel may already be live
+     and a retry would post it a second time. Otherwise you may retry at most
+     ONCE, and only when the message clearly looks transient (a timeout or
+     temporary network problem) - never retry validation or credential
+     errors.
 
 ## Hard rules
 

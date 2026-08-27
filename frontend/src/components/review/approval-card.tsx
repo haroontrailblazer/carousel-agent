@@ -1,11 +1,17 @@
 import * as React from "react"
-import { CheckCircle2, ExternalLink, Hourglass, Loader2, Send, XCircle } from "lucide-react"
+import { CheckCircle2, ExternalLink, Loader2, Send, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
 import { Textarea } from "@/components/ui/input"
-import { REJECT_CATEGORIES, AGENT_LABELS, PHASE_LABELS, predictRework } from "@/lib/pipeline"
+import {
+  REJECT_CATEGORIES,
+  AGENT_LABELS,
+  PHASE_LABELS,
+  isStopped,
+  predictRework,
+} from "@/lib/pipeline"
 import type { RunDetail } from "@/lib/types"
 
 /**
@@ -119,28 +125,21 @@ export function ApprovalCard({
   const reachedReview =
     run.phase === "review" || run.phase === "publish" || run.phase === "done"
   if (!run.pending_review && !reachedReview) {
-    const stopped =
-      run.status === "failed" ||
-      run.status === "cancelled" ||
-      run.status === "interrupted"
+    // A task that has stopped says nothing here. The status is already stated
+    // once, at the top of the page, with a dot and the word for it - and the
+    // panel below is about to say "Nothing to look at yet" for the same
+    // reason. Three restatements of one fact is not more informative than one.
+    if (isStopped(run.status)) return null
     return (
       <Card className="p-5">
         <div className="flex items-start gap-3">
-          {stopped ? (
-            <Hourglass className="mt-0.5 size-5 text-[var(--muted-foreground)]" />
-          ) : (
-            <Loader2 className="mt-0.5 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
-          )}
+          <Loader2 className="mt-0.5 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
           <div className="min-w-0 flex-1">
-            <p className="font-medium">
-              {stopped ? "No decision to make" : "Not ready for review yet"}
-            </p>
+            <p className="font-medium">Not ready for review yet</p>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              {stopped
-                ? "This task stopped before it reached review, so there is nothing to approve."
-                : `Still ${(PHASE_LABELS[run.phase] ?? run.phase).toLowerCase()}. ` +
-                  "Approve and reject appear here the moment the carousel is " +
-                  "assembled and sent for review."}
+              {`Still ${(PHASE_LABELS[run.phase] ?? run.phase).toLowerCase()}. `}
+              Approve and reject appear here the moment the carousel is
+              assembled and sent for review.
             </p>
           </div>
         </div>
@@ -174,35 +173,37 @@ export function ApprovalCard({
   // for - it is derived from the phase machine, and only the review phase
   // sets awaiting_review. During rework it is running; after a failed rework,
   // failed or interrupted.
+  //
+  // `reachedReview` is the second half of that authority, and it is not
+  // redundant. A real task sat for a day showing "The rework stopped before
+  // finishing" while its finished carousel waited at phase `review`: the run
+  // had paused for a human, but the pause was recorded as `interrupted`, so
+  // this branch fired on a status that was simply wrong. Phase is the harder
+  // fact - reaching `review` means QA passed and the bundle is assembled - so
+  // a task that got there is reviewable whatever its status column says, and
+  // telling someone otherwise sends them to Resume a task that only needed a
+  // decision.
   if (
     run.pending_review &&
     run.status !== "awaiting_review" &&
-    !run.notice_failed
+    !run.notice_failed &&
+    !reachedReview
   ) {
-    const stopped =
-      run.status === "failed" ||
-      run.status === "cancelled" ||
-      run.status === "interrupted"
+    // Same again: a rework that died is reported by the status at the top of
+    // the page, and this branch's whole job is to keep Approve & publish OFF
+    // screen - which it does by returning nothing at all. The card that used
+    // to sit here ("The rework stopped before finishing / Nothing to approve
+    // yet") only repeated the header, one paragraph lower and louder.
+    if (isStopped(run.status)) return null
     return (
       <Card className="p-5">
         <div className="flex items-start gap-3">
-          {stopped ? (
-            <Hourglass className="mt-0.5 size-5 text-[var(--muted-foreground)]" />
-          ) : (
-            <Loader2 className="mt-0.5 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
-          )}
+          <Loader2 className="mt-0.5 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
           <div className="min-w-0">
-            <p className="font-medium">
-              {stopped
-                ? "The rework stopped before finishing"
-                : "Reworking your feedback"}
-            </p>
+            <p className="font-medium">Reworking your feedback</p>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-              {stopped
-                ? "Nothing to approve yet - this task did not get back to a " +
-                  "reviewable carousel. Resume or re-run it from the header."
-                : "The agents are applying your feedback. This comes back for " +
-                  "review - here and on Telegram - once they finish."}
+              The agents are applying your feedback. This comes back for review
+              - here and on Telegram - once they finish.
             </p>
           </div>
         </div>

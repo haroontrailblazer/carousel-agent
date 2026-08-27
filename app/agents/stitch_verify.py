@@ -384,8 +384,10 @@ async def _verify_brand_padding(
                 f"artifact '{artifact}' returned no inline bytes."
             ),
         )
-    display_slide_no = slide_index - 1 if kind == "body" else None
-    errors = validate_footer_padding(data, kind, display_slide_no)
+    # Body slides carry a number in the top-left anchor; the cover and CTA do
+    # not. Only presence is checked - see validate_footer_padding on why the
+    # value itself is not, and do not read this as "the number is correct".
+    errors = validate_footer_padding(data, kind, expect_slide_number=kind == "body")
     if not errors:
         return None
     owner = AGENT_CTA if kind == "cta" else AGENT_TEMPLATE_DESIGN
@@ -532,9 +534,15 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
     if body_slides and body_indexes != list(range(2, 2 + len(body_slides))):
         issues.append(
             QAIssue(
-                severity="major",
+                # Critical, because only critical fails QA. A deck with a hole
+                # in it is not a carousel with a note attached - it is the
+                # wrong deck, and "major" let it go straight to a human as if
+                # it were finished. The per-slide checks cannot catch this:
+                # every slide that DID render is individually valid.
+                severity="critical",
                 message=f"Body slide indexes {body_indexes} are not contiguous "
-                "starting at 2 (slide 1 is the cover).",
+                "starting at 2 (slide 1 is the cover) - a slide is missing or "
+                "out of order.",
             )
         )
 
@@ -568,7 +576,10 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
         if len(body_slides) != planned_body:
             issues.append(
                 QAIssue(
-                    severity="major",
+                    # See the contiguity check above: a deck that does not
+                    # match its own plan is incomplete, and shipping it to a
+                    # reviewer as finished wastes their round.
+                    severity="critical",
                     message=(
                         f"Rendered body slide count {len(body_slides)} does not "
                         f"match the plan ({planned_body} body slides) - "
@@ -597,7 +608,11 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
         if body_slides and len(copy_set.slides) != len(body_slides):
             issues.append(
                 QAIssue(
-                    severity="major",
+                    # "Some slides may show the wrong text" is not a note, it
+                    # is a reason not to publish. Nothing downstream compares
+                    # rendered pixels to the approved copy, so this count is
+                    # the only signal that they diverged.
+                    severity="critical",
                     message=(
                         f"Copy set has {len(copy_set.slides)} slides but "
                         f"{len(body_slides)} body slides were rendered - some "

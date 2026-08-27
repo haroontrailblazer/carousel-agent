@@ -65,10 +65,27 @@ _ENGINE_KWARGS: dict = {
     # Comfortably under Supabase's idle timeout, so we retire a connection
     # before the far end does it for us.
     "pool_recycle": int(os.getenv("DB_POOL_RECYCLE_S", "280")),
-    "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
-    "max_overflow": int(os.getenv("DB_POOL_MAX_OVERFLOW", "5")),
+    # Sized against a SHARED budget, not this engine's own appetite. Supabase's
+    # session-mode pooler caps the whole project at 15 clients, and
+    # app.services.db opens its own asyncpg pool alongside this one - the two
+    # maxima add. At the previous defaults they summed to 20, and the pooler
+    # answered EMAXCONNSESSION to whichever write asked last. See the budget
+    # note on _MAX_CONNECTIONS in app/services/db.py.
+    "pool_size": int(os.getenv("DB_POOL_SIZE", "3")),
+    "max_overflow": int(os.getenv("DB_POOL_MAX_OVERFLOW", "2")),
     "pool_timeout": 30,
 }
+
+# The SQLAlchemy half of the transaction-pooler rule (see
+# _statement_cache_size in app/services/db.py). SQLAlchemy's asyncpg driver
+# keeps its own prepared-statement cache, and it fails the same way behind a
+# transaction-mode pooler - so it is disabled under exactly the same
+# condition, and a switch to port 6543 needs no code change.
+if ":6543" in (settings.database_url or ""):
+    _ENGINE_KWARGS["connect_args"] = {
+        "prepared_statement_cache_size": 0,
+        "statement_cache_size": 0,
+    }
 
 
 def _build_session_service() -> BaseSessionService:

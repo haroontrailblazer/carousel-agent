@@ -634,9 +634,23 @@ def apply_cta_brand_rail(
 def validate_footer_padding(
     data: bytes,
     kind: SlideKind,
-    slide_no: int | None = None,
+    expect_slide_number: bool = False,
 ) -> list[str]:
-    """Validate footer furniture, safe-area geometry, and exact native size."""
+    """Validate footer furniture, safe-area geometry, and exact native size.
+
+    Args:
+        expect_slide_number: Whether a slide number should be drawn in the
+            fixed top-left anchor. Deliberately a BOOLEAN, not the number.
+
+            This used to take the expected value, which read as though the
+            check compared it - it never did, and could not: the only test
+            available here is pixel variance in the anchor box, which says
+            that *something* was drawn, not *what*. Passing a number the
+            function ignored made the check look stronger than it is, so a
+            wrong number on a slide would have been reported as verified.
+            Reading which digits are rendered would need OCR; until something
+            does, the honest signature is the one that admits the limit.
+    """
     errors: list[str] = []
     try:
         with Image.open(BytesIO(data)) as opened:
@@ -692,7 +706,7 @@ def validate_footer_padding(
         )
         if cream_pixels < 500 or sum(ImageStat.Stat(favicon).var) < 500:
             errors.append("official Baskaran Builds favicon is missing from the CTA rail")
-    if slide_no is not None:
+    if expect_slide_number:
         number = image.crop(
             (
                 SLIDE_NUMBER_LEFT,

@@ -7,7 +7,8 @@ import { ApprovalCard } from "@/components/review/approval-card"
 import { CarouselViewer } from "@/components/review/carousel-viewer"
 import { Card } from "@/components/ui/card"
 import { ApiError, get, post } from "@/lib/api"
-import { PHASE_LABELS } from "@/lib/pipeline"
+import { isStopped, PHASE_LABELS } from "@/lib/pipeline"
+import { cn } from "@/lib/utils"
 import type { CoverChoice, Meta, RunArtifacts, RunDetail } from "@/lib/types"
 
 /**
@@ -21,8 +22,13 @@ import type { CoverChoice, Meta, RunArtifacts, RunDetail } from "@/lib/types"
  * It renders in EVERY phase, including the ones with nothing to show yet. A
  * tab that appears and disappears as the pipeline moves is worse than one that
  * is honest about being empty.
+ *
+ * `fit` lays it out to fill one screen instead of flowing down the page: the
+ * decision card keeps its height, the carousel takes whatever is left, and
+ * nothing scrolls. Approving something you have to scroll away from to see is
+ * how a slide with a typo gets published.
  */
-export function ReviewPanel({ run }: { run: RunDetail }) {
+export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolean }) {
   const runId = run.run_id
   const queryClient = useQueryClient()
   const [coverChoice, setCoverChoice] = React.useState<CoverChoice>(null)
@@ -103,6 +109,8 @@ export function ReviewPanel({ run }: { run: RunDetail }) {
   const coverChoiceNeeded =
     !!cover && !!cover.video?.url && !!cover.poster?.url && !coverChoice
 
+  const stopped = isStopped(run.status)
+
   // A 404 here is the normal early state, not a failure: the carousel is only
   // assembled at the end of the generate phase.
   const notAssembled =
@@ -110,7 +118,18 @@ export function ReviewPanel({ run }: { run: RunDetail }) {
     (artifacts.error instanceof ApiError ? artifacts.error.status === 404 : false)
 
   return (
-    <div className="space-y-6">
+    <div
+      className={
+        fit
+          ? "flex min-h-0 flex-col gap-4 md:h-full"
+          : "space-y-6"
+      }
+    >
+      {/* Capped rather than fixed: the decision card grows when the reject
+          form opens, and the carousel below gives up the height for it. Past
+          the cap the card scrolls on its own instead of pushing the slides
+          off the screen. */}
+      <div className={fit ? "shrink-0 md:max-h-[55%] md:overflow-y-auto" : undefined}>
       <ApprovalCard
         run={run}
         publishConfigured={meta.data?.publish_configured ?? true}
@@ -121,21 +140,38 @@ export function ReviewPanel({ run }: { run: RunDetail }) {
         onResend={() => resend.mutate()}
         resending={resend.isPending}
       />
+      </div>
 
       {artifacts.isLoading && (
-        <div className="h-96 animate-pulse rounded-[var(--radius)] bg-[var(--muted)]" />
+        <div
+          className={cn(
+            "animate-pulse rounded-[var(--radius)] bg-[var(--muted)]",
+            fit ? "min-h-0 flex-1" : "h-96",
+          )}
+        />
       )}
       {notAssembled && (
         <Card className="flex items-center gap-3 p-6">
           <Hourglass className="size-5 shrink-0 text-[var(--muted-foreground)]" />
           <div>
             <p className="font-medium">Nothing to look at yet</p>
+            {/* A task that has stopped gets the past tense. This is the only
+                thing left on the tab for one now that the approval card
+                returns nothing - and telling someone slides "appear here as
+                soon as the task assembles them" about a task that is never
+                going to assemble any is worse than saying nothing. */}
             <p className="text-sm text-[var(--muted-foreground)]">
-              The slides appear here as soon as the task assembles them
-              {run.status === "running"
-                ? ` — it is ${(PHASE_LABELS[run.phase] ?? run.phase).toLowerCase()} right now.`
-                : "."}{" "}
-              The Trace tab shows what it is doing.
+              {stopped ? (
+                <>No slides were assembled. The Trace tab shows how far it got.</>
+              ) : (
+                <>
+                  The slides appear here as soon as the task assembles them
+                  {run.status === "running"
+                    ? ` — it is ${(PHASE_LABELS[run.phase] ?? run.phase).toLowerCase()} right now.`
+                    : "."}{" "}
+                  The Trace tab shows what it is doing.
+                </>
+              )}
             </p>
           </div>
         </Card>
@@ -152,6 +188,7 @@ export function ReviewPanel({ run }: { run: RunDetail }) {
           coverChoice={coverChoice}
           onCoverChoice={setCoverChoice}
           onExpired={() => void artifacts.refetch()}
+          fit={fit}
         />
       )}
     </div>

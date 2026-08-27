@@ -26,11 +26,24 @@ function SlideFrame({
   alt,
   onExpired,
   className,
+  fit = false,
 }: {
   artifact: SignedArtifact | null
   alt: string
   onExpired?: () => void
   className?: string
+  /**
+   * Size to the available HEIGHT rather than the column width.
+   *
+   * The frame carries its 4:5 aspect ratio in CSS, so giving it a height and
+   * `width: auto` is all it takes - the width follows. That is the whole
+   * trick behind the review fitting one screen: everything else on it has a
+   * height it needs, and the slide takes what is left.
+   *
+   * Only from `md` up. Below that the page scrolls and the old width-driven
+   * layout is the right one.
+   */
+  fit?: boolean
 }) {
   const [failed, setFailed] = React.useState(false)
   const [loaded, setLoaded] = React.useState(false)
@@ -45,6 +58,7 @@ function SlideFrame({
       <div
         className={cn(
           "slide-frame grid place-items-center rounded-[var(--radius-md)] border border-[var(--border)] p-4 text-center",
+          fit && "md:mx-auto md:h-full md:w-auto md:max-w-full",
           className,
         )}
       >
@@ -64,9 +78,22 @@ function SlideFrame({
   }
 
   return (
-    <div className={cn("relative", className)}>
+    <div
+      className={cn(
+        "relative",
+        fit && "md:flex md:h-full md:min-h-0 md:items-center md:justify-center",
+        className,
+      )}
+    >
       {!loaded && (
-        <div className="slide-frame absolute inset-0 animate-pulse rounded-[var(--radius-md)] bg-[var(--muted)]" />
+        <div
+          className={cn(
+            "slide-frame absolute inset-0 animate-pulse rounded-[var(--radius-md)] bg-[var(--muted)]",
+            // Sized like the image it stands in for, so the frame does not
+            // change shape underneath the reviewer when it loads.
+            fit && "md:m-auto md:h-full md:w-auto",
+          )}
+        />
       )}
       <img
         src={artifact.url}
@@ -81,7 +108,10 @@ function SlideFrame({
         decoding="async"
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
-        className="slide-frame w-full rounded-[var(--radius-md)] border border-[var(--border)]"
+        className={cn(
+          "slide-frame w-full rounded-[var(--radius-md)] border border-[var(--border)]",
+          fit && "md:mx-auto md:h-full md:w-auto md:max-w-full",
+        )}
       />
     </div>
   )
@@ -100,11 +130,13 @@ function Cover({
   choice,
   onChoose,
   onExpired,
+  fit = false,
 }: {
   cover: RunArtifacts["cover"]
   choice: CoverChoice
   onChoose: (choice: CoverChoice) => void
   onExpired?: () => void
+  fit?: boolean
 }) {
   // Both are offered whenever both FILES exist.
   //
@@ -127,7 +159,10 @@ function Cover({
       loop
       preload="metadata"
       poster={cover.poster?.url ?? undefined}
-      className="slide-frame w-full rounded-[var(--radius-md)] border border-[var(--border)]"
+      className={cn(
+        "slide-frame w-full rounded-[var(--radius-md)] border border-[var(--border)]",
+        fit && "md:mx-auto md:h-full md:w-auto md:max-w-full",
+      )}
     >
       <source src={cover.video?.url ?? undefined} type="video/mp4" />
     </video>
@@ -135,9 +170,20 @@ function Cover({
 
   if (!hasVideo) {
     return (
-      <div className="space-y-2">
-        <SlideFrame artifact={cover.poster} alt="Cover" onExpired={onExpired} />
-        <p className="text-xs text-[var(--muted-foreground)]">
+      <div
+        className={cn(
+          "space-y-2",
+          fit && "md:flex md:h-full md:min-h-0 md:flex-col md:space-y-0 md:gap-2",
+        )}
+      >
+        <SlideFrame
+          artifact={cover.poster}
+          alt="Cover"
+          onExpired={onExpired}
+          fit={fit}
+          className={fit ? "md:min-h-0 md:flex-1" : undefined}
+        />
+        <p className={cn("text-xs text-[var(--muted-foreground)]", fit && "md:shrink-0")}>
           No source clip was found for this story, so the cover is a still
           image rather than a video.
         </p>
@@ -162,12 +208,20 @@ function Cover({
         aria-pressed={picked}
         className={cn(
           "group rounded-[var(--radius-md)] border-2 p-1.5 text-left transition-colors",
+          fit && "md:flex md:min-h-0 md:flex-col",
           picked
             ? "border-[var(--brand)] bg-[var(--brand-soft)]"
             : "border-[var(--border)] hover:border-[var(--muted-foreground)]",
         )}
       >
-        <span className="pointer-events-none block">{preview}</span>
+        <span
+          className={cn(
+            "pointer-events-none block",
+            fit && "md:min-h-0 md:flex-1",
+          )}
+        >
+          {preview}
+        </span>
         <span className="mt-1.5 flex items-center gap-1.5 px-1">
           <span
             aria-hidden
@@ -190,26 +244,42 @@ function Cover({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-2">
+    <div
+      className={cn(
+        "space-y-2",
+        fit && "md:flex md:h-full md:min-h-0 md:flex-col md:space-y-0 md:gap-2",
+      )}
+    >
+      <div className={cn("grid grid-cols-2 gap-2", fit && "md:min-h-0 md:flex-1")}>
         {option(
           "video",
           "Video cover",
           cover.is_still
             ? `${Math.round(cover.duration_s)}s slow zoom on the still`
             : `${Math.round(cover.duration_s)}s clip from the story`,
-          <span className="pointer-events-auto block">{video}</span>,
+          <span className={cn("pointer-events-auto block", fit && "md:h-full")}>
+            {video}
+          </span>,
         )}
         {option(
           "image",
           "Image cover",
           "Still frame",
-          <SlideFrame artifact={cover.poster} alt="Cover still" onExpired={onExpired} />,
+          <SlideFrame
+            artifact={cover.poster}
+            alt="Cover still"
+            onExpired={onExpired}
+            fit={fit}
+            className={fit ? "md:h-full" : undefined}
+          />,
         )}
       </div>
       {!choice && (
         <p
-          className="rounded-[var(--radius-md)] px-3 py-2 text-xs"
+          className={cn(
+            "rounded-[var(--radius-md)] px-3 py-2 text-xs",
+            fit && "md:shrink-0",
+          )}
           style={{
             background: "var(--phase-review-soft)",
             color: "var(--phase-review-fg)",
@@ -228,11 +298,21 @@ export function CarouselViewer({
   coverChoice,
   onCoverChoice,
   onExpired,
+  fit = false,
 }: {
   artifacts: RunArtifacts
   coverChoice: CoverChoice
   onCoverChoice: (choice: CoverChoice) => void
   onExpired?: () => void
+  /**
+   * Fill the height it is given instead of flowing down the page.
+   *
+   * The slide takes whatever the decision card, the step controls and the
+   * thumbnail rail leave behind, and the caption gets its own scroll rather
+   * than making the whole screen scroll. Below `md` this does nothing: a 4:5
+   * slide and a caption do not share a phone screen usefully.
+   */
+  fit?: boolean
 }) {
   const [index, setIndex] = React.useState(0)
 
@@ -273,15 +353,28 @@ export function CarouselViewer({
   const overLimit = captionLength > IG_CAPTION_LIMIT
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
-      <div className="space-y-3">
-        <div>
+    <div
+      className={cn(
+        fit
+          ? "flex min-h-0 flex-col gap-4 md:min-h-0 md:flex-1 md:flex-row md:gap-5"
+          : "grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]",
+      )}
+    >
+      <div
+        className={cn(
+          fit
+            ? "flex min-h-0 flex-col gap-2 md:min-w-0 md:flex-1"
+            : "space-y-3",
+        )}
+      >
+        <div className={cn(fit && "md:flex md:min-h-0 md:flex-1 md:justify-center")}>
           {index === 0 && (
             <Cover
               cover={artifacts.cover}
               choice={coverChoice}
               onChoose={onCoverChoice}
               onExpired={onExpired}
+              fit={fit}
             />
           )}
           {index > 0 && index <= artifacts.slides.length && (
@@ -289,14 +382,20 @@ export function CarouselViewer({
               artifact={artifacts.slides[index - 1]}
               alt={`Slide ${artifacts.slides[index - 1]?.index}`}
               onExpired={onExpired}
+              fit={fit}
             />
           )}
           {index === frames.length - 1 && (
-            <SlideFrame artifact={artifacts.cta} alt="Call to action" onExpired={onExpired} />
+            <SlideFrame
+              artifact={artifacts.cta}
+              alt="Call to action"
+              onExpired={onExpired}
+              fit={fit}
+            />
           )}
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className={cn("flex items-center justify-between", fit && "md:shrink-0")}>
           <span className="text-xs text-[var(--muted-foreground)]">
             {index + 1} / {frames.length} · {frames[index]?.label}
           </span>
@@ -321,7 +420,7 @@ export function CarouselViewer({
         </div>
 
         {/* Thumbnail rail - the fastest way to spot a bad slide in a set. */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className={cn("flex gap-2 overflow-x-auto pb-1", fit && "md:shrink-0")}>
           {frames.map((frame, i) => {
             const art =
               i === 0
@@ -358,8 +457,19 @@ export function CarouselViewer({
         </div>
       </div>
 
-      <Card className="p-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
+      <Card
+        className={cn(
+          fit
+            ? "flex min-h-0 flex-col p-4 md:w-[19rem] md:shrink-0 lg:w-[21rem]"
+            : "p-5",
+        )}
+      >
+        <div
+          className={cn(
+            "mb-3 flex items-center justify-between gap-3",
+            fit && "md:shrink-0",
+          )}
+        >
           <h3 className="text-sm font-semibold">Caption</h3>
           <div className="flex items-center gap-2">
             <MutedChip
@@ -386,7 +496,15 @@ export function CarouselViewer({
             </Button>
           </div>
         </div>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed">
+        {/* The caption is the one thing here with no natural size - it can be
+            two lines or two thousand characters - so it is the one thing that
+            gets a scrollbar of its own rather than giving the page one. */}
+        <p
+          className={cn(
+            "whitespace-pre-wrap text-sm leading-relaxed",
+            fit && "md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1",
+          )}
+        >
           {artifacts.caption || (
             <span className="text-[var(--muted-foreground)]">No caption yet.</span>
           )}

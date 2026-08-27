@@ -120,6 +120,23 @@ export const STATUS_LABELS: Record<RunStatus, string> = {
   cancelled: "Cancelled",
 }
 
+/**
+ * Did this task stop, rather than pause or finish?
+ *
+ * failed / cancelled / interrupted differ in cause and in nothing else that
+ * the UI does with them: no more work is coming, no decision is being waited
+ * for, and everything on screen should be in the past tense. The header names
+ * which of the three it was, in colour, so nothing below it repeats that -
+ * they only ask this question.
+ *
+ * Not `!isLive`. A task awaiting review is not live either, and it is very
+ * much not stopped - reading one for the other is how "Nothing to approve
+ * yet" ended up on a carousel that was ready to approve.
+ */
+export function isStopped(status: RunStatus): boolean {
+  return status === "failed" || status === "cancelled" || status === "interrupted"
+}
+
 /** Status -> phase token family, for colouring status chips consistently. */
 export const STATUS_TOKEN: Record<RunStatus, string> = {
   running: "generate",

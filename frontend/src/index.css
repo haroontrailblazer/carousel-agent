@@ -465,6 +465,30 @@
 }
 
 /* ---------------------------------------------------------------------------
+   A screen that owns the viewport instead of scrolling.
+
+   Used by the review tab, where the decision only makes sense if the slide,
+   the caption and the Approve button are visible AT ONCE. Scrolling between
+   the thing being judged and the button that publishes it is how people
+   approve something they have not actually looked at.
+
+   Only from `md` up, and only above `min-height`. A 4:5 slide plus controls
+   genuinely does not fit a phone or a 600px-tall laptop window, and squeezing
+   it until it does produces a preview too small to review - so below those
+   sizes the page scrolls like any other.
+   --------------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  .fitted-main {
+    height: 100dvh;
+    min-height: 44rem;
+    /* `auto`, not `hidden`. If some future card does not fit after all, the
+       failure should be a scrollbar inside this pane - not an Approve button
+       clipped somewhere off the bottom edge where nobody can reach it. */
+    overflow: auto;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    New-carousel agent workspace.
 
    This route deliberately opts out of the dashboard's centered max-width

@@ -88,6 +88,27 @@ def _ts_record_keys(source: str, name: str) -> set[str]:
     return set(re.findall(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:", match.group(1), re.M))
 
 
+def _route_source(path: Path, depth: int = 1) -> str:
+    """A screen's source, plus the source of the `@/` modules it imports.
+
+    Components get extracted as a screen grows - the task page's header moved
+    into its own file - and a test that greps a single route calls that a
+    regression when nothing regressed. Following the imports asks the question
+    that actually matters: is this still reachable from this screen?
+    """
+    text = path.read_text(encoding="utf-8")
+    if depth <= 0:
+        return text
+    src = REPO / "frontend" / "src"
+    for spec in re.findall(r'from "@/([^"]+)"', text):
+        for suffix in (".tsx", ".ts"):
+            child = src / f"{spec}{suffix}"
+            if child.exists():
+                text += "\n" + _route_source(child, depth - 1)
+                break
+    return text
+
+
 class AgentTreeTests(unittest.TestCase):
     """The tree the orchestrator drives must contain everything it looks up."""
 
@@ -538,7 +559,11 @@ class WorkspaceIsOneImplementationTests(unittest.TestCase):
             self.workspace,
             "there is no way to start another carousel from the workspace",
         )
-        detail = (self.src / "routes" / "run-detail.tsx").read_text(encoding="utf-8")
+        # Follow the route's own imports rather than grepping one file. The
+        # task page's header lives in its own component now, and a test that
+        # reads only the route file calls that a regression when nothing
+        # regressed - the button is still one click away on the same screen.
+        detail = _route_source(self.src / "routes" / "run-detail.tsx")
         self.assertIn(
             "NewChatButton",
             detail,

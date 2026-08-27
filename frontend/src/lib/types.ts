@@ -126,6 +126,20 @@ export type ToolCall = {
 }
 
 export type RunEvent = {
+  /**
+   * Stable identity for this frame, and what dedupe must key on.
+   *
+   * `seq` is a POSITION, and the two sources that produce frames number
+   * positions differently: history comes from ADK's transcript, the live tail
+   * from the run_events counter renumbered onto the end of whatever history
+   * was replayed. Comparing those two numbers is comparing coordinate
+   * systems - it hides a real frame when they happen to collide and shows one
+   * twice when they do not. `id` comes from the event itself, so it means the
+   * same thing whichever way the frame arrived.
+   *
+   * Optional only for frames from an older server; the fallback is `seq`.
+   */
+  id?: string
   seq: number
   kind: EventKind
   author: string

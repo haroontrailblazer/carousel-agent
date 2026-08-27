@@ -117,6 +117,25 @@ def classify_event(event: Any) -> tuple[str, dict]:
     if K_PHASE in delta:
         return KIND_PHASE, data
 
+    # A paused review, flagged BEFORE the tool branch below can return.
+    #
+    # The single event that ends an invocation is the model response that
+    # CALLS the long-running tool: it carries the function call and the
+    # pending id in long_running_tool_ids at the same time. Checking for the
+    # pause after the tool branch therefore meant the one event that matters
+    # always returned early as an ordinary tool call, `awaiting_review` was
+    # never set, and consume_invocation reported paused=False for a run that
+    # had genuinely stopped and was waiting for a human.
+    #
+    # Downstream, _drive_run reads that flag to choose the ending. Getting it
+    # wrong recorded a paused run as 'interrupted', which on the resume path -
+    # where no phase transition had already written 'awaiting_review' - left
+    # the console offering Resume on a task that was actually waiting for a
+    # decision. Resuming re-entered review, paused again, and was recorded
+    # interrupted again: a loop with no exit.
+    if getattr(event, "long_running_tool_ids", None):
+        data["awaiting_review"] = True
+
     calls, responses = _tool_names(event)
     if calls or responses:
         if calls:
@@ -125,12 +144,6 @@ def classify_event(event: Any) -> tuple[str, dict]:
             data["tool_responses"] = responses
         return KIND_TOOL, data
 
-    # A paused review is not an error and not a phase change; flag it so the
-    # console can switch to the approval card without polling.
-    if getattr(event, "long_running_tool_ids", None):
-        data["awaiting_review"] = True
-        return KIND_PROGRESS, data
-
     return KIND_PROGRESS, data
 
 
@@ -138,8 +151,8 @@ def classify_event(event: Any) -> tuple[str, dict]:
 # ---------------------------------------------------------------------------
 # Merging the two records of what happened
 # ---------------------------------------------------------------------------
-#: Kinds that exist ONLY in run_events. record_event synthesises these outside
-#: any ADK invocation, so ADK's transcript has no idea they happened.
+#: Kinds that CAN exist only in run_events. Necessary but not sufficient - see
+#: the author test in ``_lifecycle_frames``.
 _LIFECYCLE_KINDS = (KIND_TERMINAL, KIND_ERROR)
 
 
@@ -160,7 +173,21 @@ async def _lifecycle_frames(run_id: str, limit: int) -> list[dict]:
     except Exception as exc:
         logger.warning("Could not read run_events for %s: %s", run_id, exc)
         return []
-    return [r for r in rows if str(r.get("kind") or "") in _LIFECYCLE_KINDS]
+    # The kind alone is not enough. consume_invocation ALSO records KIND_ERROR
+    # for an ordinary agent error inside an invocation - and ADK has that event
+    # too, so merging on kind duplicated every one of them: the same failure
+    # printed twice in the trace, once from each source.
+    #
+    # What actually separates the two is the author. Everything synthesised
+    # from outside an invocation is written with no author, because there is no
+    # agent to name; everything consume_invocation records carries the agent
+    # that emitted it.
+    return [
+        {**r, "id": f"evt:{r.get('seq')}"}
+        for r in rows
+        if str(r.get("kind") or "") in _LIFECYCLE_KINDS
+        and not str(r.get("author") or "").strip()
+    ]
 
 
 def _merge_by_time(frames: list[dict], extra: list[dict]) -> list[dict]:
@@ -422,6 +449,17 @@ def adk_event_to_frame(row: dict) -> dict:
         kind = KIND_PROGRESS
 
     return {
+        # Stable across every read, unlike `seq`.
+        #
+        # seq is a POSITION, and the two sources number positions differently:
+        # ADK frames are numbered by their place in the transcript, live bus
+        # frames by the run_events counter, and the merge renumbers everything
+        # again by timestamp. A client deduping on seq therefore compares two
+        # different coordinate systems - which silently drops a real frame
+        # when the numbers happen to collide and shows one twice when they do
+        # not. An identity that comes from the event itself has neither
+        # problem.
+        "id": f"adk:{_pick(row.get('event_data') or {}, 'id') or row.get('seq', 0)}",
         "seq": row.get("seq", 0),
         "kind": kind,
         "author": author,
@@ -465,6 +503,16 @@ async def load_trace(run_id: str, after: int = 0, limit: int = 2000) -> list[dic
         [adk_event_to_frame(r) for r in rows],
         await _lifecycle_frames(run_id, limit),
     )
+    if len(rows) >= limit:
+        # The ADK read was capped before the merge, so the newest frames of a
+        # very long run are not in `frames` at all. Say so: a silently short
+        # trace is indistinguishable from a run that stopped early.
+        logger.warning(
+            "Trace for %s hit the %d-frame limit; the newest events are not "
+            "in this page.",
+            run_id,
+            limit,
+        )
     return frames[after : after + limit]
 
 
@@ -841,8 +889,14 @@ async def load_trace_with_summary(
         # history, so a lifecycle line missing here is missing everywhere.
         # The summary is unaffected: these frames carry no tokens or tools.
         frames = _merge_by_time(frames, await _lifecycle_frames(run_id, limit))
-        summary["event_count"] = len(frames)
-        return frames[after : after + limit], summary
+        summary["total_events"] = len(frames)
+        # Truncation is a fact about this response, so it travels with it. A
+        # short trace that says nothing is indistinguishable from a run that
+        # stopped early.
+        summary["truncated"] = len(rows) >= limit
+        page = frames[after : after + limit]
+        summary["event_count"] = len(page)
+        return page, summary
 
     frames = await db.load_run_events(run_id, after=after, limit=limit)
     return frames, {"tokens": None, "ms": None, "agents": [], "event_count": len(frames)}

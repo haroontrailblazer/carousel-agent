@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
+import os
 import uuid
 from datetime import datetime
 from typing import Any, Optional
@@ -25,6 +27,8 @@ from typing import Any, Optional
 import asyncpg
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Statuses used in news_queue.status.
 STATUS_QUEUED = "queued"
@@ -35,6 +39,52 @@ STATUS_FAILED = "failed"
 # Explicit timeouts (seconds) for every network interaction with Postgres.
 _ACQUIRE_TIMEOUT_S = 15.0
 _COMMAND_TIMEOUT_S = 30.0
+
+#: How many connections THIS pool may hold.
+#:
+#: There is a hard budget to share. Supabase's pooler on port 5432 runs in
+#: SESSION mode, which holds a server connection for the whole client session
+#: and caps the project at a fixed number of clients - 15 here. This process
+#: opens connections from two independent places: this asyncpg pool, and the
+#: SQLAlchemy engine behind ADK's DatabaseSessionService (see
+#: ``app.runtime._ENGINE_KWARGS``). Their maxima ADD.
+#:
+#: At the old defaults that sum was 10 + (5 + 5) = 20 against a budget of 15,
+#: so under load the pooler simply refused:
+#:
+#:     asyncpg.exceptions.InternalServerError: (EMAXCONNSESSION)
+#:     max clients reached in session mode - max clients are limited to
+#:     pool_size: 15
+#:
+#: A refusal there is not a slow query, it is a write that never happens - and
+#: the write that happened to lose was ``save_pending_review``, which strands
+#: a run at 'review' with no way for any surface to answer it. Raising
+#: MAX_CONCURRENT_RUNS made it likelier, not less.
+#:
+#: Keep ``DB_MAX_CONNECTIONS`` plus ``DB_POOL_SIZE + DB_POOL_MAX_OVERFLOW``
+#: comfortably under the pooler's limit, with room left for a psql session.
+_MAX_CONNECTIONS = int(os.getenv("DB_MAX_CONNECTIONS", "5"))
+_MIN_CONNECTIONS = min(int(os.getenv("DB_MIN_CONNECTIONS", "2")), _MAX_CONNECTIONS)
+
+#: Attempts for the one write whose failure strands a run (see
+#: ``save_pending_review``). Three tries over ~4.5 s covers a pooler briefly at
+#: capacity and a connection that died idle, without holding the invocation.
+#: asyncpg's prepared-statement cache. Zero whenever the DSN points at a
+#: transaction-mode pooler, because prepared statements do not survive one.
+#: Detected from the port so a URL change is all a mode switch takes;
+#: ``DB_STATEMENT_CACHE`` overrides it either way.
+def _statement_cache_size(url: Optional[str] = None) -> int:
+    override = os.getenv("DB_STATEMENT_CACHE")
+    if override is not None:
+        return int(override)
+    dsn = settings.database_url if url is None else url
+    return 0 if ":6543" in (dsn or "") else 100
+
+
+_STATEMENT_CACHE_SIZE = _statement_cache_size()
+
+_PENDING_REVIEW_ATTEMPTS = int(os.getenv("PENDING_REVIEW_ATTEMPTS", "3"))
+_PENDING_REVIEW_BACKOFF_S = float(os.getenv("PENDING_REVIEW_BACKOFF_S", "1.5"))
 
 _pool: Optional[asyncpg.Pool] = None
 _pool_lock = asyncio.Lock()
@@ -88,8 +138,20 @@ async def get_pool() -> asyncpg.Pool:
             # a user actually waits on.
             _pool = await asyncpg.create_pool(
                 dsn,
-                min_size=3,
-                max_size=10,
+                min_size=_MIN_CONNECTIONS,
+                max_size=_MAX_CONNECTIONS,
+                # Prepared statements cannot survive a TRANSACTION-mode
+                # pooler. Supabase serves session mode on 5432 and
+                # transaction mode on 6543; the latter hands your connection
+                # to someone else between statements, so a statement prepared
+                # on one backend is executed on another and every query dies
+                # with "prepared statement _asyncpg_stmt_N does not exist".
+                #
+                # Transaction mode is the answer to the 15-client ceiling that
+                # stranded a run here, so switching to 6543 should be a URL
+                # change and nothing else. Turning the cache off costs a
+                # little planning time per query and makes both modes work.
+                statement_cache_size=_STATEMENT_CACHE_SIZE,
                 init=_init_connection,
                 timeout=_ACQUIRE_TIMEOUT_S,
                 command_timeout=_COMMAND_TIMEOUT_S,
@@ -458,21 +520,51 @@ async def save_pending_review(
 
     Upserts, since a rework loop sends a fresh review mail (and a fresh
     pending function call) for the same run.
+
+    Retried, unlike almost everything else here. Most writes in this module
+    are bookkeeping: losing one costs a log line. This one decides whether a
+    paused run can ever be answered - the invocation ends either way, so a
+    single failed INSERT strands a finished carousel at 'review' with no live
+    function call for any surface to address. The failures worth retrying are
+    exactly the transient ones seen in practice: the pooler refusing a client
+    under load, or a connection that died while the pipeline spent four
+    minutes rendering slides without touching the database.
     """
-    pool = await get_pool()
-    await pool.execute(
-        """
-        INSERT INTO pending_reviews (run_id, session_id, function_call_id)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (run_id) DO UPDATE
-        SET session_id = EXCLUDED.session_id,
-            function_call_id = EXCLUDED.function_call_id,
-            created_at = now()
-        """,
-        str(run_id),
-        str(session_id),
-        str(function_call_id),
-    )
+    last: Optional[BaseException] = None
+    for attempt in range(1, _PENDING_REVIEW_ATTEMPTS + 1):
+        try:
+            pool = await get_pool()
+            await pool.execute(
+                """
+                INSERT INTO pending_reviews (run_id, session_id, function_call_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (run_id) DO UPDATE
+                SET session_id = EXCLUDED.session_id,
+                    function_call_id = EXCLUDED.function_call_id,
+                    created_at = now()
+                """,
+                str(run_id),
+                str(session_id),
+                str(function_call_id),
+            )
+            return
+        except Exception as exc:
+            last = exc
+            if attempt == _PENDING_REVIEW_ATTEMPTS:
+                break
+            delay = _PENDING_REVIEW_BACKOFF_S * attempt
+            logger.warning(
+                "save_pending_review failed for run %s (attempt %d/%d: %s); "
+                "retrying in %.1fs.",
+                run_id,
+                attempt,
+                _PENDING_REVIEW_ATTEMPTS,
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+    assert last is not None
+    raise last
 
 
 async def load_pending_review(run_id: str) -> Optional[dict]:

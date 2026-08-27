@@ -62,6 +62,7 @@ from app.schemas import Bundle, Verdict
 from app.services import db
 from app.state import (
     AGENT_REVIEW_DISPATCHER,
+    K_REVIEW_NOTICE_FAILED,
     K_BUNDLE,
     K_NEWS_ITEM,
     K_REVIEW_ROUND,
@@ -414,92 +415,76 @@ async def await_human_review(tool_context: ToolContext) -> Optional[dict]:
     pausing, the pending call is persisted (run id, session id, function call
     id) so the review API can address the resume to exactly this call.
 
-    Pausing is a commitment: the invocation ends and only a human can restart
-    it, so this tool refuses to make that commitment unless the resume will
-    actually be possible. Two preconditions, both checked here rather than
-    trusted to the instruction:
+    Pausing is not this tool's decision to make, which is the thing that
+    matters here. google-adk reads ``long_running_tool_ids`` off the MODEL
+    RESPONSE that calls this tool - the invocation is already ending by the
+    time the tool body runs, so returning a value cannot call it back. An
+    earlier version returned an error dict to "refuse" the pause; the run
+    paused regardless and simply gained a second, contradictory story, with
+    the model reporting "the run did not pause" into a trace whose very next
+    line was "waiting for a human".
 
-    * **The reviewers were told.** ``send_review_request`` stamps the round it
-      successfully sent under a ``temp:`` key; without a stamp for the current
-      round nothing went out, and pausing would strand the run waiting for a
-      human who was never asked. The prompt says as much, but a small utility
-      model on a round-2 instruction that also insists "a NEW review request
-      is required and expected" is not a guarantee.
-    * **The pending call was persisted.** Without a ``pending_reviews`` row no
-      surface can build a ``FunctionResponse`` addressed to this call, so no
-      verdict can ever resume the run. Pausing anyway used to strand it twice
-      over, because the orchestrator clears ``K_REVIEW_NOTICE_FAILED`` on a
-      successful pause - disabling the console fallback built for exactly
-      this situation.
+    So this records whether the pause is ANSWERABLE, and lets it happen either
+    way. It is answerable when the reviewers were actually told (``send_review
+    _request`` stamps the round it sent) and the pending call was persisted -
+    without a ``pending_reviews`` row no surface can build a
+    ``FunctionResponse`` addressed to this call.
+
+    When it is not answerable, ``K_REVIEW_NOTICE_FAILED`` goes up and any
+    stale pending row is dropped. That is not a cosmetic flag: it is what
+    routes the console to ``_decide_without_pause``, which records a verdict
+    straight into session state and re-enters the run - the one path that
+    works without a live function call. Leaving the flag down instead made a
+    stranded run look perfectly healthy.
 
     Returns:
-        ``None`` when the run may pause - google-adk 2.7.0 builds no
-        function-response event for a falsy long-running result, which is what
-        ends the invocation paused. Otherwise an error dict, which IS a
-        function response, so the invocation continues and the orchestrator
-        halts the run at 'review' with the notice recorded as failed.
+        Always ``None``. A falsy long-running result produces no
+        function-response event, which is the shape ADK expects for a paused
+        call; the honest signal about whether the pause can be answered is in
+        session state, not in a return value the model would narrate.
     """
     state = tool_context.state
     run_id = str(state.get(K_RUN_ID) or "")
     session_id = tool_context.session.id
     call_id = tool_context.function_call_id or ""
 
+    async def _unanswerable(reason: str) -> None:
+        """Flag the pause so the console can decide the run without it."""
+        logger.error(
+            "Review pause for run %s cannot be answered (%s); flagging "
+            "'%s' so the console offers the decide-without-pause path.",
+            run_id or "(unset)",
+            reason,
+            K_REVIEW_NOTICE_FAILED,
+        )
+        state[K_REVIEW_NOTICE_FAILED] = True
+        # Any surviving row belongs to an earlier round whose call id is dead.
+        # Left in place, submit_verdict would take the claim path and resume
+        # against a function call that no longer exists.
+        await _clear_pending_review_quietly(run_id)
+
     round_no = int(state.get(K_REVIEW_ROUND) or 0)
     sent_round = int(state.get(_SENT_KEY) or 0)
     if not round_no or sent_round != round_no:
-        logger.error(
-            "await_human_review refused for run %s: no successful "
-            "send_review_request for review round %s (last sent round: %s). "
-            "Pausing here would wait for a human nobody notified.",
-            run_id,
-            round_no or "(unset)",
-            sent_round or "none",
+        await _unanswerable(
+            f"no successful send for review round {round_no or '(unset)'}; "
+            f"last sent round was {sent_round or 'none'}"
         )
-        return {
-            "status": "error",
-            "error": (
-                "The review request was not sent, so the pipeline will not "
-                "pause. Report the send failure in one short sentence; do not "
-                "call await_human_review again."
-            ),
-        }
+        return None
 
     if not run_id or not call_id:
-        logger.error(
-            "await_human_review missing identifiers (run_id=%r, call_id=%r); "
-            "the review API would not be able to resume this run, so it will "
-            "not pause.",
-            run_id,
-            call_id,
+        await _unanswerable(
+            f"missing identifiers (run_id={run_id!r}, call_id={call_id!r})"
         )
-        return {
-            "status": "error",
-            "error": (
-                "This run cannot be paused for review: its identifiers are "
-                "missing from session state. Report the problem in one short "
-                "sentence."
-            ),
-        }
+        return None
 
     try:
         await db.save_pending_review(run_id, session_id, call_id)
     except Exception as exc:
-        logger.error(
-            "Could not persist pending review for run %s (%s); refusing to "
-            "pause, because a pause with no pending_reviews row can never be "
-            "resumed by any surface.",
-            run_id,
-            exc,
-        )
-        return {
-            "status": "error",
-            "error": (
-                "The pending review could not be saved, so the pipeline will "
-                "not pause on a call nobody could answer. Report the storage "
-                "failure in one short sentence."
-            ),
-        }
+        await _unanswerable(f"the pending review could not be saved: {exc}")
+        return None
 
+    state[K_REVIEW_NOTICE_FAILED] = False
     logger.info(
         "Pipeline paused for human review: run %s, session %s, call %s.",
         run_id,
@@ -540,11 +525,45 @@ async def set_verdict(
     state = tool_context.state
     latest = _latest_review_response(tool_context.user_content)
     authoritative = _fresh_review_response(tool_context.user_content, state)
+    directive = state.get(_DIRECTIVE_KEY)
+
+    # A consumed id means two completely different things, and telling them
+    # apart is the whole job here.
+    #
+    # ``capture_verdict_on_resume`` runs BEFORE this tool on every resume and
+    # consumes the id itself - so on the ordinary HANDLE_VERDICT turn, the one
+    # where a human just clicked Approve, the id is already consumed by the
+    # time the model does as it was told and calls this. Refusing there fired
+    # on 100% of legitimate verdicts and told the model to raise a NEW review
+    # round for a carousel that had just been approved.
+    #
+    # The case the guard was actually written for is the SEND_MAIL re-entry: a
+    # rework loop inside one invocation, where the round-1 response is still
+    # the invocation's user_content and recording it again would apply an old
+    # decision to a carousel that has since been rebuilt.
+    #
+    # The directive separates them, because it is set by the same callback
+    # from the same evidence.
     if latest is not None and authoritative is None:
+        if directive == _DIRECTIVE_HANDLE_VERDICT:
+            # The callback already recorded exactly this verdict; saying so is
+            # both true and idempotent.
+            recorded = _verdict_from_payload(dict(latest.response or {}))
+            logger.info(
+                "set_verdict for run %s: verdict '%s' was already recorded by "
+                "the resume callback; reporting it rather than re-recording.",
+                state.get(K_RUN_ID),
+                recorded.status,
+            )
+            return {
+                "status": "recorded",
+                "verdict": recorded.status,
+                "feedback": recorded.feedback,
+            }
         logger.warning(
-            "set_verdict refused for run %s: the reviewer response %s has "
-            "already been consumed this invocation. Recording it again would "
-            "apply an old decision to a reworked carousel.",
+            "set_verdict refused for run %s: the reviewer response %s was "
+            "consumed by an earlier round of this invocation. Recording it "
+            "again would apply an old decision to a reworked carousel.",
             state.get(K_RUN_ID),
             latest.id,
         )
@@ -556,6 +575,31 @@ async def set_verdict(
                 "call send_review_request instead."
             ),
         }
+
+    # No reviewer response at all, on a turn whose job is to ASK for one.
+    #
+    # The docstring below promises that "even a confused model cannot record a
+    # verdict different from what the human submitted" - which holds only when
+    # a reviewer response exists to check against. Without one, the argument
+    # branch would take the model's word for it, and a model that called this
+    # instead of send_review_request could approve a carousel no human had
+    # seen. The argument branch exists for manual overrides; nothing in the
+    # codebase calls it that way (the console writes K_VERDICT directly), so
+    # the only reachable caller was a mistake.
+    if latest is None and directive == _DIRECTIVE_SEND_MAIL:
+        logger.warning(
+            "set_verdict refused for run %s: no reviewer response in this "
+            "invocation and the dispatcher is in SEND_MAIL mode.",
+            state.get(K_RUN_ID),
+        )
+        return {
+            "status": "error",
+            "error": (
+                "There is no reviewer decision to record - nobody has replied "
+                "yet. Call send_review_request to ask for one."
+            ),
+        }
+
     if authoritative is not None:
         verdict = _verdict_from_payload(dict(authoritative.response or {}))
         arg_status = str(status or "").strip().lower()

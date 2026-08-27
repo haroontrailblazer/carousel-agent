@@ -67,57 +67,103 @@ function heatTone(ms: number | null | undefined): string {
  * step in a line, because that is what it actually is: rejected work goes back
  * and comes round again.
  */
-export function PhaseRail({ phase, live }: { phase: Phase; live: boolean }) {
+export function PhaseRail({
+  phase,
+  live,
+  stopped = false,
+}: {
+  phase: Phase
+  live: boolean
+  /** The task will not resume on its own: failed, cancelled or interrupted. */
+  stopped?: boolean
+}) {
   const linear = PHASES.filter((p) => p !== "rework")
   const activeIndex = linear.indexOf(phase === "rework" ? "qa" : phase)
 
   return (
-    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
-      {linear.map((p, index) => {
-        const done = index < activeIndex
-        const active = index === activeIndex
-        return (
-          <React.Fragment key={p}>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium",
-                !done && !active && "text-[var(--muted-foreground)]",
-              )}
-              style={
-                done || active
-                  ? {
-                      backgroundColor: `var(--phase-${p}-soft)`,
-                      color: `var(--phase-${p}-fg)`,
-                    }
-                  : undefined
-              }
+    <div
+      aria-label="Task progress"
+      className="border-y border-[var(--border)] py-3"
+    >
+      <ol className="grid grid-cols-5">
+        {linear.map((p, index) => {
+          const done = index < activeIndex
+          const active = index === activeIndex
+          return (
+            <li
+              key={p}
+              aria-current={active ? "step" : undefined}
+              className="min-w-0"
             >
-              <span
-                aria-hidden
-                className={cn(
-                  "size-1.5 rounded-full",
-                  active && live && "animate-pip-pulse",
+              <span className="flex items-center">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "size-2 shrink-0 rounded-full transition-colors duration-300 motion-reduce:transition-none",
+                    active && live && "animate-pip-pulse",
+                  )}
+                  style={{
+                    backgroundColor:
+                      done || active ? `var(--phase-${p})` : "var(--border)",
+                  }}
+                />
+                {index < linear.length - 1 && (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mx-1.5 h-px min-w-0 flex-1 transition-colors duration-300 sm:mx-2.5",
+                      done && "animate-rail-fill",
+                    )}
+                    style={{
+                      backgroundColor: done
+                        ? `var(--phase-${p})`
+                        : "var(--border)",
+                    }}
+                  />
                 )}
-                style={{
-                  backgroundColor:
-                    done || active ? `var(--phase-${p})` : "var(--border)",
-                }}
-              />
-              {PHASE_LABELS[p]}
-            </span>
-            {index < linear.length - 1 && (
-              <span aria-hidden className="text-[var(--border)]">
-                ·
               </span>
-            )}
-          </React.Fragment>
-        )
-      })}
+
+              <span
+                className={cn(
+                  "mt-2 block pr-1 text-[10px] font-medium leading-tight transition-colors duration-300 sm:text-xs motion-reduce:transition-none",
+                  active && "font-semibold",
+                  !done && !active && "text-[var(--muted-foreground)]",
+                )}
+                style={
+                  done || active
+                    ? { color: `var(--phase-${p}-fg)` }
+                    : undefined
+                }
+              >
+                {PHASE_LABELS[p]}
+              </span>
+            </li>
+          )
+        })}
+      </ol>
 
       {phase === "rework" && (
-        <Chip tone="rework" dot pulse={live} className="ml-1">
-          ↻ Reworking, then back to checking
-        </Chip>
+        <p
+          className="mt-3 flex items-center gap-2 text-xs font-medium"
+          style={{ color: "var(--phase-rework-fg)" }}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "size-1.5 rounded-full bg-[var(--phase-rework)]",
+              live && "animate-pip-pulse",
+            )}
+          />
+          {/* The rail draws five steps in a line; this sentence is the arc
+              they cannot draw - rework goes BACK to checking. Which is worth
+              saying in either tense, so a task that died mid-rework keeps the
+              explanation and loses the "now" that claimed it was still
+              working. `stopped` and not `!live`: a task awaiting review is
+              not live either. */}
+          {stopped
+            ? "Stopped while reworking, before it returned to checking"
+            : "Reworking now, then returning to checking"}
+        </p>
       )}
     </div>
   )
@@ -157,18 +203,17 @@ const ToolPill = React.memo(function ToolPill({ tool }: { tool: ToolCall }) {
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex max-w-full items-center gap-1.5 rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium leading-none transition-transform hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          className="inline-flex min-h-10 min-w-64 max-w-full items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[13px] font-medium leading-none transition-colors hover:border-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           style={{
-            backgroundColor: `var(--phase-${tone}-soft)`,
             color: `var(--phase-${tone}-fg)`,
           }}
         >
-          <Wrench className="size-3 shrink-0" />
+          <Wrench className="size-3.5 shrink-0" />
           <span className="truncate font-mono">{tool.name}</span>
           {tool.status === "running" ? (
-            <span className="opacity-70">running…</span>
+            <span className="font-mono opacity-70">· running</span>
           ) : (
-            <span className="tabular-nums opacity-80">{duration(tool.ms)}</span>
+            <span className="ml-1 tabular-nums opacity-80">{duration(tool.ms)}</span>
           )}
         </button>
       </TooltipTrigger>
@@ -256,19 +301,22 @@ export function TraceSummaryBar({
   ]
 
   return (
-    <div className="grid grid-cols-3 gap-2">
-      {stats.map(({ key, icon: Icon, label, value, title }) => (
+    <div className="grid grid-cols-3 border-y border-[var(--border)] py-4 sm:flex sm:items-center sm:py-5">
+      {stats.map(({ key, icon: Icon, label, value, title }, index) => (
         <div
           key={key}
           title={title}
-          className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] px-3 py-2"
+          className={cn(
+            "min-w-0 px-3 sm:flex sm:items-center sm:gap-3 sm:px-6",
+            index === 0 ? "pl-0 sm:pl-0" : "border-l border-[var(--border)]",
+          )}
         >
-          <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
-            <Icon className="size-3" />
+          <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)] sm:text-sm">
+            <Icon className="size-3.5" />
             {label}
           </div>
-          <div className="mt-0.5 flex items-baseline gap-1.5">
-            <span className="text-lg font-semibold leading-none tabular-nums">
+          <div className="mt-1 flex items-baseline gap-1.5 sm:mt-0">
+            <span className="font-mono text-lg font-semibold leading-none tabular-nums sm:text-base">
               {value}
             </span>
             {live && key === "ms" && (
@@ -370,17 +418,10 @@ function blockSignature(
   ].join("|")
 }
 
-function ShimmerBar() {
-  return (
-    <span aria-hidden className="animate-shimmer block h-0.5 w-full rounded-full" />
-  )
-}
-
 type AgentGroupProps = {
   author: string
   events: RunEvent[]
   stat: GroupStat
-  slowestMs: number
   occurrence: number
   totalOccurrences: number
   active: boolean
@@ -393,7 +434,6 @@ function AgentGroupImpl({
   author,
   events,
   stat,
-  slowestMs,
   occurrence,
   totalOccurrences,
   active,
@@ -419,22 +459,20 @@ function AgentGroupImpl({
   const label =
     totalOccurrences > 1 ? `${base} · pass ${occurrence}` : base
 
-  // A proportional bar makes "which agent ate the run" readable at a glance,
-  // which a column of numbers does not.
-  const share =
-    stat.ms && slowestMs ? Math.min(100, Math.max(2, (stat.ms / slowestMs) * 100)) : 0
-
   return (
     <div
       className={cn(
-        "rounded-[var(--radius)] border bg-[var(--card)] transition-colors",
-        failed ? "border-[var(--destructive)]/40" : "border-[var(--border)]",
+        "relative border-b border-[var(--border)] transition-colors",
+        open && "bg-[var(--card)]",
+        active &&
+          "before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-[var(--brand)]",
+        failed && "before:bg-[var(--destructive)]",
       )}
     >
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        className="grid min-h-[4.5rem] w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 px-3 py-3 text-left sm:grid-cols-[auto_minmax(0,1fr)_7rem_6rem_5rem_auto] sm:px-4"
         aria-expanded={open}
       >
         <span
@@ -444,70 +482,49 @@ function AgentGroupImpl({
             backgroundColor: failed
               ? "var(--destructive)"
               : active
-                ? "var(--phase-generate)"
+                ? "var(--phase-qa)"
                 : "var(--brand)",
           }}
         />
 
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate font-medium">{label}</span>
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-[15px] sm:text-base">
+            <span className="truncate font-semibold">{label}</span>
             {failed && <AlertTriangle className="size-3.5 text-[var(--destructive)]" />}
           </span>
-
-          {share > 0 && !active && (
-            <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-[var(--muted)]">
-              <span
-                className="animate-rail-fill block h-full rounded-full"
-                style={{
-                  width: `${share}%`,
-                  backgroundColor: `var(--phase-${heatTone(stat.ms)})`,
-                }}
-              />
-            </span>
-          )}
-          {active && (
-            <span className="mt-1.5 block">
-              <ShimmerBar />
-            </span>
-          )}
+          <span className="mt-1 block text-xs text-[var(--muted-foreground)] sm:hidden">
+            {stat.tokens.total ? `${compactNumber(stat.tokens.total)} tokens` : "— tokens"}
+            <span aria-hidden> · </span>
+            {stat.toolCalls || "—"} {stat.toolCalls === 1 ? "call" : "calls"}
+          </span>
         </span>
 
-        <span className="hidden items-center gap-3 text-xs text-[var(--muted-foreground)] sm:flex">
-          {stat.tokens.total ? (
-            <span
-              className="tabular-nums"
-              title={`${stat.tokens.prompt.toLocaleString()} in · ${stat.tokens.output.toLocaleString()} out`}
-            >
-              {compactNumber(stat.tokens.total)} tok
-            </span>
-          ) : null}
-          {stat.toolCalls ? (
-            <span className="tabular-nums">{stat.toolCalls} calls</span>
-          ) : null}
-        </span>
-
-        <span className="w-[4.5rem] shrink-0 text-right text-xs font-medium tabular-nums">
+        <span className="text-right font-mono text-xs font-medium tabular-nums sm:text-left">
           {active ? (
-            // No number while it is still working. The elapsed time of an
-            // unfinished agent is not its duration - it is however long it has
-            // been going so far, and showing that in the same column as
-            // finished agents invites reading it as a total. The timer appears
-            // when the agent stops.
             <span
-              className="inline-flex items-center gap-1.5 font-normal"
-              style={{ color: "var(--phase-generate-fg)" }}
+              className="inline-flex items-center gap-1.5 font-sans font-normal"
+              style={{ color: "var(--phase-qa-fg)" }}
             >
               <span
                 aria-hidden
-                className="size-1.5 animate-pip-pulse rounded-full"
-                style={{ backgroundColor: "var(--phase-generate)" }}
+                className="size-1.5 animate-pip-pulse rounded-full bg-[var(--phase-qa)]"
               />
               running
             </span>
           ) : (
             duration(stat.ms)
           )}
+        </span>
+
+        <span
+          className="hidden font-mono text-xs tabular-nums text-[var(--muted-foreground)] sm:block"
+          title={`${stat.tokens.prompt.toLocaleString()} in · ${stat.tokens.output.toLocaleString()} out`}
+        >
+          {stat.tokens.total ? compactNumber(stat.tokens.total) : "—"}
+        </span>
+
+        <span className="hidden font-mono text-xs tabular-nums text-[var(--muted-foreground)] sm:block">
+          {stat.toolCalls || "—"}
         </span>
 
         <ChevronRight
@@ -519,22 +536,14 @@ function AgentGroupImpl({
       </button>
 
       {open && (
-        <div className="space-y-3 border-t border-[var(--border)] px-4 py-3">
+        <div className="space-y-4 px-4 pb-5 pl-10 sm:pl-[3.25rem] sm:pr-8">
           {AGENT_BLURBS[author] && (
-            <p className="text-xs text-[var(--muted-foreground)]">
+            <p className="max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)]">
               {AGENT_BLURBS[author]}
             </p>
           )}
 
-          {tools.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {tools.map((tool, i) => (
-                <ToolPill key={`${tool.id || tool.name}-${i}`} tool={tool} />
-              ))}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {events.map((event) => {
               const text =
                 event.text ||
@@ -543,7 +552,7 @@ function AgentGroupImpl({
               return (
                 <div
                   key={event.seq}
-                  className="animate-line-reveal flex gap-2 font-mono text-xs leading-relaxed"
+                  className="animate-line-reveal flex gap-3 font-mono text-xs leading-relaxed"
                 >
                   <span className="shrink-0 select-none tabular-nums text-[var(--muted-foreground)]">
                     {String(event.seq).padStart(2, "0")}
@@ -562,6 +571,14 @@ function AgentGroupImpl({
               )
             })}
           </div>
+
+          {tools.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {tools.map((tool, i) => (
+                <ToolPill key={`${tool.id || tool.name}-${i}`} tool={tool} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -588,13 +605,11 @@ function AgentGroupImpl({
  * is ignored afterwards, so a change to it can never affect what is on screen,
  * and including it would defeat the memo on every append.
  */
-const AgentGroup = React.memo(AgentGroupImpl, (prev, next) => {
-  return (
-    prev.signature === next.signature &&
-    prev.slowestMs === next.slowestMs &&
-    prev.active === next.active
-  )
-})
+const AgentGroup = React.memo(
+  AgentGroupImpl,
+  (prev, next) =>
+    prev.signature === next.signature && prev.active === next.active,
+)
 
 /**
  * The run trace.
@@ -652,20 +667,6 @@ export function AgentTrace({
     })
   }, [events])
 
-  // Scale the bars against the slowest SEGMENT, excluding the orchestrator -
-  // it interleaves with every child, so its segments bracket the others and
-  // would otherwise squash every bar flat.
-  const slowestMs = React.useMemo(
-    () =>
-      Math.max(
-        1,
-        ...blocks
-          .filter((b) => b.author !== "carousel_orchestrator")
-          .map((b) => b.stat.ms ?? 0),
-      ),
-    [blocks],
-  )
-
   if (!synced && events.length === 0) {
     return (
       <div className="space-y-2">
@@ -690,17 +691,25 @@ export function AgentTrace({
 
   return (
     <TooltipProvider delayDuration={120} skipDelayDuration={300}>
-      <div className="space-y-3">
+      <div>
         <TraceSummaryBar summary={summary} live={live} />
 
-        <div className="space-y-2">
+        <div className="hidden grid-cols-[auto_minmax(0,1fr)_7rem_6rem_5rem_auto] items-center gap-x-3 border-b border-[var(--border)] px-4 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)] sm:grid">
+          <span className="size-2" />
+          <span>Agent activity</span>
+          <span>Time</span>
+          <span>Tokens</span>
+          <span>Calls</span>
+          <span className="size-4" />
+        </div>
+
+        <div>
           {blocks.map((block, index) => (
             <AgentGroup
               key={`${block.author}-${index}`}
               author={block.author}
               events={block.events}
               stat={block.stat}
-              slowestMs={slowestMs}
               occurrence={block.occurrence}
               totalOccurrences={block.totalOccurrences}
               signature={block.signature}
@@ -711,8 +720,8 @@ export function AgentTrace({
         </div>
 
         {summary?.agents?.length ? (
-          <p className="text-center text-[11px] text-[var(--muted-foreground)]">
-            Hover a tool pill for its arguments and result.
+          <p className="border-t border-[var(--border)] py-3 text-center text-[11px] text-[var(--muted-foreground)]">
+            Hover a tool call for its arguments and result.
           </p>
         ) : null}
       </div>

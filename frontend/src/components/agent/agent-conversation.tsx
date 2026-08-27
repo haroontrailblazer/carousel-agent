@@ -10,7 +10,7 @@ import { AgentAssetStrip } from "@/components/agent/agent-assets"
 import { UserAvatar } from "@/components/layout/user-avatar"
 import type { LoadingVariant } from "@/components/agent/loading-state"
 import { useProfile } from "@/hooks/use-profile"
-import { AGENT_LABELS, PHASE_LABELS } from "@/lib/pipeline"
+import { AGENT_LABELS, isStopped, PHASE_LABELS } from "@/lib/pipeline"
 import type { RunArtifacts, RunDetail, RunEvent, TraceSummary } from "@/lib/types"
 
 /**
@@ -105,11 +105,7 @@ export function AgentConversation({
           key={runId}
           label={agentActivityLabel(run, events)}
           live={live}
-          outcome={
-            ["failed", "cancelled", "interrupted"].includes(run.status)
-              ? "stopped"
-              : "complete"
-          }
+          outcome={isStopped(run.status) ? "stopped" : "complete"}
           variant={variant}
           // The run's own start instant, so the timer reads the same whether
           // you have been watching since it began or just opened the task.

@@ -2,26 +2,23 @@ import * as React from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router"
 import {
   ArrowUpRight,
-  ExternalLink,
   Images,
   ListTree,
   MessagesSquare,
-  WifiOff,
 } from "lucide-react"
 
-import { NewChatButton } from "@/components/agent/agent-workspace"
 import { chatPath } from "@/components/layout/chat-list"
 import { ReviewPanel } from "@/components/review/review-panel"
-import { TaskActions } from "@/components/run/task-actions"
+import { TaskHeader } from "@/components/run/task-header"
 import { AgentTrace, PhaseRail } from "@/components/run/trace"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { TaskSkeleton } from "@/components/layout/route-skeleton"
-import { Chip, MutedChip } from "@/components/ui/chip"
+import { MutedChip } from "@/components/ui/chip"
 import { TabPanel, Tabs } from "@/components/ui/tabs"
+import { isStopped } from "@/lib/pipeline"
+import { cn } from "@/lib/utils"
 import { useRunWorkspace } from "@/hooks/use-run-workspace"
-import { elapsed, relativeTime } from "@/lib/format"
-import { PHASE_LABELS, STATUS_LABELS, STATUS_TOKEN } from "@/lib/pipeline"
 import type { RunStatus } from "@/lib/types"
 
 type TaskTab = "trace" | "review"
@@ -72,13 +69,6 @@ export function RunDetailRoute() {
     }
   }, [urlTab, runId, navigate])
 
-  React.useEffect(() => {
-    if (tab || !status) return
-    setTab(defaultTab(status))
-  }, [tab, status])
-
-  const active: TaskTab = tab ?? "trace"
-
   const selectTab = React.useCallback(
     (next: TaskTab) => {
       setTab(next)
@@ -96,6 +86,28 @@ export function RunDetailRoute() {
     },
     [setParams],
   )
+
+  // The resolved default is written into the URL, not just into state. The
+  // shell reads `?tab=` to decide whether this screen scrolls or fits the
+  // viewport, and a tab that only existed in a component's head left the
+  // layout guessing - and a shared link pointing at a different tab than the
+  // one it was copied from.
+  // Layout effect, not effect: this decides whether the shell scrolls or
+  // fits, and running it after the browser has painted means painting one
+  // frame of the wrong layout first.
+  React.useLayoutEffect(() => {
+    if (tab || !status) return
+    selectTab(defaultTab(status))
+  }, [tab, status, selectTab])
+
+  // Derived, not awaited. Reading the default straight out of the status
+  // means the first paint is already the right tab; the effect above only
+  // has to catch the URL up.
+  const active: TaskTab = tab ?? (status ? defaultTab(status) : "trace")
+
+  // The review fits one screen; the trace is a transcript and scrolls. Both
+  // shapes exist in the same tree, switched here.
+  const fitted = active === "review"
 
 
   if (run.isLoading) {
@@ -120,81 +132,28 @@ export function RunDetailRoute() {
 
   const data = run.data
   const live = isLive
-  const tokens = data.token_usage ?? {}
-
   return (
-    <div className="space-y-6">
-      <header className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Chip tone={STATUS_TOKEN[data.status]} dot pulse={live}>
-            {STATUS_LABELS[data.status]}
-          </Chip>
-          <MutedChip>{PHASE_LABELS[data.phase] ?? data.phase}</MutedChip>
-          {data.rework_round > 0 && <MutedChip>Rework {data.rework_round}</MutedChip>}
-          {/* Only when the view has genuinely lost track of the run.
-              This used to key off the SSE connection with no `live` guard,
-              which meant two wrong things at once: every tunnelled session
-              showed it (Cloudflare buffers SSE, so the stream never opens
-              even though polling is fine), and a FINISHED task showed it
-              permanently - there is no stream to connect to once a run ends,
-              so `connected` stayed false forever on an immutable trace. */}
-          {stream.stale && (
-            <MutedChip
-              title="Could not reach the server for the latest trace; retrying."
-              style={{
-                background: "var(--phase-failed-soft)",
-                color: "var(--phase-failed-fg)",
-              }}
-            >
-              <WifiOff className="size-3" /> Reconnecting
-            </MutedChip>
-          )}
-        </div>
+    <div
+      className={
+        fitted
+          ? "flex min-h-0 flex-col gap-4 md:min-h-0 md:flex-1 md:gap-5"
+          : "space-y-8"
+      }
+    >
+      <TaskHeader data={data} live={live} stale={stream.stale} />
 
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">
-            {data.title || data.news.title || data.run_id}
-          </h1>
-          <div className="flex items-center gap-1.5">
-            {/* Several carousels can run at once, so starting another does not
-                cost you this one - it keeps working and stays in Tasks. */}
-            <NewChatButton />
-            <TaskActions runId={data.run_id} status={data.status} title={data.title} />
-          </div>
-        </div>
+      <PhaseRail phase={data.phase} live={live} stopped={isStopped(data.status)} />
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
-          <span className="font-mono">{data.run_id}</span>
-          <span>started {relativeTime(data.created_at)}</span>
-          <span>· {elapsed(data.created_at, live ? null : data.updated_at)}</span>
-          {data.requested_by && <span>· by {data.requested_by}</span>}
-          {data.news.source_url && (
-            <a
-              className="inline-flex items-center gap-1 text-[var(--link)] hover:underline"
-              href={data.news.source_url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              source <ExternalLink className="size-3" />
-            </a>
-          )}
-        </div>
-      </header>
+      {/* NO card for a stopped task.
 
-      <PhaseRail phase={data.phase} live={live} />
-
-      {data.status === "interrupted" && (
-        <Card className="flex flex-wrap items-center gap-4 p-4">
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">This task was interrupted</p>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              The service restarted while it was working. It can pick up from
-              the start of the “{PHASE_LABELS[data.phase] ?? data.phase}” phase.
-            </p>
-          </div>
-        </Card>
-      )}
-
+          The header already carries the whole fact: a coloured dot, the
+          status word (Interrupted / Failed / Cancelled) and the phase it
+          got to, with Resume sitting right beside them. A card underneath
+          saying the same thing in a paragraph is the second half of a
+          sentence nobody asked for - and on a task that was interrupted
+          while awaiting review it stacked with the approval card's own
+          version, so one task explained itself twice before the reader
+          got to the trace. */}
       {/* Only on the trace tab: on the review tab the decision card below is
           already saying this, louder. */}
       {data.pending_review && active === "trace" && (
@@ -212,7 +171,9 @@ export function RunDetailRoute() {
       )}
 
       {data.qa.issues.length > 0 && (
-        <Card className="p-4">
+        // Capped when fitted: a long QA list is worth reading, but not at the
+        // price of the slide it is about.
+        <Card className={cn("p-4", fitted && "md:max-h-28 md:shrink-0 md:overflow-y-auto")}>
           <p className="mb-2 text-sm font-semibold">QA found {data.qa.issues.length} issue(s)</p>
           <ul className="space-y-1 text-sm">
             {data.qa.issues.map((issue, i) => (
@@ -232,7 +193,11 @@ export function RunDetailRoute() {
         </Card>
       )}
 
-      <section className="space-y-4">
+      <section
+        className={
+          fitted ? "flex min-h-0 flex-col gap-3 md:flex-1" : "space-y-4"
+        }
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Tabs
             label="Task views"
@@ -257,15 +222,7 @@ export function RunDetailRoute() {
               },
             ]}
           />
-          <div className="flex items-center gap-3">
-            {active === "trace" && (
-              <div className="flex gap-2 text-xs text-[var(--muted-foreground)]">
-                {tokens.llm_calls != null && <span>{tokens.llm_calls} LLM calls</span>}
-                {tokens.image_calls != null && (
-                  <span>· {tokens.image_calls} images</span>
-                )}
-              </div>
-            )}
+          <div className="flex items-center gap-3 [&_a]:rounded-[10px]">
             {/* A link, not a tab.
                 
                 Trace and Review are two views OF this page; the conversation
@@ -294,8 +251,12 @@ export function RunDetailRoute() {
           />
         </TabPanel>
 
-        <TabPanel value="review" selected={active === "review"}>
-          <ReviewPanel run={data} />
+        <TabPanel
+          value="review"
+          selected={active === "review"}
+          className="min-h-0 md:flex-1"
+        >
+          <ReviewPanel run={data} fit />
         </TabPanel>
       </section>
     </div>

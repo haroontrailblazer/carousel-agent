@@ -594,9 +594,14 @@ async def run_events(
                 # History is numbered by position in ADK's transcript, while
                 # the bus numbers from our own run_events counter, and the two
                 # do not line up. Appending keeps the stream monotonic, which
-                # is what the client's cursor depends on. Nothing is lost by
-                # renumbering: ADK persists these events too, so a reconnect
-                # re-derives them from the transcript with stable positions.
+                # is what the SSE cursor depends on.
+                #
+                # The renumbering is for ORDER ONLY. Each frame also carries
+                # its own `id`, which survives it, and that is what the browser
+                # deduplicates on - because a renumbered seq is a guess about
+                # where the next poll will place the same event, and a wrong
+                # guess either hides a real frame or renders one twice (the
+                # terminal line was the reliable victim).
                 if event.kind == "gap":
                     yield _sse("run", event.to_dict(), seq=emitted)
                     continue

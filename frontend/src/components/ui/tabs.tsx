@@ -11,7 +11,7 @@ export type TabItem<T extends string> = {
 }
 
 /**
- * A segmented switch, styled as one pill with the selected segment raised.
+ * A compact segmented view switch.
  *
  * Tabs, not links. Switching between the trace and the review has to keep the
  * event stream open and the trace scrolled where it was; routing between two
@@ -50,8 +50,7 @@ export function Tabs<T extends string>({
       role="tablist"
       aria-label={label}
       className={cn(
-        "inline-flex items-center gap-1 rounded-[var(--radius-pill)] " +
-          "bg-[var(--muted)] p-1",
+        "inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--muted)] p-1",
         className,
       )}
       onKeyDown={(e) => {
@@ -81,8 +80,9 @@ export function Tabs<T extends string>({
             onClick={() => onChange(item.value)}
             className={cn(
               "inline-flex h-9 items-center gap-2 rounded-[var(--radius-pill)] px-4 " +
-                "text-sm font-medium transition-colors focus-visible:outline-none " +
-                "focus-visible:ring-2 focus-visible:ring-[var(--ring)] " +
+                "text-sm font-medium transition-[color,background-color,box-shadow,transform] duration-200 ease-out " +
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] " +
+                "active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100 " +
                 "[&_svg]:size-4 [&_svg]:shrink-0",
               selected
                 ? "bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-card)]"

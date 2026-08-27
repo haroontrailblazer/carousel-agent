@@ -93,3 +93,85 @@ class UpdateRunPhaseStatusTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class StoppedIsDecidedInOnePlaceTests(unittest.TestCase):
+    """"Did this task stop?" is one function, not one copy per screen.
+
+    ``failed || cancelled || interrupted`` was written out inline in three
+    different components. Nothing was broken by that on the day - the three
+    copies agreed - but the failure mode is the one duplication always has:
+    a fourth stopped status, or a rename, lands in one copy and the other two
+    keep answering the old question, silently and only on the screens nobody
+    reopened.
+
+    So this test is not about style. It is the drift alarm: the set is defined
+    once, in ``isStopped``, and the console asks it rather than re-deriving it.
+
+    A note on the near-miss it must NOT accept: ``!isLive`` is not the same
+    question. A task awaiting review is not live either, and reading one for
+    the other is exactly how "Nothing to approve yet" ended up on a carousel
+    that was ready to approve.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from pathlib import Path
+
+        cls.src = Path(__file__).resolve().parent.parent / "frontend" / "src"
+
+    def test_the_set_is_defined_once_and_names_all_three(self) -> None:
+        pipeline = (self.src / "lib" / "pipeline.ts").read_text(encoding="utf-8")
+        self.assertIn(
+            "export function isStopped(", pipeline,
+            "The one definition of 'this task stopped' is gone. Every screen "
+            "that asks the question is now asking a function that no longer "
+            "exists, or has quietly grown its own copy again.",
+        )
+        body = pipeline[pipeline.index("export function isStopped(") :]
+        body = body[: body.index("\n}")]
+        for status in ("failed", "cancelled", "interrupted"):
+            self.assertIn(
+                f'"{status}"', body,
+                f"isStopped no longer counts `{status}` as stopped. If that is "
+                "deliberate, every caller wants re-reading: the review card "
+                "withholds Approve on the strength of this answer.",
+            )
+
+    def test_no_screen_re_derives_it_inline(self) -> None:
+        import re
+
+        STOPPED = {"failed", "cancelled", "interrupted"}
+        ALL = "running|awaiting_review|done|failed|cancelled|interrupted"
+        # Two shapes, because those are the two ways it was actually written:
+        # a chain of `===` comparisons, and a literal array with `.includes`.
+        chain = re.compile(rf'(?:[\w.]+\s*===\s*"(?:{ALL})"\s*(?:\|\|\s*)?)+')
+        array = re.compile(rf'\[(?:\s*"(?:{ALL})"\s*,?\s*)+\]\s*\.includes')
+        quoted = re.compile(rf'"({ALL})"')
+
+        offenders: list[str] = []
+        for path in sorted(self.src.rglob("*.ts*")):
+            # The definition itself, and the union type it is derived from.
+            if path.name in ("pipeline.ts", "types.ts"):
+                continue
+            text = path.read_text(encoding="utf-8")
+            for pattern in (chain, array):
+                for match in pattern.finditer(text):
+                    # EXACTLY the stopped set, and nothing else. A deliberate
+                    # subset is a different question, not a stale copy - the
+                    # task actions ask two of them (`interrupted | cancelled |
+                    # awaiting_review` is "carry on from here"; `failed |
+                    # cancelled` is "give the failing part another go"), and
+                    # neither wants folding into isStopped.
+                    if set(quoted.findall(match.group(0))) == STOPPED:
+                        offenders.append(
+                            f"{path.relative_to(self.src)}: "
+                            f"{' '.join(match.group(0).split())}"
+                        )
+
+        self.assertEqual(
+            [], offenders,
+            "These re-derive the stopped set instead of calling isStopped() "
+            "from @/lib/pipeline. Import it - a copy here is a copy that will "
+            "not be updated when the set changes:\n  " + "\n  ".join(offenders),
+        )

@@ -20,6 +20,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const isAgentWorkspace = location.pathname === "/new"
 
+  // The review tab is laid out to fit one screen, so the shell has to stop
+  // being a scrolling document while it is open. Read from the URL rather
+  // than passed down: the task screen keeps `?tab=` in sync precisely so the
+  // open tab is a fact about the location - the one thing a layout and a
+  // shared link can both agree on.
+  const isFittedReview =
+    /^\/tasks\/[^/]+\/?$/.test(location.pathname) &&
+    new URLSearchParams(location.search).get("tab") === "review"
+
   // Once this screen has settled, quietly fetch the ones next to it in the
   // sidebar. Hover already covers a mouse; nothing covered a thumb, which is
   // where switching screens felt slowest.
@@ -89,7 +98,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           className={
             (isAgentWorkspace
               ? "agent-main"
-              : "mx-auto max-w-5xl px-4 pb-8 pt-14 md:px-8 md:py-8") +
+              : isFittedReview
+                ? "fitted-main mx-auto flex w-full max-w-5xl flex-col px-4 pb-8 pt-14 md:px-8 md:py-5"
+                : "mx-auto max-w-5xl px-4 pb-8 pt-14 md:px-8 md:py-8") +
             // The focus is a position, not a selection - it should not draw a
             // ring around the entire page.
             " outline-none"

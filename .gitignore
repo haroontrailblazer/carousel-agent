@@ -32,3 +32,6 @@ Thumbs.db
 # Built SPA (produced by 'npm run build' in frontend/)
 frontend/dist/
 frontend/node_modules/
+
+# Database and media backups - contain live data and encrypted credentials
+backups/

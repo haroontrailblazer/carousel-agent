@@ -314,7 +314,29 @@ async def store_feedback_and_distill(tool_context: ToolContext) -> dict:
         prior_records = await service.recent_feedback(
             limit=_RECENT_FEEDBACK_LIMIT
         )
-        await service.store_feedback(record)
+        # One lesson per verdict, not one per attempt at it.
+        #
+        # The Learner runs on every entry into the rework phase, and a run
+        # that is retried - a resume, a restart, a rework round - enters it
+        # again with the SAME verdict still in state. Each pass appended
+        # another identical row: a real run finished with four copies of one
+        # rejection. Theme detection skips same-run duplicates, so that part
+        # was safe, but the rows still crowd the shared history. Only the
+        # newest dozen reach K_RECENT_FEEDBACK, which is what the planner and
+        # phrasing read as "what reviewers keep asking for" - so one retried
+        # complaint evicted three other runs' lessons.
+        already_stored = any(
+            prior.run_id == run_id and prior.feedback == feedback_text
+            for prior in prior_records
+        )
+        if already_stored:
+            logger.info(
+                "Learner run %s: this exact lesson is already stored; not "
+                "adding another copy.",
+                run_id,
+            )
+        else:
+            await service.store_feedback(record)
     except Exception as exc:  # noqa: BLE001 - learning must never break the run
         logger.exception("Storing feedback failed for run %s.", run_id)
         result = {
@@ -327,7 +349,7 @@ async def store_feedback_and_distill(tool_context: ToolContext) -> dict:
 
     result = {
         "status": "stored",
-        "stored": True,
+        "stored": not already_stored,
         "targets": targets,
         "similar_count": 0,
         "rule_appended": False,

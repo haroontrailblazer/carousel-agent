@@ -527,7 +527,13 @@ export function AgentWorkspace({
  * the task you are looking at keeps working, keeps streaming, and stays in
  * Tasks. It just stops being the thing on screen.
  */
-export function NewChatButton({ className }: { className?: string }) {
+export function NewChatButton({
+  className,
+  showLabel = false,
+}: {
+  className?: string
+  showLabel?: boolean
+}) {
   const navigate = useNavigate()
   return (
     <button
@@ -540,8 +546,8 @@ export function NewChatButton({ className }: { className?: string }) {
       title="Start another carousel - this one keeps running"
     >
       <Plus className="size-4" />
-      <span className="hidden sm:inline">New chat</span>
-      <span className="sr-only sm:hidden">New chat</span>
+      <span className={showLabel ? "inline" : "hidden sm:inline"}>New chat</span>
+      {!showLabel && <span className="sr-only sm:hidden">New chat</span>}
     </button>
   )
 }

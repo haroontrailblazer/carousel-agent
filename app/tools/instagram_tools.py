@@ -156,6 +156,31 @@ def _create_child_container(
     return str(container_id)
 
 
+class PublishUncertain(Exception):
+    """The publish request failed in a way that cannot be undone or retried.
+
+    Every other failure in this module happens BEFORE anything is public, so
+    trying again is free. This one is different: the POST to
+    ``media_publish`` left the client, and a transport-level failure - a read
+    timeout, a dropped connection - says nothing about whether Instagram
+    accepted it. The carousel may be live.
+
+    Retrying is the one thing that must not happen, because the retry builds
+    fresh containers and publishes a SECOND identical carousel to a real
+    account. A missed post is recoverable and visible; a duplicate is neither.
+
+    Carries ``creation_id`` so an operator can reconcile against the account.
+    """
+
+    def __init__(self, creation_id: str, cause: str) -> None:
+        super().__init__(
+            f"The carousel was sent to Instagram but the reply was lost "
+            f"({cause}). It MAY already be live - check the account before "
+            f"doing anything else. Container id: {creation_id}"
+        )
+        self.creation_id = creation_id
+
+
 class PublishAborted(Exception):
     """The caller withdrew consent part-way through a publish.
 
@@ -321,15 +346,24 @@ def publish_carousel(
         # (4) Publish. The last checkpoint - after this the post is live and
         # no amount of stopping takes it back.
         _still_wanted(should_continue)
-        publish_payload = _graph_request(
-            client,
-            "POST",
-            f"/{settings.ig_user_id}/media_publish",
-            data={
-                "creation_id": parent_id,
-                "access_token": settings.ig_access_token,
-            },
-        )
+        try:
+            publish_payload = _graph_request(
+                client,
+                "POST",
+                f"/{settings.ig_user_id}/media_publish",
+                data={
+                    "creation_id": parent_id,
+                    "access_token": settings.ig_access_token,
+                },
+            )
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            # The request left; the answer did not come back. Whether the
+            # carousel is live is genuinely unknown from here, and nothing in
+            # the Graph API lets us ask "did creation_id already publish?"
+            # cheaply. So this is raised as its own type, which the publisher
+            # agent is told never to retry - a duplicate post cannot be taken
+            # back, a missing one can be published again on purpose.
+            raise PublishUncertain(str(parent_id), type(exc).__name__) from exc
         media_id = publish_payload.get("id")
         if not media_id:
             raise RuntimeError(

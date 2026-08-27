@@ -312,9 +312,18 @@ async def start_run(
             # queued and someone could pick it later, paying twice for one
             # carousel. Best effort: most pasted links are not in the queue.
             try:
-                await db.claim_news_by_url_hash(db.url_hash(url.strip()))
+                claimed = await db.claim_news_by_url_hash(db.url_hash(url.strip()))
             except Exception as exc:  # pragma: no cover - bookkeeping only
                 logger.debug("Could not claim a queued item for %s: %s", url, exc)
+                claimed = None
+            if claimed:
+                # Record the QUEUE ROW's id, not the synthetic "url-<hash>"
+                # one minted by fetch_url_item. _close_news_item closes the row
+                # named by runs.news_id, so recording the synthetic id claimed
+                # a story and then had nothing to close - leaving it stuck at
+                # 'processing' exactly as if it had never been claimed.
+                news = dict(news or {})
+                news["id"] = str(claimed)
         elif source == "topic":
             cleaned = (topic or "").strip()
             if len(cleaned) < 3:
@@ -367,6 +376,25 @@ async def start_run(
     return StartedRun(run_id=run_id, news_id=news_id, title=title)
 
 
+def _forget_task(run_id: str, task: "asyncio.Task[None]"):
+    """Retract a task's registration - but only if it is still the one there.
+
+    ``_run_tasks`` is keyed by run id, and a run can legitimately have a NEW
+    task registered while the previous one is still unwinding: a cancelled run
+    that is resumed straight away, or a timeout whose handler is still writing
+    the ending. An unconditional ``pop(run_id)`` in the old task's callback
+    then deletes the NEW task's entry - which drops the only strong reference
+    to a running coroutine (asyncio keeps just a weak one, so it can be
+    collected mid-run) and leaves Stop unable to find it.
+    """
+
+    def _done(finished: "asyncio.Task[None]") -> None:
+        if _run_tasks.get(run_id) is finished:
+            _run_tasks.pop(run_id, None)
+
+    return _done
+
+
 def spawn_run(run_id: str, *, runner: Any, first_message: str) -> "asyncio.Task[None]":
     """Drive a run in the background, holding a strong reference to the task."""
     from google.genai import types
@@ -376,7 +404,7 @@ def spawn_run(run_id: str, *, runner: Any, first_message: str) -> "asyncio.Task[
         _drive_run(run_id, runner, message), name=f"run-{run_id}"
     )
     _run_tasks[run_id] = task
-    task.add_done_callback(lambda _t: _run_tasks.pop(run_id, None))
+    task.add_done_callback(_forget_task(run_id, task))
     return task
 
 
@@ -445,6 +473,16 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
     # Everything this task does from here on is attributed to this run,
     # including image calls made several layers down inside a worker thread.
     observability.bind_run(run_id)
+    if cancellation.is_requested(run_id):
+        # Stopped while it was still being set up. Clearing the flag here
+        # unconditionally threw that away and the run carried on as if nobody
+        # had asked - so honour it first, then clear.
+        logger.info("Run %s was stopped before it started; not driving it.", run_id)
+        cancellation.clear(run_id)
+        await _finish_badly(
+            run_id, db.RUN_STATUS_CANCELLED, "Stopped before it started."
+        )
+        return
     # A stop belongs to the leg it stopped. Leaving the flag up would make a
     # deliberate Stop permanent: every later resume would refuse to publish.
     cancellation.clear(run_id)
@@ -512,6 +550,12 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
             run_id,
             RUN_TIMEOUT_S,
         )
+        # The same flag Stop raises. Abandoning a run because it hung must not
+        # leave a worker thread free to finish publishing it - the timeout
+        # cancels the task, but a thread inside to_thread never notices, so
+        # without this the carousel could still go live hours after the run was
+        # given up on.
+        cancellation.request(run_id)
         await _finish_badly(
             run_id,
             db.RUN_STATUS_INTERRUPTED,
@@ -519,6 +563,11 @@ async def _drive_run(run_id: str, runner: Any, message: Any) -> None:
             "tool or model call never returned. Resume to pick it up.",
         )
     except asyncio.CancelledError:
+        # Reached from Stop (which has already raised the flag) and from the
+        # shutdown drain (which has not). Raising it again is free, and it is
+        # what stops a half-finished publish completing after the process has
+        # decided to give the run up.
+        cancellation.request(run_id)
         await _finish_badly(run_id, db.RUN_STATUS_CANCELLED, "Run cancelled.")
         raise
     except Exception as exc:
@@ -573,19 +622,30 @@ async def _finish_badly(run_id: str, status: str, text: str) -> None:
         observability.pop_image_usage(run_id)
     except Exception:  # pragma: no cover - accounting must never block an ending
         pass
-    try:
-        await asyncio.shield(db.set_run_status(run_id, status))
-        seq = await asyncio.shield(db.max_run_seq(run_id))
-        await asyncio.shield(
-            record_event(
-                run_id, seq + 1, KIND_ERROR, text=text, data={"status": status}
-            )
+
+    async def _record() -> None:
+        await db.set_run_status(run_id, status)
+        seq = await db.max_run_seq(run_id)
+        await record_event(
+            run_id, seq + 1, KIND_ERROR, text=text, data={"status": status}
         )
+
+    try:
+        # ONE shield around the whole ending, not one per statement.
+        #
+        # Shielding each await individually protects only the await itself: a
+        # cancellation arriving in the gap BETWEEN two of them still lands, so
+        # the status could be written while the terminal event that explains
+        # it was not - a run marked cancelled above a trace that stops dead
+        # with no reason given. Shielding the coroutine protects the sequence.
+        await asyncio.shield(_record())
     except Exception as exc:  # pragma: no cover - shutdown / DB down
         logger.warning("Could not record the end of run %s: %s", run_id, exc)
 
 
-async def resume_interrupted_run(run_id: str, *, requested_by: str = "") -> bool:
+async def resume_interrupted_run(
+    run_id: str, *, requested_by: str = "", slot_held: bool = False
+) -> bool:
     """Re-enter an interrupted run at whatever phase it stopped in.
 
     This works because the orchestrator is a re-entrant phase machine: it reads
@@ -606,7 +666,14 @@ async def resume_interrupted_run(run_id: str, *, requested_by: str = "") -> bool
 
     # Not a new carousel: this one's images and reasoning are already spent,
     # so the daily cap does not apply. Only the concurrency cap does.
-    await _check_limits(run_id, new_run=False)
+    #
+    # ``slot_held`` means the caller already reserved for this run and is
+    # keeping it across work of its own (restart_run rewinds the session
+    # first). Re-checking there would be worse than redundant: the slot has to
+    # be released to be re-taken, and in that gap another request can claim it
+    # - so the refusal would arrive AFTER the session had been rewound.
+    if not slot_held:
+        await _check_limits(run_id, new_run=False)
 
     try:
         from app.agent import build_runner
@@ -633,7 +700,7 @@ async def resume_interrupted_run(run_id: str, *, requested_by: str = "") -> bool
         _drive_run(run_id, runner, message), name=f"resume-run-{run_id}"
     )
     _run_tasks[run_id] = task
-    task.add_done_callback(lambda _t: _run_tasks.pop(run_id, None))
+    task.add_done_callback(_forget_task(run_id, task))
     _release_slot(run_id)  # the task holds the slot now
     return True
 
@@ -675,10 +742,11 @@ async def restart_run(run_id: str, *, requested_by: str = "") -> bool:
     # Resume would re-enter at the rewound phase instead of where the work
     # actually stopped. resume_interrupted_run checks again, which is fine -
     # the check is cheap and idempotent.
+    # Reserved here and HELD across the rewind below, then handed to
+    # resume_interrupted_run. Releasing it in between opened a window where
+    # another request could take the slot, so the refusal landed after the
+    # rework budget had already been reset and the phase moved.
     await _check_limits(run_id, new_run=False)
-    # restart_run only checks; resume_interrupted_run below reserves again and
-    # owns the release, so hand this one back rather than holding two.
-    _release_slot(run_id)
 
     from app.review.resume import PIPELINE_USER_ID
 
@@ -687,16 +755,26 @@ async def restart_run(run_id: str, *, requested_by: str = "") -> bool:
     phase = str(run.get("phase") or "") or PHASE_GENERATE
     if phase == PHASE_DONE:
         phase = PHASE_REWORK
-    await db.rewind_session_for_restart(
-        run_id, settings.app_name, PIPELINE_USER_ID, phase
-    )
+    try:
+        await db.rewind_session_for_restart(
+            run_id, settings.app_name, PIPELINE_USER_ID, phase
+        )
+    except BaseException:
+        _release_slot(run_id)
+        raise
     logger.info(
         "Restarting run %s in place at phase '%s' (rework budget reset) for %s.",
         run_id,
         phase,
         requested_by or "unknown",
     )
-    return await resume_interrupted_run(run_id, requested_by=requested_by)
+    try:
+        return await resume_interrupted_run(
+            run_id, requested_by=requested_by, slot_held=True
+        )
+    except BaseException:
+        _release_slot(run_id)
+        raise
 
 async def cancel_run(run_id: str) -> bool:
     """Stop whatever this process is running for ``run_id``.
@@ -728,6 +806,15 @@ async def cancel_run(run_id: str) -> bool:
 
     task = _run_tasks.get(run_id)
     stopped = False
+    if task is None and run_id in _reserved:
+        # Reserved but not yet driven: start_run has taken a slot and is still
+        # setting the run up (a session write, three DB writes, and for a
+        # pasted URL a thirty-second fetch). There is no task to cancel, but
+        # the flag above is now raised and _drive_run checks it before doing
+        # any work - so Stop is honoured rather than answering "that run is
+        # not currently running" about a run the console is showing.
+        logger.info("Stop requested for %s while it was still starting.", run_id)
+        return True
     if task is not None and not task.done():
         # Cancel once. A second task.cancel() re-raises CancelledError inside
         # the handler that is busy recording the ending, which is how a

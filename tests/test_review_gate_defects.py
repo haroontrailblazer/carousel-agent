@@ -172,58 +172,95 @@ class DecideWithoutPauseReportsTheTruthTests(unittest.TestCase):
 
 
 class PauseOnlyWhenItIsAnswerableTests(unittest.TestCase):
-    """Never pause on a call nobody can address.
+    """Never leave a pause nobody can answer looking healthy.
 
-    ``await_human_review`` returns ``None`` - which is exactly what makes ADK
-    end the invocation paused - even when ``db.save_pending_review`` raised
-    and no ``pending_reviews`` row exists. Without that row the review API
-    cannot build a ``FunctionResponse`` addressed to this call, so no verdict
-    from any surface can ever resume the run.
+    This class used to assert that ``await_human_review`` REFUSES to pause by
+    returning an error dict. That premise was wrong, and a real run
+    (``run-35caff54b6eb``) proved it: google-adk reads
+    ``long_running_tool_ids`` off the model response that CALLS the tool, so
+    the invocation is already ending before the tool body runs. Returning a
+    value cannot call it back - it only adds a contradictory "the run did not
+    pause" line to a trace whose next entry is "waiting for a human".
 
-    It is worse than a plain stall: the orchestrator stamps
-    ``K_REVIEW_NOTICE_FAILED=False`` on the pause (``orchestrator.py:566``),
-    which disables the one fallback built for "the carousel is ready but the
-    reviewer could not be told" (``verdict.py:230``). Every verdict submit
-    answers ``not_pending``, and startup reconcile skips the run because
-    ``ACTIVE_PHASES`` excludes ``review``.
+    What the tool can do is record whether the pause is answerable. Without a
+    ``pending_reviews`` row no surface can address this call, so
+    ``K_REVIEW_NOTICE_FAILED`` goes up - which is what routes the console to
+    ``_decide_without_pause``, the one path that resolves a run with no live
+    function call.
+
+    The full mechanism, and the two defects that composed with it, are pinned
+    in ``tests/test_review_pause_state.py``.
     """
 
-    def test_a_failed_pending_save_does_not_pause_the_run(self) -> None:
-        class _Ctx:
-            state = {"run_id": RUN_ID}
-            session = type("S", (), {"id": RUN_ID})()
-            function_call_id = "call-abc"
+    def _ctx(self, **state):
+        base = {"run_id": RUN_ID, "review_round": 1, "temp:review_sent_round": 1}
+        base.update(state)
+        return type(
+            "Ctx",
+            (),
+            {
+                "state": base,
+                "session": type("S", (), {"id": RUN_ID})(),
+                "function_call_id": "call-abc",
+            },
+        )()
 
+    def test_an_unanswerable_pause_is_flagged_for_the_console(self) -> None:
+        from app.state import K_REVIEW_NOTICE_FAILED
+
+        ctx = self._ctx()
         with patch.object(
             db,
             "save_pending_review",
             AsyncMock(side_effect=ConnectionError("pooler dropped it")),
-        ):
-            result = asyncio.run(dispatcher_mod.await_human_review(_Ctx()))
+        ), patch.object(db, "clear_pending_review", AsyncMock(return_value=None)):
+            asyncio.run(dispatcher_mod.await_human_review(ctx))
 
-        self.assertIsNotNone(
-            result,
-            "await_human_review swallowed the save failure and still "
-            "returned None. google-adk builds no function-response event for "
-            "a falsy long-running result, so the invocation ends PAUSED on a "
-            "call that has no pending_reviews row to answer it - the run is "
-            "stuck at phase 'review' forever. Return a non-falsy error dict "
-            "(which suppresses the pause) or retry the save before giving up.",
+        self.assertTrue(
+            ctx.state.get(K_REVIEW_NOTICE_FAILED),
+            "The pause happened and cannot be answered, but nothing recorded "
+            "that - so the console shows a healthy awaiting-review task whose "
+            "every verdict submit will answer 'not pending'.",
         )
 
-    def test_the_pause_is_not_reached_when_the_send_failed(self) -> None:
-        """The 'only pause if the mail went out' rule is prose, not code."""
-        source = inspect.getsource(dispatcher_mod.await_human_review)
+    def test_a_stale_pending_row_is_dropped_when_the_pause_is_unanswerable(
+        self,
+    ) -> None:
+        """Otherwise a verdict resumes against a dead function call."""
+        cleared: list[str] = []
+
+        async def fake_clear(run_id):
+            cleared.append(run_id)
+
+        ctx = self._ctx()
+        with patch.object(
+            db,
+            "save_pending_review",
+            AsyncMock(side_effect=ConnectionError("pooler dropped it")),
+        ), patch.object(db, "clear_pending_review", fake_clear):
+            asyncio.run(dispatcher_mod.await_human_review(ctx))
+
+        self.assertEqual(
+            cleared,
+            [RUN_ID],
+            "the previous round's pending row survives, so submit_verdict "
+            "takes the claim path and resumes against a call id that no "
+            "longer exists",
+        )
+
+    def test_the_pause_is_flagged_when_nothing_was_sent(self) -> None:
+        """The 'only pause if the mail went out' rule, enforced in code."""
+        from app.state import K_REVIEW_NOTICE_FAILED
+
+        # No temp:review_sent_round stamp for the current round.
+        ctx = self._ctx(**{"temp:review_sent_round": 0})
+        with patch.object(db, "save_pending_review", AsyncMock(return_value=None)),              patch.object(db, "clear_pending_review", AsyncMock(return_value=None)):
+            asyncio.run(dispatcher_mod.await_human_review(ctx))
+
         self.assertTrue(
-            "sent" in source or "review_sent" in source,
-            "Nothing in await_human_review checks whether "
-            "send_review_request actually succeeded - the guard exists only "
-            "as an instruction to a small utility model, on a round-2 prompt "
-            "that simultaneously insists 'a NEW review request is required "
-            "and expected'. When the model pauses after a failed send, a "
-            "pending row is written and the run waits for a human who was "
-            "never told anything. Have send_review_request stamp a temp: "
-            "flag and have this tool refuse to pause without it.",
+            ctx.state.get(K_REVIEW_NOTICE_FAILED),
+            "the run paused waiting for a human nobody notified, and nothing "
+            "recorded that",
         )
 
 

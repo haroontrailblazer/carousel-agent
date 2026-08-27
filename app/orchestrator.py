@@ -593,17 +593,64 @@ class CarouselOrchestrator(BaseAgent):
                 yield event
             if holder["paused"]:
                 # Mail sent; invocation ends here. K_PHASE stays "review" so
-                # the resume re-enters this handler. Clear any earlier
-                # notification failure - it is no longer true.
+                # the resume re-enters this handler.
+                #
+                # The flag is READ, not written. await_human_review has just
+                # decided whether this pause can actually be answered - it
+                # cannot be, if the reviewers were never told or the pending
+                # call could not be persisted - and hard-coding False here
+                # overwrote that verdict with an optimistic one, hiding a
+                # stranded run behind a healthy-looking status.
+                unanswerable = bool(state.get(K_REVIEW_NOTICE_FAILED))
+                # Carried on THIS event's delta, which is the only way it
+                # reaches the database.
+                #
+                # await_human_review sets the flag on tool_context.state, and
+                # that write is visible here because ADK state writes mutate
+                # the live session dict. But a long-running tool returning a
+                # falsy result builds NO function-response event
+                # (flows/llm_flows/functions.py), so its state_delta never
+                # becomes an event and append_event never persists it. The
+                # value existed only in this process's memory - which is
+                # exactly where the console cannot see it, because
+                # _halted_awaiting_review reads sessions.state out of
+                # Postgres.
+                #
+                # Both directions matter. True is what routes a stranded run
+                # to the decide-without-pause fallback; False is what clears a
+                # True persisted by an earlier halt, so a run whose re-notice
+                # succeeded stops offering that fallback while live Approve
+                # buttons are in someone's Telegram.
                 yield self._progress(
                     ctx,
-                    "[review] review request sent; waiting for a human.",
-                    {K_REVIEW_NOTICE_FAILED: False},
+                    "[review] the carousel is ready but the pause could not "
+                    "be registered - decide it in the console."
+                    if unanswerable
+                    else "[review] review request sent; waiting for a human.",
+                    {K_REVIEW_NOTICE_FAILED: unanswerable},
+                )
+                # Mirror the phase even though it did not CHANGE.
+                #
+                # A fresh run reached review through _phase_qa's transition,
+                # which recorded it. A run RESUMED at review skips that
+                # entirely, so the row kept status='running' from
+                # resume_interrupted_run - and _drive_run's fallback, which
+                # exists to respect a status the orchestrator already moved
+                # off running, found nothing to respect and wrote
+                # 'interrupted' over a run that was waiting for a human. The
+                # console then offered Resume, which re-entered review, paused,
+                # and was recorded interrupted again.
+                #
+                # This also carries K_REVIEW_ROUND across, so the console stops
+                # showing round 1 while the pipeline is on round 2.
+                await self._record_phase_quietly(
+                    state, PHASE_REVIEW, status=db.RUN_STATUS_AWAITING_REVIEW
                 )
                 logger.info(
-                    "[%s] paused for human review (run %s).",
+                    "[%s] paused for human review (run %s, answerable=%s).",
                     self.name,
                     state.get(K_RUN_ID),
+                    not unanswerable,
                 )
                 return
             verdict = _safe_model(state, K_VERDICT, Verdict)

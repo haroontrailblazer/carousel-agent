@@ -52,6 +52,16 @@ export type TraceState = {
   summary: TraceSummary | null
 }
 
+/**
+ * What makes two frames the same frame.
+ *
+ * Falls back to the position for a frame from a server that predates `id`,
+ * which is no worse than the behaviour it replaces.
+ */
+function frameKey(event: RunEvent): string {
+  return event.id ?? `seq:${event.seq}`
+}
+
 export function useRunStream(
   runId: string | null,
   {
@@ -125,7 +135,9 @@ export function useRunStream(
         return
       }
       setTail((current) =>
-        current.some((e) => e.seq === event.seq) ? current : [...current, event],
+        current.some((e) => frameKey(e) === frameKey(event))
+          ? current
+          : [...current, event],
       )
       const phase = event.data?.phase
       if (typeof phase === "string") onPhaseRef.current?.(phase)
@@ -141,10 +153,15 @@ export function useRunStream(
     const base = history.data?.items ?? []
     if (!tail.length) return base
     // The stream renumbers live frames onto the end of the replayed history,
-    // and a poll may have already picked the same events up from ADK. Dedupe
-    // on sequence so a frame never appears twice.
-    const seen = new Set(base.map((e) => e.seq))
-    return [...base, ...tail.filter((e) => !seen.has(e.seq))]
+    // and a poll may have already picked the same events up from ADK.
+    //
+    // Dedupe on IDENTITY, not position. The renumbered seq is a guess about
+    // where the next poll will place the same event, and the two sources
+    // count different things - so a wrong guess either filtered out a real
+    // frame (the terminal "Waiting for your review" line was the reliable
+    // casualty) or left the same line rendered twice.
+    const seen = new Set(base.map(frameKey))
+    return [...base, ...tail.filter((e) => !seen.has(frameKey(e)))]
   }, [history.data, tail])
 
   const phase = React.useMemo(() => {

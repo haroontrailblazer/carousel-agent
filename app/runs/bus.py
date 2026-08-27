@@ -58,7 +58,14 @@ class RunEvent:
     created_at: Optional[str] = None
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        # `id` is what the browser dedupes on. `seq` is a POSITION and the SSE
+        # endpoint renumbers it onto the end of whatever history it replayed,
+        # so two frames can share one seq (and one frame can appear under two)
+        # depending on which source the client last read. The identity below
+        # comes from the run_events counter, which is the same value the
+        # merged history uses for these rows - so a live frame and its
+        # persisted twin are recognisably the same thing.
+        return {**asdict(self), "id": f"evt:{self.seq}"}
 
 
 class RunBus:
