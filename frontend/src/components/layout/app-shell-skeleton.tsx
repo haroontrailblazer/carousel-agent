@@ -1,4 +1,8 @@
 import { BrandLogo } from "@/components/layout/brand-logo"
+import {
+  RouteSkeleton,
+  isFullHeightRoute,
+} from "@/components/layout/route-skeleton"
 import { Skeleton } from "@/components/ui/skeleton"
 
 /**
@@ -21,8 +25,27 @@ import { Skeleton } from "@/components/ui/skeleton"
  * `hadSession` in use-auth). A first-time visitor gets the spinner: showing
  * them a console they are about to be redirected away from would be a worse
  * lie than showing them nothing.
+ *
+ * The middle of it is the placeholder for THE SCREEN BEING OPENED, not a
+ * generic one. It used to draw a task list whatever the URL said, so
+ * reloading the browser on a chat showed a list of cards, which then vanished
+ * and was replaced by the chat's own placeholder - the app appeared to load
+ * the wrong page first. `RouteSkeleton` is the same component the screen
+ * itself renders while its data lands, so now the shape goes up once and
+ * stays until the real thing replaces it.
  */
-export function AppShellSkeleton() {
+export function AppShellSkeleton({
+  pathname = "/",
+  search = "",
+}: {
+  pathname?: string
+  search?: string
+}) {
+  // The chat and the composer own the viewport; every other screen sits in a
+  // padded column. Getting this wrong is not cosmetic - it is the difference
+  // between the composer being centred and it jumping down the page when the
+  // real screen mounts.
+  const full = isFullHeightRoute(pathname)
   return (
     <div className="min-h-dvh bg-[var(--background)]">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[17rem] border-r border-[var(--border)] bg-[var(--card)] md:block">
@@ -55,22 +78,16 @@ export function AppShellSkeleton() {
       </aside>
 
       <div className="md:pl-[17rem]">
-        <main className="mx-auto max-w-5xl px-4 pb-8 pt-14 md:px-8 md:py-8">
-          {/* Announced rather than drawn: the shapes below are decoration, and
-              a screen reader should hear what is happening instead of a list
-              of empty boxes. */}
-          <p className="sr-only" role="status">
-            Loading the console
-          </p>
-          <Skeleton className="h-7 w-40" />
-          <div className="mt-5 space-y-2">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton
-                key={i}
-                className="h-20 rounded-[var(--radius)] border border-[var(--border)]"
-              />
-            ))}
-          </div>
+        {/* The same two wrappers `AppShell` picks between, so the screen does
+            not change container the moment it mounts. */}
+        <main
+          className={
+            full
+              ? "agent-main"
+              : "mx-auto max-w-5xl px-4 pb-8 pt-14 md:px-8 md:py-8"
+          }
+        >
+          <RouteSkeleton pathname={pathname} search={search} />
         </main>
       </div>
     </div>

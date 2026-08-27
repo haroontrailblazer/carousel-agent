@@ -30,6 +30,7 @@ import { toast } from "sonner"
 import { AgentAssetRail, AgentAssetStrip } from "@/components/agent/agent-assets"
 import { AgentComposer, type ComposerState } from "@/components/agent/agent-composer"
 import { AgentConversation } from "@/components/agent/agent-conversation"
+import { ChatSkeleton } from "@/components/layout/route-skeleton"
 import { Skeleton } from "@/components/ui/skeleton"
 import { InlineEdit } from "@/components/ui/inline-edit"
 import { useRenameRun } from "@/hooks/use-rename-run"
@@ -169,44 +170,6 @@ function ChatTitle({
         <span className="sr-only">Rename this chat</span>
       </button>
     </h1>
-  )
-}
-
-/**
- * The chat, before any of it has arrived.
- *
- * Shaped like what replaces it - a prompt bubble on the right, then the
- * agent's status line, its thinking panel and the first steps under it - so
- * the page does not rearrange itself the moment the data lands.
- *
- * It deliberately contains NO text. The old loading state said "Connecting to
- * the task transcript…" above a heading that read "New carousel", and both
- * were guesses: the task is already connected as far as the user is concerned
- * (they clicked a chat that exists), and its name is whatever the server is
- * about to say, not "New carousel". Showing a wrong title and then correcting
- * it is worse than showing no title at all, because the wrong one is
- * indistinguishable from a real answer for as long as it is up.
- */
-function ChatSkeleton() {
-  return (
-    <div className="space-y-6" aria-hidden>
-      <div className="flex justify-end gap-3">
-        <Skeleton className="h-12 w-[62%] rounded-[16px]" />
-        <Skeleton className="size-8 shrink-0 rounded-full" />
-      </div>
-
-      <div className="space-y-5">
-        <Skeleton className="h-4 w-56" />
-        <Skeleton className="h-40 rounded-[14px]" />
-        <div className="flex flex-wrap gap-2">
-          <Skeleton className="h-7 w-32 rounded-full" />
-          <Skeleton className="h-7 w-28 rounded-full" />
-          <Skeleton className="h-7 w-36 rounded-full" />
-        </div>
-        <Skeleton className="h-4 w-[70%]" />
-        <Skeleton className="h-4 w-[54%]" />
-      </div>
-    </div>
   )
 }
 

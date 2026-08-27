@@ -52,14 +52,33 @@ function RootLayout() {
  * nearest ancestor's HydrateFallback while that happens; without one it
  * renders null, and a white page is indistinguishable from a broken app.
  *
- * The same mark and spinner as the signed-in loading state on purpose - the
- * boot sequence should look like one continuous wait, not two different ones.
+ * One continuous wait, not two different ones. A browser that has been signed
+ * in here before goes straight to the console laid out for THE SCREEN IN THE
+ * URL, and stays in that shape through session confirmation and the chunk
+ * download until the real screen replaces it. Before, this was a spinner, then
+ * a task list, then the screen's own placeholder - three shapes for one wait.
+ *
+ * `window.location` rather than `useLocation`: a HydrateFallback renders
+ * before the router has committed a location, and the address bar is already
+ * correct at that point anyway.
+ *
+ * A first-time visitor still gets the spinner, for the same reason
+ * `RequireAuth` gives them one - a console they are about to be redirected
+ * away from is a worse thing to show them than nothing.
  */
 function BootSplash() {
+  if (!hadSession()) {
+    return (
+      <div className="grid min-h-dvh place-items-center">
+        <Spinner label="Loading" />
+      </div>
+    )
+  }
   return (
-    <div className="grid min-h-dvh place-items-center">
-      <Spinner label="Loading" />
-    </div>
+    <AppShellSkeleton
+      pathname={window.location.pathname}
+      search={window.location.search}
+    />
   )
 }
 
@@ -87,7 +106,7 @@ function RequireAuth() {
     // they are about to be redirected away from is a worse thing to show them
     // than nothing.
     return hadSession() ? (
-      <AppShellSkeleton />
+      <AppShellSkeleton pathname={location.pathname} search={location.search} />
     ) : (
       <div className="grid min-h-dvh place-items-center">
         <Spinner label="Loading" />
