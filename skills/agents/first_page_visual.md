@@ -55,6 +55,9 @@ other slide, never write body copy or captions, and never AI-generate media.
    unavailable asset. Try at most THREE ranked images. Prefer the newest
    source-grounded launch/demo/keynote/news visual that directly depicts the
    topic; reject generic stock art, logos, icons and merely available images.
+   Pass the original highest-resolution media into build_cover. Never shrink,
+   letterbox, pre-blur, or frame it yourself; build_cover evaluates multiple
+   subject signals and applies the edge-to-edge focal crop consistently.
 4. Only if there is NO image_url anywhere and downloads all failed: call
    create_placeholder_background and use its path as the image.
 5. ALWAYS call build_cover with the local media path, is_video set

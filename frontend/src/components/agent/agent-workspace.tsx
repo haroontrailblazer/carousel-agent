@@ -34,6 +34,7 @@ import { ChatSkeleton } from "@/components/layout/route-skeleton"
 import { Skeleton } from "@/components/ui/skeleton"
 import { InlineEdit } from "@/components/ui/inline-edit"
 import { useRenameRun } from "@/hooks/use-rename-run"
+import { ChatScrollContext, useChatTail } from "@/hooks/use-chat-tail"
 import { useRailPanel } from "@/hooks/use-rail-panel"
 import { invalidateRun, type RunWorkspace } from "@/hooks/use-run-workspace"
 import { ApiError, post } from "@/lib/api"
@@ -71,12 +72,40 @@ export function activityLabel(run: RunDetail, events: RunEvent[]): string {
  */
 export function composerStateFor(
   workspace: RunWorkspace,
-  starting: boolean,
+  /** The transcript is still a skeleton - see `loading` in the composer. */
+  booting: boolean,
+  /** This tab created this run seconds ago, so it is running by construction. */
+  justStarted = false,
 ): ComposerState {
   const { run, isLive } = workspace
-  if (starting || run.isLoading) return "starting"
+  if (run.isError) return "failed"
+
+  // A run this tab just created does not need the server to confirm that it
+  // is running - we made it. The seconds before the first response are
+  // exactly when someone realises they typed the wrong thing, so Stop is live
+  // from the first frame, which is what it was always meant to be. What it
+  // was NOT meant to cover is the case below.
+  if (justStarted && (run.isLoading || !run.data)) return "starting"
+
+  // Nothing is known yet, so nothing is offered. `loading`, NOT `starting`:
+  // both mean "a request is in flight", but they are opposite situations.
+  // `starting` is a run this tab just launched, and its Stop button is the
+  // whole point of it. This is someone opening a chat that may well have
+  // finished last week, and offering to stop that is offering an action which
+  // cannot apply - the old code mapped one onto the other, so merely opening
+  // a finished chat put a live Stop on screen for as long as the page loaded.
+  if (run.isLoading || !run.data) return "loading"
+
+  // Checked BEFORE `booting`, deliberately. The status arrives well before the
+  // transcript does, and a task we now know is running is one the agents are
+  // already spending money on - which is exactly the moment someone realises
+  // they typed the wrong thing. Stop is live from here even though the chat
+  // behind it is still a skeleton.
   if (isLive) return "running"
-  if (run.isError || !run.data) return "failed"
+
+  // Known, and not running. There is nothing to stop and nothing useful to
+  // send until the transcript says which of the finished states this is.
+  if (booting) return "loading"
   // `pending_review`, not the status: it is the authoritative "is a decision
   // still wanted?" flag, and it is NOT monotonic - a failed resume restores
   // the pending row. This is the only state where a typed message has a
@@ -177,6 +206,7 @@ export function AgentWorkspace({
   runId,
   workspace,
   prompt,
+  justStarted = false,
   variant = "standalone",
   onReset,
 }: {
@@ -184,6 +214,8 @@ export function AgentWorkspace({
   workspace: RunWorkspace
   /** What the person typed, when this browser is the one that typed it. */
   prompt?: string
+  /** This tab started this run, so Stop is live before the first response. */
+  justStarted?: boolean
   variant?: "standalone" | "embedded"
   /** Clear the workspace and go back to an empty composer. */
   onReset?: () => void
@@ -213,7 +245,26 @@ export function AgentWorkspace({
     },
   })
 
-  const state = composerStateFor(workspace, false)
+  /**
+   * Nothing real goes on screen until everything real is here.
+   *
+   * "Everything" is the run AND its trace. The run alone gives the title and
+   * the status, but the body of the page is the transcript - so rendering as
+   * soon as the run lands produced a titled, empty chat that then filled in,
+   * which is two loading states in a row rather than one.
+   *
+   * Artifacts are deliberately NOT waited on. That endpoint 404s for most of a
+   * run's life by design - the carousel is only assembled at the end - so
+   * waiting for it would hold the skeleton up for fifteen minutes on a task
+   * that is working perfectly.
+   */
+  const booting = !run.isError && (!run.data || !stream.synced)
+
+  // Declared before the composer's state reads it, so the bar and the
+  // transcript cannot disagree about whether the chat has arrived. It used to
+  // be a second copy of the same expression, which is how two things that are
+  // meant to agree start not agreeing.
+  const state = composerStateFor(workspace, booting, justStarted)
 
   /**
    * What happens to a message typed after the agents have stopped.
@@ -298,24 +349,19 @@ export function AgentWorkspace({
   }, [followUp, target, state, rework, startAnother])
 
 
-  /**
-   * Nothing real goes on screen until everything real is here.
-   *
-   * "Everything" is the run AND its trace. The run alone gives the title and
-   * the status, but the body of the page is the transcript - so rendering as
-   * soon as the run lands produced a titled, empty chat that then filled in,
-   * which is two loading states in a row rather than one.
-   *
-   * Artifacts are deliberately NOT waited on. That endpoint 404s for most of a
-   * run's life by design - the carousel is only assembled at the end - so
-   * waiting for it would hold the skeleton up for fifteen minutes on a task
-   * that is working perfectly.
-   */
-  const booting = !run.isError && (!run.data || !stream.synced)
-
   // Gated on `booting`, so the skeleton gets the whole width and the rail
   // slides in afterwards - the chat narrowing is the arrival.
   const rail = useRailPanel(!booting)
+
+  // Open at the end of the transcript, and stay there while it is still being
+  // written. Only in the workspace's own scroller - the task page puts this
+  // conversation inside a tabbed screen whose scroller is the window, and
+  // yanking a whole page to its bottom on arrival would take the tabs and the
+  // task's header off screen with it.
+  const tail = useChatTail({ ready: !booting, live: isLive })
+  // Memoised, or every render hands the context a new object and re-renders
+  // the whole conversation under it.
+  const scrollApi = React.useMemo(() => ({ reveal: tail.reveal }), [tail.reveal])
 
   const conversation = (
     <>
@@ -438,9 +484,17 @@ export function AgentWorkspace({
           </div>
         </header>
 
-        <div className="agent-conversation-scroll">
-          <div className="mx-auto w-full max-w-3xl space-y-6 px-5 pb-44 pt-6 sm:px-8 sm:pt-9">
-            {conversation}
+        <div ref={tail.scrollRef} className="agent-conversation-scroll">
+          <div
+            ref={tail.contentRef}
+            className="mx-auto w-full max-w-3xl space-y-6 px-5 pb-44 pt-6 sm:px-8 sm:pt-9"
+          >
+            {/* Only here. The task page renders the same conversation inside
+                a tabbed screen with no floating bar and the window as its
+                scroller, so there is nothing for this to be about there. */}
+            <ChatScrollContext.Provider value={scrollApi}>
+              {conversation}
+            </ChatScrollContext.Provider>
           </div>
         </div>
 

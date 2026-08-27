@@ -10,10 +10,10 @@ Three jobs (see docs/CONTRACTS.md file map):
 2. ``download_and_trim(url)``   - fetch the clip via the yt-dlp Python API and
    trim it into the configured cover window (settings.cover_clip_min_s..max_s,
    default 4-15 s), silent H.264 mp4.
-3. ``compose_cover(...)``       - subject-preserving fit over a blurred 4:5
-   fill, composite the STRANGE-COVER overlay template plus a Pillow-rendered
-   title block (warm-white, condensed extra-bold uppercase, solid green
-   highlight phrase), and produce the final cover mp4 + first-frame poster.
+3. ``compose_cover(...)``       - subject-aware edge-to-edge crop across the
+   visible cover stage, composite the STRANGE-COVER overlay template plus a
+   Pillow-rendered title block (warm-white, condensed extra-bold uppercase,
+   solid green highlight phrase), and produce the final cover mp4 + poster.
 
 The cover is NEVER AI-generated (skills/cover-style.md): a sourced clip, or -
 fallback - the update's own image turned into a 6 s slow-zoom video.
@@ -37,11 +37,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from itertools import combinations
 from pathlib import Path
+from statistics import median
 from typing import Any, Optional
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, download_range_func
 
@@ -102,6 +103,8 @@ _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
 _TEMPLATE_TEXT_BOX = (0.175, 0.705, 0.83, 0.872)  # (x0, y0, x1, y1)
 _STILL_COVER_SECONDS = 6.0
 _COVER_FPS = 30
+_COVER_VISUAL_HEIGHT_FRAC = 0.75
+_SALIENCY_MAX_SIZE = 320
 _MIN_COVER_IMAGE_PIXELS = 450_000
 _MIN_COVER_IMAGE_SIDE = 360
 _MAX_COVER_IMAGE_ASPECT = 3.2
@@ -1291,44 +1294,196 @@ def _build_overlay_png(title: str, highlight: str, wd: Path) -> Path:
     return out
 
 
-def _prepare_still_cover(media_path: str, wd: Path) -> Path:
-    """Fit a complete still over a softly blurred 4:5 background.
+def _saliency_weights(image: Image.Image) -> tuple[int, int, list[int]]:
+    """Build a lightweight subject map using detail, edges, and skin tones."""
+    sample = image.convert("RGB")
+    sample.thumbnail(
+        (_SALIENCY_MAX_SIZE, _SALIENCY_MAX_SIZE),
+        Image.Resampling.LANCZOS,
+    )
+    gray = sample.convert("L")
+    blur_radius = max(2.0, min(sample.size) / 42)
+    detail = ImageChops.difference(
+        gray,
+        gray.filter(ImageFilter.GaussianBlur(radius=blur_radius)),
+    )
+    edges = gray.filter(ImageFilter.FIND_EDGES)
+    ycbcr = sample.convert("YCbCr")
 
-    A blind center crop removes people and products from landscape news photos.
-    The foreground therefore uses a small safe inset and ``contain`` semantics;
-    only the blurred background is allowed to crop. The foreground is biased
-    toward the top so the lower cover-title reservation remains readable.
-    """
+    def pixels(layer: Image.Image) -> Any:
+        flattened = getattr(layer, "get_flattened_data", None)
+        return flattened() if flattened is not None else layer.getdata()
+
+    weights: list[int] = []
+    for detail_px, edge_px, (luma, cb, cr) in zip(
+        pixels(detail),
+        pixels(edges),
+        pixels(ycbcr),
+    ):
+        # The broad YCbCr range works for photography and illustrated skin.
+        # It is only a bonus; product/object detail still drives non-people art.
+        skin_bonus = 170 if luma > 35 and 72 <= cb <= 132 and 135 <= cr <= 180 else 0
+        weights.append(int(detail_px) * 2 + int(edge_px) + skin_bonus)
+    return sample.width, sample.height, weights
+
+
+def _best_crop_axis_start(
+    weights: list[int],
+    map_w: int,
+    map_h: int,
+    window: int,
+    *,
+    horizontal: bool,
+) -> int:
+    """Choose the crop start that keeps salient content away from cut edges."""
+    length = map_w if horizontal else map_h
+    window = min(max(1, window), length)
+    if window >= length:
+        return 0
+
+    axis = [0] * length
+    for y in range(map_h):
+        row = y * map_w
+        for x in range(map_w):
+            axis[x if horizontal else y] += weights[row + x]
+
+    prefix = [0]
+    for value in axis:
+        prefix.append(prefix[-1] + value)
+
+    max_start = length - window
+    preferred_start = max_start * (0.5 if horizontal else 0.34)
+    total_weight = max(prefix[-1], 1)
+    edge_band = max(1, window // 12)
+    best_start = round(preferred_start)
+    best_score = float("-inf")
+    for start in range(max_start + 1):
+        end = start + window
+        inside = prefix[end] - prefix[start]
+        cut_risk = (
+            prefix[start + edge_band]
+            - prefix[start]
+            + prefix[end]
+            - prefix[end - edge_band]
+        )
+        distance = abs(start - preferred_start) / max(max_start, 1)
+        score = inside - cut_risk * 0.72 - total_weight * 0.055 * distance * distance
+        if score > best_score:
+            best_score = score
+            best_start = start
+    return best_start
+
+
+def _smart_crop_box(
+    image: Image.Image,
+    target_aspect: float,
+) -> tuple[int, int, int, int]:
+    """Return a fill crop positioned around the image's likely real subject."""
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        return (0, 0, max(width, 1), max(height, 1))
+    source_aspect = width / height
+    if math.isclose(source_aspect, target_aspect, rel_tol=0.01):
+        return (0, 0, width, height)
+
+    map_w, map_h, weights = _saliency_weights(image)
+    if source_aspect > target_aspect:
+        crop_w = min(width, max(1, round(height * target_aspect)))
+        map_crop_w = min(map_w, max(1, round(map_w * crop_w / width)))
+        map_left = _best_crop_axis_start(
+            weights,
+            map_w,
+            map_h,
+            map_crop_w,
+            horizontal=True,
+        )
+        available_map = max(map_w - map_crop_w, 1)
+        left = round((width - crop_w) * map_left / available_map)
+        left = min(max(left, 0), width - crop_w)
+        return (left, 0, left + crop_w, height)
+
+    crop_h = min(height, max(1, round(width / target_aspect)))
+    map_crop_h = min(map_h, max(1, round(map_h * crop_h / height)))
+    map_top = _best_crop_axis_start(
+        weights,
+        map_w,
+        map_h,
+        map_crop_h,
+        horizontal=False,
+    )
+    available_map = max(map_h - map_crop_h, 1)
+    top = round((height - crop_h) * map_top / available_map)
+    top = min(max(top, 0), height - crop_h)
+    return (0, top, width, top + crop_h)
+
+
+def _crop_anchor(image: Image.Image, target_aspect: float) -> tuple[float, float]:
+    """Convert a smart crop box to FFmpeg's normalized crop offsets."""
+    left, top, right, bottom = _smart_crop_box(image, target_aspect)
+    x_room = image.width - (right - left)
+    y_room = image.height - (bottom - top)
+    return (
+        left / x_room if x_room > 0 else 0.5,
+        top / y_room if y_room > 0 else 0.5,
+    )
+
+
+def _video_crop_anchor(media: Path, wd: Path, duration_s: float) -> tuple[float, float]:
+    """Evaluate several clip moments and return a stable subject-aware crop."""
+    visual_h = round(settings.slide_height * _COVER_VISUAL_HEIGHT_FRAC)
+    target_aspect = settings.slide_width / visual_h
+    if duration_s > 0:
+        times = [duration_s * fraction for fraction in (0.16, 0.5, 0.82)]
+    else:
+        times = [0.5]
+
+    anchors: list[tuple[float, float]] = []
+    for index, timestamp in enumerate(times):
+        frame = wd / f"crop-probe-{index}.png"
+        try:
+            _run_ffmpeg(
+                [
+                    settings.ffmpeg_bin,
+                    "-y",
+                    "-ss",
+                    f"{max(timestamp, 0):.3f}",
+                    "-i",
+                    str(media),
+                    "-frames:v",
+                    "1",
+                    "-update",
+                    "1",
+                    str(frame),
+                ],
+                timeout_s=_FFPROBE_TIMEOUT_S,
+            )
+            with Image.open(frame) as image:
+                anchors.append(_crop_anchor(image.convert("RGB"), target_aspect))
+        except (RuntimeError, OSError, subprocess.TimeoutExpired):
+            continue
+        finally:
+            frame.unlink(missing_ok=True)
+    if not anchors:
+        return (0.5, 0.5)
+    return (
+        float(median(anchor[0] for anchor in anchors)),
+        float(median(anchor[1] for anchor in anchors)),
+    )
+
+
+def _prepare_still_cover(media_path: str, wd: Path) -> Path:
+    """Smart-crop a still edge-to-edge across the visible cover stage."""
     target_w, target_h = settings.slide_width * 2, settings.slide_height * 2
+    visual_h = round(target_h * _COVER_VISUAL_HEIGHT_FRAC)
+    target_aspect = target_w / visual_h
     with Image.open(media_path) as img:
         source = img.convert("RGB")
-
-        bg_scale = max(target_w / source.width, target_h / source.height)
-        bg_size = (
-            max(round(source.width * bg_scale), target_w),
-            max(round(source.height * bg_scale), target_h),
+        cropped = source.crop(_smart_crop_box(source, target_aspect)).resize(
+            (target_w, visual_h),
+            Image.Resampling.LANCZOS,
         )
-        background = source.resize(bg_size, Image.Resampling.LANCZOS)
-        bg_left = (background.width - target_w) // 2
-        bg_top = (background.height - target_h) // 2
-        background = background.crop(
-            (bg_left, bg_top, bg_left + target_w, bg_top + target_h)
-        ).filter(ImageFilter.GaussianBlur(radius=48))
-
-        # Leave enough inset for the restrained zoompan below. The whole real
-        # image stays visible throughout the animation instead of losing faces
-        # or a product positioned near a landscape frame's edges.
-        fit_w, fit_h = round(target_w * 0.96), round(target_h * 0.96)
-        fg_scale = min(fit_w / source.width, fit_h / source.height)
-        fg_size = (
-            max(1, round(source.width * fg_scale)),
-            max(1, round(source.height * fg_scale)),
-        )
-        foreground = source.resize(fg_size, Image.Resampling.LANCZOS)
-        left = (target_w - foreground.width) // 2
-        spare_y = target_h - foreground.height
-        upper = max(0, round(spare_y * 0.12))
-        background.paste(foreground, (left, upper))
+        background = Image.new("RGB", (target_w, target_h), (0, 0, 0))
+        background.paste(cropped, (0, 0))
         out = wd / "still-base.png"
         background.save(out)
     return out
@@ -1339,12 +1494,12 @@ def compose_cover(
 ) -> dict:
     """Compose the final 1080x1350 cover video + poster from sourced media.
 
-    The media is fitted into 1080x1350 over a blurred fill so the real subject
-    is not destroyed by a blind 16:9-to-4:5 center crop. The STRANGE-COVER
-    overlay template plus the Pillow-rendered title block are composited on
-    top, and ffmpeg renders a silent H.264 mp4 (``+faststart``) with a
-    first-frame poster PNG. Still images become a 6 s restrained slow-zoom
-    video (static video fallback if the zoom filter fails).
+    The media fills the visible upper cover stage with a subject-aware crop;
+    the lower headline area is black rather than a blurred/shrunken duplicate.
+    The STRANGE-COVER overlay template plus the Pillow-rendered title block are
+    composited on top, and ffmpeg renders a silent H.264 mp4 (``+faststart``)
+    with a first-frame poster PNG. Still images become a 6 s restrained
+    slow-zoom video (static video fallback if the zoom filter fails).
 
     Args:
         media_path: Local path of the trimmed clip or downloaded image.
@@ -1391,13 +1546,13 @@ def compose_cover(
         cap = float(settings.cover_clip_max_s)
         in_duration = _media_duration(media)
         clip_t = f"{min(in_duration, cap):.3f}" if in_duration > 0 else f"{cap:g}"
-        fit_w, fit_h = round(width * 0.96), round(height * 0.96)
+        visual_h = round(height * _COVER_VISUAL_HEIGHT_FRAC)
+        anchor_x, anchor_y = _video_crop_anchor(media, wd, in_duration)
         filter_complex = (
-            "[0:v]split=2[bgsrc][fgsrc];"
-            f"[bgsrc]scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},boxblur=18:2[bg];"
-            f"[fgsrc]scale={fit_w}:{fit_h}:force_original_aspect_ratio=decrease[fg];"
-            "[bg][fg]overlay=(W-w)/2:(H-h)*0.12,"
+            f"[0:v]scale={width}:{visual_h}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{visual_h}:(iw-ow)*{anchor_x:.6f}:"
+            f"(ih-oh)*{anchor_y:.6f},"
+            f"pad={width}:{height}:0:0:black,"
             f"setsar=1,fps={_COVER_FPS}[base];"
             "[base][1:v]overlay=0:0:format=auto[out]"
         )
@@ -1423,8 +1578,8 @@ def compose_cover(
         base_png = _prepare_still_cover(str(media), wd)
         frames = int(_STILL_COVER_SECONDS * _COVER_FPS)
         zoom_filter = (
-            "[0:v]zoompan=z='min(1+0.0002*on,1.035)'"
-            ":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            "[0:v]zoompan=z='min(1+0.00014*on,1.025)'"
+            ":x='iw/2-(iw/zoom/2)':y='0'"
             f":d={frames}:s={width}x{height}:fps={_COVER_FPS}[base];"
             "[base][1:v]overlay=0:0:format=auto[out]"
         )

@@ -488,14 +488,36 @@
   overflow: hidden;
 }
 
+/* The prompt bar, floating over the conversation rather than docked to it.
+ *
+ * This used to be a full-width strip: a 94% background wash with a 16px
+ * backdrop blur behind it, which made the bottom of every chat a band of
+ * frosted glass with a bar sitting in it. What floats now is the bar itself -
+ * its own card fill and lift shadow are the only thing drawn, and the
+ * conversation runs to the bottom of the pane behind it.
+ *
+ * `pointer-events: none` on the dock, restored on its child: without it the
+ * transparent strip would still be a 5rem-tall invisible lid over the
+ * conversation, swallowing scrolls and clicks on the last message in it. The
+ * bar keeps its own events; the empty space beside and above it does not.
+ *
+ * The scroller's `pb-44` is what keeps the last message clear of the bar at
+ * rest. Mid-scroll the text does pass behind it, which is the point of a
+ * floating control - it is occluded by the bar, not by a panel. */
 .agent-running-composer-dock {
   position: absolute;
   inset-inline: 0;
   bottom: 0;
   z-index: 20;
-  background: color-mix(in oklch, var(--background) 94%, transparent);
   padding-top: 0.75rem;
-  backdrop-filter: blur(16px);
+  pointer-events: none;
+}
+
+/* The BAR, not its centring wrapper. The wrapper is the full width of the
+   conversation column, so giving it events back would have restored most of
+   the lid this is here to remove. */
+.agent-running-composer-dock .agent-composer {
+  pointer-events: auto;
 }
 
 /* The conversation, and the asset rail beside it.

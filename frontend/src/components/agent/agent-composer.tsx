@@ -19,6 +19,9 @@ import { cn } from "@/lib/utils"
  * new carousel instead.
  */
 export type ComposerState =
+  /** The chat itself is still arriving. Nothing is offered, because nothing
+   *  is known yet - see the `loading` note in the component. */
+  | "loading"
   | "idle"
   | "starting"
   | "running"
@@ -27,6 +30,7 @@ export type ComposerState =
   | "failed"
 
 const PLACEHOLDER: Record<ComposerState, string> = {
+  loading: "",
   idle: "Describe a story or paste a news URL…",
   starting: "",
   running: "",
@@ -62,7 +66,23 @@ export function AgentComposer({
   // first message of a chat?
   const working = state === "running" || state === "starting"
   const composing = state === "idle"
-  const canType = !working
+
+  /**
+   * The chat is still a skeleton, so the bar offers nothing.
+   *
+   * It used to offer Stop. `composerStateFor` mapped "the run request is in
+   * flight" onto `starting`, which is the state a task the user just launched
+   * is in - so merely OPENING a finished chat put a live Stop button on
+   * screen for as long as the page took to load. Pressing it asked the server
+   * to cancel a task that had ended days ago.
+   *
+   * Stop belongs to `starting` for the case it was written for: a run this
+   * tab has just kicked off, where the agents really are already spending
+   * money and a button that refuses for the first few seconds refuses at
+   * exactly the moment someone realises they mistyped. That case is unchanged.
+   */
+  const loading = state === "loading"
+  const canType = !working && !loading
 
   // Pointing only exists while the pipeline is paused on a review. See the
   // hook for why offering it anywhere else would be a menu that does nothing.
@@ -190,12 +210,14 @@ export function AgentComposer({
           ) : (
             <button
               type="submit"
-              disabled={value.trim().length < 3}
+              disabled={loading || value.trim().length < 3}
               className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--foreground)] text-[var(--background)] transition-all hover:-translate-y-px hover:opacity-85 disabled:translate-y-0 disabled:opacity-25"
               title={
-                state === "review"
-                  ? "Send this change to the agents"
-                  : "Start a carousel"
+                loading
+                  ? "Loading this task…"
+                  : state === "review"
+                    ? "Send this change to the agents"
+                    : "Start a carousel"
               }
             >
               <ArrowUp className="size-4 stroke-[2.5]" />

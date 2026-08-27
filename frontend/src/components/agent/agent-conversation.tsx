@@ -62,6 +62,12 @@ export function AgentConversation({
   // so this costs no request and cannot show a different face from them.
   const { profile } = useProfile()
 
+  // Computed once and used twice, so the two controls cannot both appear.
+  // Whichever screen this is rendered on, exactly one route into the review
+  // is drawn: the card while the carousel is waiting to be judged, the
+  // strip's own bar once it no longer is.
+  const reviewCta = showReviewCta && run.pending_review
+
   return (
     <div className="space-y-6">
       {typed ? (
@@ -115,7 +121,12 @@ export function AgentConversation({
             above a panel explaining what each one searched for. */}
         <ThinkingPanel events={events} summary={summary ?? null} live={live} />
         <StreamedAgentText events={events} live={live} />
-        <AgentAssetStrip artifacts={artifacts} live={live} runId={runId} />
+        <AgentAssetStrip
+          artifacts={artifacts}
+          live={live}
+          runId={runId}
+          showReview={!reviewCta}
+        />
 
         {run.news.source_url && (
           <a
@@ -128,7 +139,7 @@ export function AgentConversation({
           </a>
         )}
 
-        {showReviewCta && run.pending_review && (
+        {reviewCta && (
           <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--card)] p-4">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">Your carousel is ready</p>

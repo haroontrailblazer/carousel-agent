@@ -118,6 +118,10 @@ export function NewRunRoute() {
         runId={runId}
         workspace={workspace}
         prompt={submittedPrompt}
+        // The mutation keeps its result, so this is true only for the run
+        // this tab actually created - not for the next chat opened from the
+        // sidebar, which would otherwise inherit a stale "just started".
+        justStarted={start.data?.run_id === runId}
         onReset={reset}
       />
     )

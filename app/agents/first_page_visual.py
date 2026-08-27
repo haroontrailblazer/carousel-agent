@@ -317,11 +317,12 @@ async def build_cover(
 ) -> dict:
     """Compose the final cover, save its artifacts, and write CoverSpec state.
 
-    Scales/center-crops the media to 1080x1350, composites the STRANGE-COVER
-    overlay template plus the hook title (warm-white uppercase, solid #8FB832
-    highlight phrase), renders the mp4 + first-frame poster PNG, saves both to
-    the artifact service, and stores the CoverSpec in session state. Call this
-    exactly once at the end (again after rework to replace the cover).
+    Smart-crops the media around its evaluated subject across the edge-to-edge
+    upper cover stage, composites the STRANGE-COVER overlay template plus the
+    hook title (warm-white uppercase, solid #8FB832 highlight phrase), renders
+    the mp4 + first-frame poster PNG, saves both to the artifact service, and
+    stores the CoverSpec in session state. Call this exactly once at the end
+    (again after rework to replace the cover).
 
     Args:
         media_path: Local path of the trimmed clip (from download_and_trim /
@@ -493,6 +494,9 @@ other slide, never write body copy or captions, and never AI-generate media.
    unavailable asset. Try at most THREE ranked images. Prefer the newest
    source-grounded launch/demo/keynote/news visual that directly depicts the
    topic; reject generic stock art, logos, icons and merely available images.
+   Pass the original highest-resolution media into build_cover. Never shrink,
+   letterbox, pre-blur, or frame it yourself; build_cover evaluates multiple
+   subject signals and applies the edge-to-edge focal crop consistently.
 4. Only if there is NO image_url anywhere and downloads all failed: call
    create_placeholder_background and use its path as the image.
 5. ALWAYS call build_cover with the local media path, is_video set

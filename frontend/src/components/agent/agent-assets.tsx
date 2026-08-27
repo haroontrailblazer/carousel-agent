@@ -157,24 +157,30 @@ export function AgentAssetStrip({
   live,
   runId,
   className,
+  showReview = true,
 }: {
   artifacts: RunArtifacts | null | undefined
   live: boolean
   runId: string
   /** Entrance animation; see `.animate-strip-in`. */
   className?: string
+  /**
+   * Off when the "Your carousel is ready" card is already on screen.
+   *
+   * That card carries its own Review button, so leaving this on gave a phone
+   * two ways into the same screen, one under the other. The caller decides,
+   * because it is the one that knows whether the card is being drawn.
+   */
+  showReview?: boolean
 }) {
   const items = readyAssets(artifacts)
   if (!items.length && !live) return null
 
   return (
     <section className={cn("agent-asset-strip space-y-2", className)}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium text-[var(--muted-foreground)]">
-          Assets · {items.length}{artifacts?.expected_count ? ` of ${artifacts.expected_count}` : ""} ready
-        </p>
-        {items.length > 0 && <Link to={`/tasks/${runId}?tab=review`} viewTransition className="text-xs text-[var(--link)] hover:underline">Open review</Link>}
-      </div>
+      <p className="text-xs font-medium text-[var(--muted-foreground)]">
+        Assets · {items.length}{artifacts?.expected_count ? ` of ${artifacts.expected_count}` : ""} ready
+      </p>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {items.map((item) => (
           <img
@@ -195,6 +201,21 @@ export function AgentAssetStrip({
           </div>
         ))}
       </div>
+
+      {/* A bar, the same one the desktop rail ends with - not the 12px link
+          that used to sit up beside the "Assets" count. On a phone that link
+          was a 67x16 tap target next to a 111x32 button pointing at the same
+          screen, which read as two different things and was the harder of the
+          two to hit. */}
+      {showReview && items.length > 0 && (
+        <Link
+          to={`/tasks/${runId}?tab=review`}
+          viewTransition
+          className="mt-1 flex w-full items-center justify-center rounded-[10px] bg-[var(--foreground)] px-3 py-2.5 text-xs font-medium text-[var(--background)] transition-opacity hover:opacity-85"
+        >
+          Open carousel review
+        </Link>
+      )}
     </section>
   )
 }

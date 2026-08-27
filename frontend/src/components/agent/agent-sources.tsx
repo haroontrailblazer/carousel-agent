@@ -2,6 +2,7 @@ import * as React from "react"
 import { ChevronDown } from "lucide-react"
 
 import { defaultAvatar } from "@/components/layout/user-avatar"
+import { useChatScroll } from "@/hooks/use-chat-tail"
 import type { RunEvent } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -180,13 +181,47 @@ export function AgentSources({
   className?: string
 }) {
   const [open, setOpen] = React.useState(false)
+  const panelRef = React.useRef<HTMLDivElement>(null)
+  const listRef = React.useRef<HTMLDivElement>(null)
+  const chat = useChatScroll()
+
+  /**
+   * Opening it moves the page down with it.
+   *
+   * The list unfolds INTO the conversation - it pushes everything below it
+   * down rather than floating over it - so on a full screen it can open
+   * entirely below the fold, and clicking the control appears to do nothing.
+   *
+   * The height is measured BEFORE the animation, off the clipped content,
+   * which is why this can run on the click rather than on `transitionend`:
+   * the scroll knows where the box will end up and travels there alongside
+   * the expansion, as one movement. It also means the chat's tail stops
+   * following before the box starts growing, so the page cannot pin itself to
+   * the bottom on the way and then jump back.
+   *
+   * Outside the chat workspace there is no floating bar and no scroller of our
+   * own, so the plain browser behaviour is the right one.
+   */
+  const toggle = React.useCallback(() => {
+    const next = !open
+    setOpen(next)
+    if (!next) return
+    const height = listRef.current?.scrollHeight ?? 0
+    if (chat) chat.reveal(panelRef.current, height)
+    else {
+      requestAnimationFrame(() =>
+        panelRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+      )
+    }
+  }, [open, chat])
+
   if (!total) return null
 
   return (
     <div className={className}>
       <button
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggle}
         aria-expanded={open}
         // The ring around each stacked favicon has to be the colour behind it
         // or the overlap reads as a smudge - so the button publishes its own
@@ -223,6 +258,7 @@ export function AgentSources({
           content" without measuring it. The inner div does the clipping; the
           grid does the animating. */}
       <div
+        ref={panelRef}
         className="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
         style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
         // Clipped to nothing when shut, so it must also be inert: without
@@ -230,7 +266,7 @@ export function AgentSources({
         aria-hidden={!open || undefined}
         inert={!open || undefined}
       >
-        <div className="overflow-hidden">
+        <div ref={listRef} className="overflow-hidden">
           <div className="mt-2 max-h-72 overflow-y-auto rounded-[12px] border border-[var(--border)] bg-[var(--card)] p-1.5">
             {groups.map((group, index) => (
               <div

@@ -242,23 +242,42 @@ class ImageQualityTests(unittest.TestCase):
                 )
             self.assertEqual(list(Path(temp_dir).rglob("img-*")), [])
 
-    def test_wide_still_fit_preserves_both_horizontal_edges(self) -> None:
-        source = Image.new("RGB", (1600, 900), (20, 30, 200))
-        source.paste((240, 20, 20), (0, 0, 120, source.height))
-        source.paste((20, 220, 40), (source.width - 120, 0, source.width, source.height))
+    def test_smart_crop_moves_toward_off_center_subject(self) -> None:
+        source = Image.new("RGB", (1600, 900), (25, 45, 75))
+        source.paste((215, 135, 90), (1200, 170, 1480, 760))
+        source.paste((20, 20, 20), (1260, 260, 1300, 310))
+        source.paste((235, 235, 220), (1350, 430, 1460, 520))
+
+        target_aspect = 2160 / round(2700 * media_tools._COVER_VISUAL_HEIGHT_FRAC)
+        left, _top, right, _bottom = media_tools._smart_crop_box(
+            source,
+            target_aspect,
+        )
+        anchor_x, _anchor_y = media_tools._crop_anchor(source, target_aspect)
+
+        self.assertGreater(left, 400)
+        self.assertGreaterEqual(right, 1480)
+        self.assertGreater(anchor_x, 0.5)
+
+    def test_prepared_still_fills_visual_stage_without_blurred_border(self) -> None:
+        source = Image.new("RGB", (1600, 900), (210, 120, 50))
+        source.paste((30, 70, 160), (500, 0, 1100, source.height))
 
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "wide.png"
             source.save(source_path)
             result_path = media_tools._prepare_still_cover(source_path, Path(temp_dir))
             with Image.open(result_path) as fitted:
-                y = round((fitted.height - round(fitted.width * 0.96 * 900 / 1600)) * 0.12)
-                sample_y = y + 300
-                left = fitted.getpixel((45, sample_y))
-                right = fitted.getpixel((fitted.width - 46, sample_y))
+                visual_h = round(
+                    fitted.height * media_tools._COVER_VISUAL_HEIGHT_FRAC
+                )
+                top_left = fitted.getpixel((0, 50))
+                top_right = fitted.getpixel((fitted.width - 1, 50))
+                lower = fitted.getpixel((fitted.width // 2, visual_h + 50))
 
-        self.assertGreater(left[0], left[2])
-        self.assertGreater(right[1], right[2])
+        self.assertNotEqual(top_left, (0, 0, 0))
+        self.assertNotEqual(top_right, (0, 0, 0))
+        self.assertEqual(lower, (0, 0, 0))
 
 
 class CoverTypographyTests(unittest.TestCase):
