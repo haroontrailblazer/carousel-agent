@@ -498,6 +498,18 @@
   backdrop-filter: blur(16px);
 }
 
+/* The conversation, and the asset rail beside it.
+ *
+ * The second track animates between nothing and 15rem, which is what makes
+ * the chat WIDEN back over the space when the rail is closed instead of
+ * leaving a hole where it was. `grid-template-columns` is interpolable as
+ * long as the track count does not change, so the closed state is `0rem`
+ * rather than a removed track.
+ *
+ * This is the second layout property in the app that is animated on purpose
+ * (the composer's collapse is the other), and for the same reason: it fires
+ * on a deliberate act - a click, or a chat finishing loading - not on every
+ * frame of a hover. */
 .agent-workspace-grid {
   display: grid;
   height: 100%;
@@ -553,6 +565,90 @@
 
 .agent-asset-strip {
   display: block;
+}
+
+/* Below 1180px there is no rail to open, so there is no control for it - the
+   assets appear inline under the conversation instead. */
+.rail-toggle {
+  display: none;
+}
+
+/* The asset panel arriving, once the chat itself is on screen.
+ *
+ * Held back rather than rendered empty: while the conversation is still a
+ * skeleton, a second column of skeletons beside it is two loading screens
+ * competing for the same glance. The artifacts request runs the whole time -
+ * only the panel waits - so nothing is slower for holding it.
+ *
+ * 380ms on a decelerate curve. Faster than about 250ms and a panel this wide
+ * reads as a flicker rather than as something arriving; slower than about
+ * 450ms and it is something you wait for. Only opacity and transform, so the
+ * whole thing runs on the compositor while the conversation beside it is
+ * still settling.
+ *
+ * On a phone there is no rail - the assets appear inline under the
+ * conversation - so the strip rises into place. The desktop rail arrives by a
+ * different mechanism entirely: the grid track beside the chat widens, so the
+ * conversation narrowing IS the arrival. See `.agent-workspace-grid`. */
+@keyframes strip-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.animate-strip-in {
+  animation: strip-in 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Words resolving out of blur as an agent message lands, and the source list
+ * unfolding under it.
+ *
+ * The word reveal is a per-word `animation-delay` and nothing else - no timer,
+ * no state, no typewriter. The whole paragraph is in the DOM from the first
+ * frame, so it can be selected, copied and read by a screen reader while it is
+ * still resolving; only its appearance is staggered. A JS typewriter would
+ * withhold text the server has already delivered, and would start over every
+ * time a new event arrived.
+ *
+ * Opacity and `filter` only, deliberately: `transform` does not apply to a
+ * non-replaced inline element, so a `translateY` here would silently do
+ * nothing - and forcing every word to `inline-block` to make it work would
+ * take the spaces inside the boxes and break line wrapping.
+ */
+@keyframes word-in {
+  from { opacity: 0; filter: blur(5px); }
+  to   { opacity: 1; filter: none; }
+}
+
+.stream-word {
+  animation: word-in 320ms ease-out both;
+}
+
+/* One row arriving. Used with a per-row `animation-delay` wherever a list
+   unfolds - the source list, the facts, the agent trace - so a list of ten
+   reads as arriving rather than as appearing all at once. */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.animate-fade-up {
+  animation: fade-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-word,
+  .animate-fade-up {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-strip-in {
+    animation: none;
+  }
+  .agent-workspace-grid {
+    transition: none;
+  }
 }
 
 .agent-composer {
@@ -624,6 +720,7 @@
   background: var(--foreground);
 }
 
+.text-shimmer,
 .agent-loading-label {
   background-image: linear-gradient(
     90deg,
@@ -634,9 +731,23 @@
   background-size: 200% 100%;
   background-clip: text;
   color: transparent;
+  animation: shimmer-text 1.4s linear infinite;
+}
+
+.agent-loading-label {
   font-size: 13px;
   font-weight: 500;
-  animation: shimmer-text 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still readable, just not moving: without an explicit colour a stopped
+     shimmer is transparent text on transparent background. */
+  .text-shimmer,
+  .agent-loading-label {
+    animation: none;
+    background-image: none;
+    color: var(--muted-foreground);
+  }
 }
 
 @keyframes pixel-on {
@@ -671,13 +782,35 @@
 
 @media (min-width: 1180px) {
   .agent-workspace-grid {
+    /* Closed by default so a chat that is still loading has the full width,
+       and the rail arrives into it rather than out of a reserved gap. */
+    grid-template-columns: minmax(0, 1fr) 0rem;
+    transition: grid-template-columns 380ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .agent-workspace-grid[data-rail="open"] {
     grid-template-columns: minmax(0, 1fr) 15rem;
   }
 
   .agent-asset-rail {
     display: block;
     border-top-width: 0;
+    /* min-width:0 is load-bearing. A grid item defaults to `min-width:auto`,
+       which refuses to shrink below its content - so the track would animate
+       to 0 and the rail would sit there at its natural width regardless. */
+    min-width: 0;
+    overflow-x: hidden;
     border-left-width: 1px;
+  }
+
+  /* No 1px line hanging in the layout when the panel is shut. */
+  .agent-workspace-grid:not([data-rail="open"]) .agent-asset-rail {
+    border-left-width: 0;
+  }
+
+  /* The control belongs to the rail, so it exists only where the rail does. */
+  .rail-toggle {
+    display: grid;
   }
 
   .agent-asset-strip {

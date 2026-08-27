@@ -41,6 +41,28 @@ export const AGENT_LABELS: Record<string, string> = {
   carousel_orchestrator: "Orchestrator",
 }
 
+/**
+ * The agents a reviewer is allowed to point at, in pipeline order.
+ *
+ * Mirrors `REWORKABLE_AGENTS` in app/state.py, which is the list the server
+ * enforces - anything not on it is dropped by the rework sanitizer, so
+ * offering a seventh here would be offering a choice that silently does
+ * nothing. The two lists are asserted equal by tests/test_agent_tree.py.
+ *
+ * `slash` is what someone types to reach it. Short, lowercase and distinct in
+ * the first two characters, so the menu narrows fast.
+ */
+export const REWORKABLE_AGENTS = [
+  { name: "research", slash: "research", hint: "Facts, sources, figures" },
+  { name: "planner", slash: "plan", hint: "Slide count, hook, structure" },
+  { name: "first_page_visual", slash: "cover", hint: "The cover image or clip" },
+  { name: "phrasing", slash: "copy", hint: "Wording on every slide" },
+  { name: "template_design", slash: "design", hint: "Layout and typography" },
+  { name: "cta", slash: "cta", hint: "The final call-to-action slide" },
+] as const
+
+export type ReworkableAgent = (typeof REWORKABLE_AGENTS)[number]["name"]
+
 /** One line on what each agent actually does, for the trace's expanded state. */
 export const AGENT_BLURBS: Record<string, string> = {
   research: "Searches the web and saves a brief of verified facts.",

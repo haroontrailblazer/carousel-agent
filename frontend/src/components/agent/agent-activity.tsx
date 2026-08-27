@@ -3,17 +3,21 @@ import {
   Brain,
   Check,
   ChevronDown,
-  ChevronRight,
   Circle,
-  ExternalLink,
-  Globe2,
   Image as ImageIcon,
   ListChecks,
   LoaderCircle,
   Search,
-  Wrench,
+  Sparkles,
 } from "lucide-react"
 
+import {
+  AgentFacts,
+  AgentSources,
+  SourceFavicon,
+  collectFacts,
+  groupSources,
+} from "@/components/agent/agent-sources"
 import { AGENT_BLURBS, AGENT_LABELS } from "@/lib/pipeline"
 import type { RunEvent, ToolCall, TraceSummary } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -27,6 +31,43 @@ const VIEWS: { value: ThinkingView; label: string; icon: typeof ListChecks }[] =
   { value: "search", label: "Search", icon: Search },
   { value: "rendering", label: "Rendering", icon: ImageIcon },
 ]
+
+/**
+ * The header line, which names what the trace is showing rather than always
+ * saying "Thinking".
+ *
+ * Switching to Search and still reading "Thought for 25s" made the tab look
+ * decorative - the label has to move with the view or it is telling you about
+ * something else.
+ */
+const THINKING_LABEL: Record<ThinkingView, string> = {
+  steps: "Working",
+  reasoning: "Thinking",
+  search: "Searching the web",
+  rendering: "Rendering",
+}
+
+const THINKING_DONE: Record<ThinkingView, string> = {
+  steps: "Worked",
+  reasoning: "Thought",
+  search: "Searched the web",
+  rendering: "Rendered",
+}
+
+/**
+ * How the duration joins the label.
+ *
+ * "Thought for 25s" is the phrasing everyone recognises, but "Searched the
+ * web for 25s" reads as having searched FOR twenty-five seconds - the wrong
+ * sense of the word, on the one label where it matters. Those get a
+ * separator instead.
+ */
+const THINKING_JOIN: Record<ThinkingView, string> = {
+  steps: "for",
+  reasoning: "for",
+  search: "·",
+  rendering: "·",
+}
 
 const RENDER_AGENTS = new Set(["first_page_visual", "template_design", "cta"])
 const SEARCH_TOOL = /search|fetch|source|download|scrape|url|media/i
@@ -95,27 +136,145 @@ export function PixelLoader({
   )
 }
 
-function ActivityStatus({ active, failed = false }: { active: boolean; failed?: boolean }) {
-  if (failed) {
-    return <Circle className="size-4 fill-[var(--destructive)] text-[var(--destructive)]" />
-  }
-  if (active) {
-    return <LoaderCircle className="size-4 animate-spin-slow text-[var(--phase-generate)]" />
-  }
+function EmptyTrace({ children }: { children: React.ReactNode }) {
   return (
-    <span className="grid size-4 place-items-center rounded-full bg-[var(--brand)] text-[var(--brand-foreground)]">
-      <Check className="size-2.5 stroke-[3]" />
-    </span>
+    <p className="animate-fade-up px-2 py-1.5 text-[13px] text-[var(--muted-foreground)]">
+      {children}
+    </p>
   )
 }
 
-function EmptyThinkingView({ children }: { children: React.ReactNode }) {
+/**
+ * How long a row waits before it arrives, and how far the stagger counts.
+ *
+ * Capped so a twenty-step trace does not spend two seconds unfolding: past
+ * the cap every remaining row shares the last delay and lands together.
+ */
+const ROW_MS = 55
+const ROW_CAP = 10
+
+function rowDelay(index: number): React.CSSProperties {
+  return { animationDelay: `${Math.min(index, ROW_CAP) * ROW_MS}ms` }
+}
+
+/**
+ * One line of the trace: a leading mark, what happened, and what it cost.
+ *
+ * Every view is built from this, which is the point - a trace reads as one
+ * thing whether the row is an agent, a thought, a search or a render, and the
+ * only thing that varies is the mark on the left and whether the text wraps.
+ */
+function TraceRow({
+  mark,
+  primary,
+  secondary,
+  meta,
+  wrap = false,
+  mono = false,
+  style,
+  href,
+}: {
+  mark?: React.ReactNode
+  primary: React.ReactNode
+  secondary?: React.ReactNode
+  meta?: React.ReactNode
+  /** Prose, which wraps, rather than a label, which truncates. */
+  wrap?: boolean
+  mono?: boolean
+  style?: React.CSSProperties
+  href?: string
+}) {
+  const body = (
+    <>
+      {mark != null && <span className="mt-[3px] shrink-0">{mark}</span>}
+      <span className={cn("min-w-0 flex-1", wrap ? "leading-6" : "truncate")}>
+        <span className={cn("text-[13px]", wrap ? "text-[var(--muted-foreground)]" : "font-medium")}>
+          {primary}
+        </span>
+        {secondary != null && (
+          <span
+            className={cn(
+              "ml-2 text-[12px] text-[var(--muted-foreground)]",
+              mono && "font-mono text-[11.5px]",
+              wrap ? "mt-0.5 block ml-0" : "",
+            )}
+          >
+            {secondary}
+          </span>
+        )}
+      </span>
+      {meta != null && (
+        <span className="shrink-0 pt-px text-[11.5px] tabular-nums text-[var(--muted-foreground)]">
+          {meta}
+        </span>
+      )}
+    </>
+  )
+
+  const className = cn(
+    "animate-fade-up flex w-full items-start gap-2.5 rounded-[8px] px-2 py-1.5 text-left",
+    href && "transition-colors hover:bg-[var(--muted)]",
+  )
+
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" title={href} className={className} style={style}>
+        {body}
+      </a>
+    )
+  }
   return (
-    <div className="grid min-h-28 place-items-center px-5 py-7 text-center text-sm text-[var(--muted-foreground)]">
-      {children}
+    <div className={className} style={style}>
+      {body}
     </div>
   )
 }
+
+/** The mark on a step: running, failed, or done. */
+function StepMark({ active, failed }: { active: boolean; failed: boolean }) {
+  if (failed) {
+    return <Circle className="size-3.5 fill-[var(--destructive)] text-[var(--destructive)]" />
+  }
+  if (active) {
+    return <LoaderCircle className="size-3.5 animate-spin-slow text-[var(--foreground)]" />
+  }
+  return <Check className="size-3.5 text-[var(--muted-foreground)]" />
+}
+
+/**
+ * What a tool call was actually asked to do.
+ *
+ * The server hands `args` over as a JSON string capped at 600 characters, so
+ * this is a best-effort read: the recognised keys first, then any short
+ * string value, and the raw text if it will not parse at all (a truncated
+ * payload never will). Nothing here is load-bearing - a row with no subject
+ * still shows the tool's name, which is what it showed before.
+ */
+const ARG_KEYS = ["query", "q", "url", "prompt", "filename", "artifact", "path", "name"]
+
+function toolSubject(args: string): string {
+  const text = (args ?? "").trim()
+  if (!text) return ""
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed === "string") return parsed
+    if (parsed && typeof parsed === "object") {
+      for (const key of ARG_KEYS) {
+        const value = (parsed as Record<string, unknown>)[key]
+        if (typeof value === "string" && value.trim()) return value.trim()
+      }
+      for (const value of Object.values(parsed as Record<string, unknown>)) {
+        if (typeof value === "string" && value.trim() && value.length <= 140) return value.trim()
+      }
+    }
+  } catch {
+    /* truncated or not JSON at all; fall through to the raw text */
+  }
+  return text.length <= 140 ? text : ""
+}
+
+/** How many source rows the Search view shows before it counts the rest. */
+const SEARCH_SOURCES = 5
 
 export function ThinkingPanel({
   events,
@@ -126,7 +285,12 @@ export function ThinkingPanel({
   summary: TraceSummary | null
   live: boolean
 }) {
-  const [open, setOpen] = React.useState(true)
+  // Open while the agents work, shut once they stop - which is what a trace
+  // is for. `null` means "nobody has decided", so the automatic behaviour
+  // holds until someone clicks, and their choice then sticks for the rest of
+  // the session rather than being overridden the moment the run finishes.
+  const [choice, setChoice] = React.useState<boolean | null>(null)
+  const open = choice ?? live
   const [view, setView] = React.useState<ThinkingView>("steps")
 
   const tools = React.useMemo(() => allTools(events), [events])
@@ -171,243 +335,228 @@ export function ThinkingPanel({
     () => events.flatMap((event) => eventThoughts(event).map((text) => ({ event, text }))),
     [events],
   )
+  const sources = React.useMemo(() => groupSources(events), [events])
   const searchTools = tools.filter((tool) => SEARCH_TOOL.test(tool.name))
   const renderTools = tools.filter((tool) => RENDER_TOOL.test(tool.name))
   const renderEvents = events.filter((event) => RENDER_AGENTS.has(event.author))
-  const visibleSteps = agentSteps.length > 5 ? agentSteps.slice(-4) : agentSteps
+  const visibleSteps = agentSteps.length > 6 ? agentSteps.slice(-5) : agentSteps
   const hiddenStepCount = agentSteps.length - visibleSteps.length
 
+  // What the header says once the work is over. The summary's `ms` is time
+  // the agents actually ran, so a task that waited overnight on a review
+  // still reports the minute of work it took.
+  const spent = compactDuration(summary?.ms)
+  const label = live
+    ? THINKING_LABEL[view]
+    : spent
+      ? `${THINKING_DONE[view]} ${THINKING_JOIN[view]} ${spent}`
+      : THINKING_DONE[view]
+
   return (
-    <section className="overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--card)]/55">
-      <div className="flex min-h-14 items-center border-b border-[var(--border)] px-3 sm:px-4">
+    <section className="flex flex-col">
+      <div className="flex items-center gap-1">
         <button
           type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="flex items-center gap-2 rounded-lg px-1.5 py-2 text-sm font-medium hover:bg-[var(--muted)]"
+          onClick={() => setChoice(!open)}
           aria-expanded={open}
+          className="-ml-1.5 flex min-w-0 items-center gap-2 rounded-[8px] px-1.5 py-1 transition-colors hover:bg-[var(--muted)]"
         >
-          {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-          <Brain className="size-4" />
-          Thinking
+          <Sparkles
+            className={cn("size-4 shrink-0", live ? "text-[var(--foreground)]" : "text-[var(--muted-foreground)]")}
+          />
+          <span role="status" className="truncate text-[13px] font-medium">
+            {live ? (
+              <span className="text-shimmer">{label}</span>
+            ) : (
+              <span className="text-[var(--muted-foreground)]">{label}</span>
+            )}
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-300",
+              open && "rotate-180",
+            )}
+          />
         </button>
 
-        <div className="ml-auto hidden items-stretch self-stretch sm:flex" role="tablist" aria-label="Thinking detail">
-          {VIEWS.map(({ value, label }) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={view === value}
-              onClick={() => {
-                setView(value)
-                setOpen(true)
-              }}
-              className={cn(
-                "relative px-3 text-xs text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]",
-                view === value && "text-[var(--foreground)]",
-              )}
-            >
-              {label}
-              {view === value && <span className="absolute inset-x-2 bottom-0 h-px bg-[var(--foreground)]" />}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {open && (
-        <>
-          <div className="flex gap-1 overflow-x-auto border-b border-[var(--border)] p-2 sm:hidden" role="tablist">
-            {VIEWS.map(({ value, label, icon: Icon }) => (
+        {/* The four kinds of trace this pipeline produces. Only offered while
+            the trace is open - a filter for something you cannot see is a
+            control that appears to do nothing. */}
+        {open && (
+          <div className="ml-auto flex min-w-0 gap-0.5 overflow-x-auto" role="tablist" aria-label="Thinking detail">
+            {VIEWS.map(({ value, label: name, icon: Icon }) => (
               <button
                 key={value}
                 type="button"
                 role="tab"
                 aria-selected={view === value}
                 onClick={() => setView(value)}
+                title={name}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs",
-                  view === value ? "bg-[var(--muted)] text-[var(--foreground)]" : "text-[var(--muted-foreground)]",
+                  "flex shrink-0 items-center gap-1.5 rounded-[7px] px-2 py-1 text-[12px] transition-colors",
+                  view === value
+                    ? "bg-[var(--muted)] text-[var(--foreground)]"
+                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
                 )}
               >
-                <Icon className="size-3.5" /> {label}
+                <Icon className="size-3.5" />
+                <span className={cn(view === value ? "" : "hidden sm:inline")}>{name}</span>
               </button>
             ))}
           </div>
+        )}
+      </div>
 
-          {view === "steps" && (
-            <div className="divide-y divide-[var(--border)]">
-              {agentSteps.length ? (
+      <div
+        className="grid transition-[grid-template-rows,opacity] duration-400 ease-[cubic-bezier(0.23,1,0.32,1)]"
+        style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
+        aria-hidden={!open || undefined}
+        inert={!open || undefined}
+      >
+        <div className="overflow-hidden">
+          {/* The hairline is a border on the rows themselves rather than a
+              measured element, so it grows with the list instead of needing a
+              layout pass every time a row arrives. */}
+          <div className="ml-[7px] mt-1 flex flex-col border-l border-[var(--border)] py-1 pl-3.5">
+            {view === "steps" &&
+              (agentSteps.length ? (
                 <>
                   {hiddenStepCount > 0 && (
-                    <div className="flex items-center gap-3 px-4 py-2.5 text-xs text-[var(--muted-foreground)]">
-                      <span className="grid size-4 place-items-center rounded-full bg-[var(--muted)]"><Check className="size-2.5" /></span>
-                      {hiddenStepCount} earlier agent steps completed
-                    </div>
+                    <TraceRow
+                      mark={<Check className="size-3.5 text-[var(--muted-foreground)]" />}
+                      primary={
+                        <span className="font-normal text-[var(--muted-foreground)]">
+                          {hiddenStepCount} earlier steps
+                        </span>
+                      }
+                    />
                   )}
-                  {visibleSteps.map((step) => (
-                    <div key={step.id} className="flex items-start gap-3 px-4 py-3">
-                      <span className="mt-0.5"><ActivityStatus active={step.active} failed={step.failed} /></span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium">{step.label}</span>
-                        <span className="mt-0.5 block text-xs leading-5 text-[var(--muted-foreground)]">{step.detail}</span>
-                      </span>
-                      <span className="pt-0.5 text-xs tabular-nums text-[var(--muted-foreground)]">
-                        {step.active ? "running" : step.duration}
-                      </span>
-                    </div>
+                  {visibleSteps.map((step, index) => (
+                    <TraceRow
+                      key={step.id}
+                      style={rowDelay(index)}
+                      mark={<StepMark active={step.active} failed={step.failed} />}
+                      primary={step.label}
+                      secondary={step.detail}
+                      meta={step.active ? "running" : step.duration}
+                    />
                   ))}
                 </>
               ) : (
-                <EmptyThinkingView>{live ? "The orchestrator is preparing the first agent." : "No agent ran on this task."}</EmptyThinkingView>
-              )}
-            </div>
-          )}
+                <EmptyTrace>
+                  {live ? "Preparing the first agent." : "No agent ran on this task."}
+                </EmptyTrace>
+              ))}
 
-          {view === "reasoning" && (
-            thoughts.length ? (
-              <div className="max-h-72 space-y-3 overflow-y-auto p-4">
-                {thoughts.slice(-8).map(({ event, text }, index) => (
-                  <div key={`${event.seq}:${index}`} className="flex gap-3 text-sm leading-6">
-                    <Brain className="mt-1 size-4 shrink-0 text-[var(--muted-foreground)]" />
-                    <div>
-                      <p>{text}</p>
-                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                        {AGENT_LABELS[event.author] ?? event.author}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyThinkingView>{live ? "Reasoning will appear when the model emits ADK thought parts." : "This task recorded no model reasoning."}</EmptyThinkingView>
-            )
-          )}
+            {view === "reasoning" &&
+              (thoughts.length ? (
+                <div className="max-h-72 overflow-y-auto">
+                  {thoughts.slice(-8).map(({ event, text }, index) => (
+                    <TraceRow
+                      key={`${event.seq}:${index}`}
+                      style={rowDelay(index)}
+                      wrap
+                      primary={text}
+                      secondary={AGENT_LABELS[event.author] ?? event.author}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyTrace>
+                  {live
+                    ? "Reasoning appears when a model emits its thoughts."
+                    : "This task recorded no model reasoning."}
+                </EmptyTrace>
+              ))}
 
-          {view === "search" && (
-            searchTools.length ? (
-              <div className="divide-y divide-[var(--border)]">
-                {searchTools.slice(-10).map((tool) => (
-                  <ToolRow key={tool.key ?? tool.id ?? tool.name} tool={tool} live={live} icon={Globe2} />
-                ))}
-              </div>
-            ) : (
-              <EmptyThinkingView>{live ? "Search calls and retrieved sources will appear here." : "This task made no searches."}</EmptyThinkingView>
-            )
-          )}
-
-          {view === "rendering" && (
-            renderTools.length || renderEvents.length ? (
-              <div className="divide-y divide-[var(--border)]">
-                {renderTools.slice(-10).map((tool) => (
-                  <ToolRow key={tool.key ?? tool.id ?? tool.name} tool={tool} live={live} icon={ImageIcon} />
-                ))}
-                {!renderTools.length && renderEvents.slice(-6).map((event) => (
-                  <div key={event.seq} className="flex items-center gap-3 px-4 py-3 text-sm">
-                    <ImageIcon className="size-4 text-[var(--muted-foreground)]" />
-                    <span className="min-w-0 flex-1 truncate">
-                      {cleanEventText(event.text) || AGENT_BLURBS[event.author]}
+            {view === "search" &&
+              (searchTools.length || sources.total ? (
+                <>
+                  {/* What was asked, then what was read - the order it
+                      happened in, and the order it is useful in. */}
+                  {searchTools.slice(-6).map((tool, index) => (
+                    <TraceRow
+                      key={tool.key ?? tool.id ?? tool.name}
+                      style={rowDelay(index)}
+                      mark={<Search className="size-3.5 text-[var(--muted-foreground)]" />}
+                      primary={toolSubject(tool.args) || tool.name}
+                      meta={
+                        live && tool.status === "running"
+                          ? "searching"
+                          : tool.status === "error"
+                            ? "failed"
+                            : compactDuration(tool.ms)
+                      }
+                    />
+                  ))}
+                  {sources.groups.slice(0, SEARCH_SOURCES).map((group, index) => (
+                    <TraceRow
+                      key={group.host}
+                      style={rowDelay(searchTools.length + index)}
+                      href={group.links[0].url}
+                      mark={<SourceFavicon host={group.host} size={14} className="rounded-[4px]" />}
+                      primary={group.host}
+                      secondary={group.links.length > 1 ? `${group.links.length} pages` : group.links[0].path}
+                    />
+                  ))}
+                  {sources.groups.length > SEARCH_SOURCES && (
+                    <span className="animate-fade-up px-2 py-1 text-[12px] text-[var(--muted-foreground)]">
+                      +{sources.groups.length - SEARCH_SOURCES} more sites
                     </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyThinkingView>{live ? "Cover and slide rendering activity will appear here." : "This task rendered nothing."}</EmptyThinkingView>
-            )
-          )}
-        </>
-      )}
+                  )}
+                </>
+              ) : (
+                <EmptyTrace>
+                  {live ? "Searches and the pages read will appear here." : "This task made no searches."}
+                </EmptyTrace>
+              ))}
+
+            {view === "rendering" &&
+              (renderTools.length || renderEvents.length ? (
+                <>
+                  {renderTools.slice(-8).map((tool, index) => (
+                    <TraceRow
+                      key={tool.key ?? tool.id ?? tool.name}
+                      style={rowDelay(index)}
+                      mark={
+                        live && tool.status === "running" ? (
+                          <LoaderCircle className="size-3.5 animate-spin-slow text-[var(--foreground)]" />
+                        ) : tool.status === "error" ? (
+                          <Circle className="size-3.5 fill-[var(--destructive)] text-[var(--destructive)]" />
+                        ) : (
+                          <ImageIcon className="size-3.5 text-[var(--muted-foreground)]" />
+                        )
+                      }
+                      primary={tool.name}
+                      secondary={toolSubject(tool.args)}
+                      mono
+                      meta={
+                        live && tool.status === "running" ? "rendering" : compactDuration(tool.ms)
+                      }
+                    />
+                  ))}
+                  {!renderTools.length &&
+                    renderEvents.slice(-6).map((event, index) => (
+                      <TraceRow
+                        key={event.seq}
+                        style={rowDelay(index)}
+                        mark={<ImageIcon className="size-3.5 text-[var(--muted-foreground)]" />}
+                        primary={cleanEventText(event.text) || AGENT_BLURBS[event.author]}
+                      />
+                    ))}
+                </>
+              ) : (
+                <EmptyTrace>
+                  {live ? "Cover and slide rendering will appear here." : "This task rendered nothing."}
+                </EmptyTrace>
+              ))}
+          </div>
+        </div>
+      </div>
     </section>
   )
 }
 
-function ToolRow({
-  tool,
-  icon: Icon,
-  live = false,
-}: {
-  tool: ToolCall
-  icon: typeof Wrench
-  /** False once the run has ended, whatever the stored status says. */
-  live?: boolean
-}) {
-  // A call whose response never arrived - the run was stopped, or the process
-  // died mid-tool - is stored as "running" forever, because only a matching
-  // response flips it. Trusting that on a finished run left a spinner turning
-  // on a task that ended days ago. The run being over is the better evidence.
-  const active = live && tool.status === "running"
-  return (
-    <div className="flex items-start gap-3 px-4 py-3">
-      <Icon className="mt-0.5 size-4 shrink-0 text-[var(--muted-foreground)]" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-xs font-medium">{tool.name}</span>
-        {tool.args && (
-          <span className="mt-1 line-clamp-2 block whitespace-pre-wrap text-xs leading-5 text-[var(--muted-foreground)]">
-            {tool.args}
-          </span>
-        )}
-      </span>
-      <span className="flex items-center gap-1.5 text-xs tabular-nums text-[var(--muted-foreground)]">
-        <ActivityStatus active={active} failed={tool.status === "error"} />
-        {active ? "running" : tool.status === "running" ? "no result" : compactDuration(tool.ms)}
-      </span>
-    </div>
-  )
-}
-
-export function ToolChipList({
-  events,
-  live = false,
-}: {
-  events: RunEvent[]
-  live?: boolean
-}) {
-  const tools = React.useMemo(() => allTools(events), [events])
-  if (!tools.length) return null
-
-  return (
-    <div className="flex flex-wrap gap-2" aria-label={`${tools.length} tool calls`}>
-      {tools.slice(-8).map((tool) => (
-        <span
-          key={tool.key ?? tool.id ?? tool.name}
-          className="inline-flex max-w-full items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs"
-          title={tool.args || tool.result || tool.name}
-        >
-          {SEARCH_TOOL.test(tool.name) ? <Globe2 className="size-3.5" /> : RENDER_TOOL.test(tool.name) ? <ImageIcon className="size-3.5" /> : <Wrench className="size-3.5" />}
-          <span className="max-w-44 truncate font-mono">{tool.name}</span>
-          <span className="tabular-nums text-[var(--muted-foreground)]">
-            {tool.status === "running"
-              ? live
-                ? "running"
-                : "no result"
-              : compactDuration(tool.ms)}
-          </span>
-          {tool.status === "ok" ? (
-            <Check className="size-3.5 text-[var(--phase-qa)]" />
-          ) : live && tool.status === "running" ? (
-            <LoaderCircle className="size-3.5 animate-spin-slow text-[var(--phase-generate)]" />
-          ) : (
-            <Circle className="size-3.5 fill-[var(--destructive)] text-[var(--destructive)]" />
-          )}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-function sourceUrls(events: RunEvent[]): string[] {
-  const seen = new Set<string>()
-  const urls: string[] = []
-  for (const event of events) {
-    const sources = event.data?.sources
-    if (!Array.isArray(sources)) continue
-    for (const source of sources) {
-      if (typeof source !== "string" || seen.has(source)) continue
-      seen.add(source)
-      urls.push(source)
-    }
-  }
-  return urls
-}
 
 function usefulMessages(events: RunEvent[]): { seq: number; text: string }[] {
   const messages: { seq: number; text: string }[] = []
@@ -421,47 +570,75 @@ function usefulMessages(events: RunEvent[]): { seq: number; text: string }[] {
   return messages.slice(-3)
 }
 
+/**
+ * How far into a paragraph the per-word stagger keeps counting.
+ *
+ * Beyond this every remaining word shares the last delay and they resolve
+ * together. Without the cap a 200-word brief would take four seconds to
+ * finish appearing, which stops being an arrival and starts being a wait.
+ */
+const STAGGER_WORDS = 44
+const STAGGER_MS = 22
+
+/**
+ * One agent message, its words resolving out of blur as it lands.
+ *
+ * The stagger is CSS-only - a per-word `animation-delay`, no timer and no
+ * state. That matters for more than tidiness: the entire paragraph is in the
+ * DOM from the first frame, so it can be selected, copied and read aloud
+ * immediately, and only its APPEARANCE is staggered. A JS typewriter would
+ * withhold text the server has already sent, and would restart itself every
+ * time a new event arrived.
+ */
+function StreamedLine({ text, caret }: { text: string; caret: boolean }) {
+  const words = React.useMemo(() => text.split(/\s+/), [text])
+  return (
+    <p className="text-[15px] leading-7 text-[var(--foreground)]">
+      {words.map((word, index) => (
+        <React.Fragment key={index}>
+          {/* The space sits OUTSIDE the span so the line still breaks
+              normally between words. */}
+          <span
+            className="stream-word"
+            style={{ animationDelay: `${Math.min(index, STAGGER_WORDS) * STAGGER_MS}ms` }}
+          >
+            {word}
+          </span>{" "}
+        </React.Fragment>
+      ))}
+      {caret && (
+        <span
+          className="ml-0.5 inline-block h-4 w-0.5 translate-y-0.5 animate-pulse bg-[var(--foreground)]"
+          aria-label="Streaming"
+        />
+      )}
+    </p>
+  )
+}
+
 export function StreamedAgentText({ events, live }: { events: RunEvent[]; live: boolean }) {
   const messages = usefulMessages(events)
-  const sources = sourceUrls(events)
-  if (!messages.length && !sources.length) return null
+  const sources = React.useMemo(() => groupSources(events), [events])
+  const facts = React.useMemo(() => collectFacts(events), [events])
+  if (!messages.length && !sources.total && !facts.length) return null
 
   return (
     <section className="space-y-4" aria-live="polite">
       {messages.map((message, index) => (
-        <p key={message.seq} className="animate-line-reveal text-[15px] leading-7 text-[var(--foreground)]">
-          {message.text}
-          {index === messages.length - 1 && live && (
-            <span className="ml-1 inline-block h-4 w-0.5 translate-y-0.5 animate-pulse bg-[var(--foreground)]" aria-label="Streaming" />
-          )}
-        </p>
+        <StreamedLine
+          key={message.seq}
+          text={message.text}
+          caret={index === messages.length - 1 && live}
+        />
       ))}
 
-      {sources.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-medium text-[var(--muted-foreground)]">Sources</p>
-          <div className="flex flex-wrap gap-2">
-            {sources.slice(0, 6).map((source, index) => {
-              let host = source
-              try { host = new URL(source).hostname.replace(/^www\./, "") } catch { /* keep source */ }
-              return (
-                <a
-                  key={source}
-                  href={source}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex max-w-full items-center gap-2 rounded-[9px] border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs transition-colors hover:bg-[var(--muted)]"
-                >
-                  <Globe2 className="size-3.5 shrink-0 text-[var(--link)]" />
-                  <span className="max-w-52 truncate">{host}</span>
-                  <span className="grid size-4 shrink-0 place-items-center rounded bg-[var(--muted)] text-[10px] text-[var(--muted-foreground)]">{index + 1}</span>
-                  <ExternalLink className="size-3 shrink-0 text-[var(--muted-foreground)]" />
-                </a>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      {/* The verified claims, each cited to the page it was checked against.
+          Above the source group on purpose: a specific citation is worth more
+          than the run's full reading list, and burying it under one would
+          make the list look like the answer. */}
+      <AgentFacts facts={facts} />
+
+      <AgentSources groups={sources.groups} total={sources.total} />
     </section>
   )
 }

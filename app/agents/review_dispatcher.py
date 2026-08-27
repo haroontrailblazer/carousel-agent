@@ -172,7 +172,8 @@ def _verdict_from_payload(payload: dict) -> Verdict:
     with.
 
     Args:
-        payload: ``{"status": ..., "feedback": ..., ["reviewer": ...]}``.
+        payload: ``{"status": ..., "feedback": ...,
+            ["reviewer": ...], ["targets": [...]]}``.
 
     Returns:
         A validated Verdict model.
@@ -180,6 +181,16 @@ def _verdict_from_payload(payload: dict) -> Verdict:
     raw_status = str(payload.get("status") or "").strip().lower()
     feedback = str(payload.get("feedback") or "").strip()
     reviewer = str(payload.get("reviewer") or "").strip()
+    # Carried through as strings and canonicalised later, by the feedback
+    # router's sanitizer. Validating agent names here would put the same list
+    # of valid targets in two modules, and the sanitizer is already the one
+    # place that owns it.
+    raw_targets = payload.get("targets")
+    targets = (
+        [str(t).strip() for t in raw_targets if str(t).strip()]
+        if isinstance(raw_targets, (list, tuple))
+        else []
+    )
     if raw_status not in ("approved", "rejected"):
         feedback = (
             f"Malformed review response (status={raw_status!r}); treated as "
@@ -191,7 +202,9 @@ def _verdict_from_payload(payload: dict) -> Verdict:
             "Reviewer rejected without feedback text; re-check overall quality "
             "(visual, texts, design, CTA)."
         )
-    return Verdict(status=raw_status, feedback=feedback, reviewer=reviewer)
+    return Verdict(
+        status=raw_status, feedback=feedback, reviewer=reviewer, targets=targets
+    )
 
 
 def _fresh_review_response(

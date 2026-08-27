@@ -159,6 +159,16 @@ class Verdict(BaseModel):
     status: VerdictStatus
     feedback: str = ""  # optional on approve, compulsory on reject
     reviewer: str = ""
+    #: Agents the human POINTED AT, as ``state.REWORKABLE_AGENTS`` names.
+    #:
+    #: Empty means "work out who should fix this" - the router LLM reads the
+    #: text and decides, which is how every verdict behaved before the console
+    #: could point at an agent. Non-empty means the human already knows: they
+    #: picked the CTA, or clicked the cover. Those are honoured exactly rather
+    #: than treated as a hint, because a person naming the agent is better
+    #: evidence than a model inferring it - and being silently overruled is
+    #: indistinguishable from the feature not working.
+    targets: list[str] = Field(default_factory=list)
     decided_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

@@ -304,12 +304,28 @@ def _sanitize_rework_plan(
     # the feedback only when there is no reviewer text to prefer.
     plan.feedback = effective_feedback or plan.feedback
 
-    # Normalize targets, preserving order and dropping duplicates/unknowns.
-    normalized: list[str] = []
-    for raw_target in plan.targets:
+    # A human who NAMED an agent outranks the model that guessed one.
+    #
+    # The console lets a reviewer point - pick /cta, or click the cover on the
+    # review screen - and those choices arrive on the verdict. When they are
+    # present the router's opinion is discarded rather than merged: the whole
+    # value of pointing is that it is exact, and a plan that quietly added
+    # `planner` alongside the CTA would re-run the entire carousel to fix one
+    # slide. Anything unrecognised still falls through to the normal path, so
+    # a bad target cannot leave the plan empty.
+    human_targets: list[str] = []
+    for raw_target in verdict.targets if verdict is not None else []:
         target = _normalize_target(str(raw_target))
-        if target is not None and target not in normalized:
-            normalized.append(target)
+        if target is not None and target not in human_targets:
+            human_targets.append(target)
+
+    # Normalize targets, preserving order and dropping duplicates/unknowns.
+    normalized: list[str] = list(human_targets)
+    if not normalized:
+        for raw_target in plan.targets:
+            target = _normalize_target(str(raw_target))
+            if target is not None and target not in normalized:
+                normalized.append(target)
 
     if not normalized:
         normalized = derive_targets_from_feedback(

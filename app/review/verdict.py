@@ -246,6 +246,7 @@ async def submit_verdict(
     *,
     reviewer: str = "",
     source: VerdictSource = "telegram",
+    targets: Optional[list[str]] = None,
 ) -> VerdictOutcome:
     """Record a human verdict and resume the paused run.
 
@@ -267,6 +268,9 @@ async def submit_verdict(
         reviewer: Who decided - an email from the web console, empty for a
             Telegram link (those are capability URLs and carry no identity).
         source: Which surface decided.
+        targets: Agents the human pointed at, when they named one. Empty - the
+            only thing a Telegram link can send - leaves the routing to the
+            feedback router exactly as before.
 
     Returns:
         A :class:`VerdictOutcome`. Never raises for an expected condition;
@@ -274,6 +278,7 @@ async def submit_verdict(
     """
     clean_status = (status or "").strip().lower()
     clean_feedback = (feedback or "").strip()
+    clean_targets = [str(t).strip() for t in (targets or []) if str(t).strip()]
 
     if clean_status not in ("approved", "rejected"):
         return VerdictOutcome(
@@ -342,13 +347,19 @@ async def submit_verdict(
             run_id,
             clean_status,
             clean_feedback,
+            # Stored with the verdict, so the feedback history records WHICH
+            # agent a person blamed rather than only what they said. The
+            # learner reads these rows back.
+            targets=clean_targets or None,
             decided_by=reviewer,
             source=source,
         )
     except Exception as exc:
         logger.warning("record_verdict failed for run %s: %s", run_id, exc)
 
-    spawn_resume(run_id, session_id, function_call_id, clean_status, clean_feedback)
+    spawn_resume(
+        run_id, session_id, function_call_id, clean_status, clean_feedback, clean_targets
+    )
     logger.info(
         "Verdict '%s' accepted for run %s from %s%s; resume dispatched.",
         clean_status,

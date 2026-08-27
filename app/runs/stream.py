@@ -570,6 +570,62 @@ def _source_urls(value: Any, limit: int = 24) -> list[str]:
     return found
 
 
+_BRIEF_TOOL = "save_research_brief"
+_MAX_FACTS = 12
+_MAX_FACT_CHARS = 400
+
+
+def _research_facts(args: Any) -> list[dict]:
+    """Lift the brief's per-fact citations out of a ``save_research_brief`` call.
+
+    The Research agent already records WHICH URL each fact was verified at -
+    ``ResearchFact.source_url`` - but that mapping only ever existed inside
+    the tool arguments, which the trace truncates to 600 characters for
+    display. Pulling it out here is what lets the console cite a claim rather
+    than list a bag of links beside it and leave the reader to guess which
+    link proved what.
+
+    A fact with no URL is kept, uncited: it came from the news item's own
+    text, which is honest and different from an unsourced invention.
+    """
+    if not isinstance(args, dict):
+        return []
+    facts: list[dict] = []
+    for item in args.get("key_facts") or []:
+        if not isinstance(item, dict):
+            continue
+        fact = str(item.get("fact") or "").strip()
+        if not fact:
+            continue
+        url = str(item.get("source_url") or "").strip()
+        facts.append(
+            {
+                "fact": fact[:_MAX_FACT_CHARS],
+                "source_url": url if url.startswith(("http://", "https://")) else "",
+            }
+        )
+        if len(facts) >= _MAX_FACTS:
+            break
+    return facts
+
+
+def _brief_sources(args: Any) -> list[str]:
+    """The URLs a ``save_research_brief`` call declares it consulted.
+
+    Deliberately narrow: only ``sources`` and each fact's ``source_url``, not
+    a walk of the whole payload. ``media_candidates`` are also URLs, but they
+    are footage to clip for the cover rather than anything that was read, and
+    listing them under "sources" would be a lie of categorisation.
+    """
+    if not isinstance(args, dict):
+        return []
+    urls = list(args.get("sources") or [])
+    for item in args.get("key_facts") or []:
+        if isinstance(item, dict) and item.get("source_url"):
+            urls.append(item["source_url"])
+    return _source_urls(urls)
+
+
 def build_trace(rows: list[dict]) -> tuple[list[dict], dict]:
     """Turn stored ADK events into display frames plus a summary.
 
@@ -630,6 +686,11 @@ def build_trace(rows: list[dict]) -> tuple[list[dict], dict]:
         calls, responses = _tool_parts(content.get("parts") or [])
 
         tools: list[dict] = []
+        # Declared on the frame that CARRIES the call, not the one that
+        # answers it: the brief's citations live in the arguments, and the
+        # response is only a status line.
+        frame_sources: list[str] = []
+        frame_facts: list[dict] = []
         for call in calls:
             tool = {
                 "id": call["id"],
@@ -642,9 +703,13 @@ def build_trace(rows: list[dict]) -> tuple[list[dict], dict]:
             tools.append(tool)
             if call["id"]:
                 pending[call["id"]] = {"tool": tool, "started": ts}
+            if call["name"] == _BRIEF_TOOL:
+                frame_facts.extend(_research_facts(call["args"]))
+                for url in _brief_sources(call["args"]):
+                    if url not in frame_sources:
+                        frame_sources.append(url)
 
         # A response completes the call recorded earlier, wherever it was.
-        frame_sources: list[str] = []
         for resp in responses:
             started = pending.pop(resp["id"], None) if resp["id"] else None
             payload = resp.get("response")
@@ -675,6 +740,9 @@ def build_trace(rows: list[dict]) -> tuple[list[dict], dict]:
 
         if frame_sources:
             frame.setdefault("data", {})["sources"] = frame_sources
+
+        if frame_facts:
+            frame.setdefault("data", {})["facts"] = frame_facts
 
         if tools:
             frame["tools"] = tools

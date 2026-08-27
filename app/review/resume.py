@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from app.services import db
 
@@ -51,7 +51,10 @@ _resume_tasks: set["asyncio.Task[None]"] = set()
 
 
 def build_resume_content(
-    function_call_id: str, status: str, feedback: str
+    function_call_id: str,
+    status: str,
+    feedback: str,
+    targets: Optional[list[str]] = None,
 ) -> Any:
     """Build the ``types.Content`` that answers the paused review tool call.
 
@@ -63,6 +66,9 @@ def build_resume_content(
         function_call_id: The original ``await_human_review`` call id.
         status: ``"approved"`` or ``"rejected"``.
         feedback: Reviewer feedback text (may be empty on approve).
+        targets: Agents the human named, when they pointed at one. Left out of
+            the payload entirely when empty, so a verdict that names nobody
+            looks exactly as it always did to everything downstream.
 
     Returns:
         The ``types.Content`` to pass as ``Runner.run_async(new_message=...)``.
@@ -76,7 +82,11 @@ def build_resume_content(
                 function_response=types.FunctionResponse(
                     id=function_call_id,
                     name=AWAIT_REVIEW_TOOL_NAME,
-                    response={"status": status, "feedback": feedback},
+                    response={
+                        "status": status,
+                        "feedback": feedback,
+                        **({"targets": list(targets)} if targets else {}),
+                    },
                 )
             )
         ],
@@ -129,6 +139,7 @@ async def resume_pipeline(
     function_call_id: str,
     status: str,
     feedback: str,
+    targets: Optional[list[str]] = None,
 ) -> None:
     """Resume the paused run with the reviewer's verdict (background work).
 
@@ -178,7 +189,7 @@ async def resume_pipeline(
         )
 
         runner = build_runner()
-        content = build_resume_content(function_call_id, status, feedback)
+        content = build_resume_content(function_call_id, status, feedback, targets)
 
         result = await asyncio.wait_for(
             consume_invocation(
@@ -267,10 +278,13 @@ def spawn_resume(
     function_call_id: str,
     status: str,
     feedback: str,
+    targets: Optional[list[str]] = None,
 ) -> None:
     """Fire the resume as a fire-and-forget asyncio task (strongly referenced)."""
     task = asyncio.get_running_loop().create_task(
-        resume_pipeline(run_id, session_id, function_call_id, status, feedback),
+        resume_pipeline(
+            run_id, session_id, function_call_id, status, feedback, targets
+        ),
         name=f"resume-{run_id}",
     )
     _resume_tasks.add(task)

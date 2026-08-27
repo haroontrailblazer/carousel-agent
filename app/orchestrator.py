@@ -52,7 +52,7 @@ from typing_extensions import override
 from app import observability
 from app.agents.publisher import K_PUBLISH_RESULT
 from app.config import settings
-from app.schemas import NewsItem, QAReport, ReworkPlan, Verdict
+from app.schemas import CarouselPlan, NewsItem, QAReport, ReworkPlan, Verdict
 from app.services import db
 from app.state import (
     K_REVIEW_NOTICE_FAILED,
@@ -68,6 +68,7 @@ from app.state import (
     AGENT_TEMPLATE_DESIGN,
     K_NEWS_ITEM,
     K_PHASE,
+    K_PLAN,
     K_QA_REPORT,
     K_QA_ROUND,
     AGENT_RESEARCH,
@@ -484,6 +485,34 @@ class CarouselOrchestrator(BaseAgent):
             logger.debug("runs-table create skipped (%s).", exc)
         await self._record_phase_quietly(state, PHASE_GENERATE)
 
+    async def _name_run_quietly(self, state: Any) -> None:
+        """Give the task the name the PLANNER chose, once it has one.
+
+        A topic run is created titled with whatever the person typed, because
+        at that moment there is no story yet - so the sidebar showed "the new
+        viral ai news" where a headline belongs. The planner's ``hook_title``
+        is the carousel's actual cover line, which is the best short name this
+        pipeline ever produces for the thing it is making.
+
+        Deliberately best-effort and silent about failure, like the phase
+        mirror above it: a title is presentation, and nothing downstream reads
+        it to decide what to do. ``db.set_auto_title`` refuses when a human has
+        renamed the task, so a rework re-running the planner cannot take a
+        chosen name away.
+        """
+        run_id = str(state.get(K_RUN_ID) or "")
+        if not run_id:
+            return
+        plan = _safe_model(state, K_PLAN, CarouselPlan)
+        title = (getattr(plan, "hook_title", "") or "").strip() if plan else ""
+        if not title:
+            return
+        try:
+            if await db.set_auto_title(run_id, title):
+                logger.info("Run %s named by the planner: %r", run_id, title)
+        except Exception as exc:  # DB may be absent in local runs - never fatal
+            logger.debug("runs-table title update skipped (%s).", exc)
+
     async def _phase_generate(
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]
     ) -> AsyncGenerator[Event, None]:
@@ -493,6 +522,9 @@ class CarouselOrchestrator(BaseAgent):
                 yield event
             if holder["paused"]:
                 return
+        # The plan exists by now, so the task can stop being called by the
+        # words that were typed to start it.
+        await self._name_run_quietly(state)
         yield self._transition(ctx, PHASE_GENERATE, PHASE_QA, holder=holder)
         await self._record_phase_quietly(state, PHASE_QA)
 

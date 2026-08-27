@@ -441,13 +441,15 @@ if __name__ == "__main__":  # pragma: no cover
 
 
 class WorkspaceIsOneImplementationTests(unittest.TestCase):
-    """The New carousel screen and the Chat tab are the same screen.
+    """There is exactly ONE chat screen, and the task page points at it.
 
-    "Open the chat for this task" should hand you the workspace you were just
-    working in, not a read-only transcript of it. Two implementations of that
-    would drift - which is exactly what had happened: /new had a composer, a
-    Stop button and an asset rail; the Chat tab had a card with the transcript
-    in it.
+    The rule this protects has not changed - "open the chat for this task"
+    must hand you the workspace you were working in, never a second, drifting
+    copy of it. What changed is how: the task page used to EMBED the workspace
+    as a Chat tab, so the same conversation existed in two places at two
+    widths. It now links out to `/new?run=<id>` instead, which is the same
+    guarantee enforced more cheaply - there is only one implementation because
+    there is only one place it renders.
     """
 
     @classmethod
@@ -460,15 +462,30 @@ class WorkspaceIsOneImplementationTests(unittest.TestCase):
             cls.src / "components" / "agent" / "agent-composer.tsx"
         ).read_text(encoding="utf-8")
 
-    def test_both_screens_render_the_shared_workspace(self) -> None:
-        for route in ("new-run.tsx", "run-detail.tsx"):
-            text = (self.src / "routes" / route).read_text(encoding="utf-8")
-            self.assertIn(
-                "AgentWorkspace",
-                text,
-                f"{route} builds its own workspace instead of rendering the "
-                "shared one, so the two screens will drift apart again.",
-            )
+    def test_the_chat_screen_renders_the_shared_workspace(self) -> None:
+        text = (self.src / "routes" / "new-run.tsx").read_text(encoding="utf-8")
+        self.assertIn(
+            "AgentWorkspace",
+            text,
+            "new-run.tsx builds its own workspace instead of rendering the "
+            "shared one, so the chat screen will drift from the component.",
+        )
+
+    def test_the_task_page_links_to_the_chat_rather_than_rebuilding_it(self) -> None:
+        """One conversation, one place. The task page sends you there."""
+        text = (self.src / "routes" / "run-detail.tsx").read_text(encoding="utf-8")
+        self.assertIn(
+            "chatPath",
+            text,
+            "run-detail.tsx no longer points at the chat screen; a second "
+            "copy of the conversation is how the two drifted apart before.",
+        )
+        self.assertNotIn(
+            "<AgentWorkspace",
+            text,
+            "run-detail.tsx embeds the workspace again, so the chat exists "
+            "in two places at two widths.",
+        )
 
     def test_stop_is_offered_from_the_first_frame(self) -> None:
         """A run you cannot cancel yet is a run spending money you cannot stop.
@@ -478,11 +495,16 @@ class WorkspaceIsOneImplementationTests(unittest.TestCase):
         snapshot arriving. The agents are already working by then, and that is
         precisely when someone realises they typed the wrong thing.
         """
-        block = re.search(
-            r'state === "running" \|\| state === "starting" \? \((.*?)\) : state ===',
+        # The two states share one `working` flag now, which is the strongest
+        # form of this guarantee: `starting` cannot be forgotten separately
+        # because it is not written separately.
+        self.assertIn(
+            'const working = state === "running" || state === "starting"',
             self.composer,
-            re.DOTALL,
+            "starting and running no longer share one flag, so the Stop "
+            "button can be enabled for one and not the other again",
         )
+        block = re.search(r"\{working \? \((.*?)\) : \(", self.composer, re.DOTALL)
         assert block is not None, "the stop button branch was not found"
         self.assertNotIn(
             'state === "starting"',

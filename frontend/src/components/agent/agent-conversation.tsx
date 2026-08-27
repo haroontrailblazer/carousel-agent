@@ -5,7 +5,6 @@ import {
   PixelLoader,
   StreamedAgentText,
   ThinkingPanel,
-  ToolChipList,
 } from "@/components/agent/agent-activity"
 import { AgentAssetStrip } from "@/components/agent/agent-assets"
 import { UserAvatar } from "@/components/layout/user-avatar"
@@ -110,8 +109,11 @@ export function AgentConversation({
           // you have been watching since it began or just opened the task.
           startedAt={run.created_at}
         />
+        {/* The tool chips that used to sit here are gone: they were the same
+            calls the trace already lists, minus the query that made them
+            legible, so a research run showed six identical `web_search` pills
+            above a panel explaining what each one searched for. */}
         <ThinkingPanel events={events} summary={summary ?? null} live={live} />
-        <ToolChipList events={events} live={live} />
         <StreamedAgentText events={events} live={live} />
         <AgentAssetStrip artifacts={artifacts} live={live} runId={runId} />
 

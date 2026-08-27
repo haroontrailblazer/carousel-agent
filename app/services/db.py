@@ -680,11 +680,42 @@ async def rename_run(run_id: str, title: str) -> bool:
     """
     pool = await get_pool()
     result = await pool.execute(
-        "UPDATE runs SET title = NULLIF($2, '') WHERE run_id = $1",
+        # `title_locked` is set here and nowhere else: this is the only path a
+        # human names a task through, and it is what stops the pipeline
+        # renaming it back on the next rework. See 004_title_lock.sql.
+        "UPDATE runs SET title = NULLIF($2, ''), title_locked = true "
+        "WHERE run_id = $1",
         str(run_id),
         title.strip(),
     )
     # asyncpg returns the command tag, e.g. "UPDATE 1".
+    return result.rsplit(" ", 1)[-1] != "0"
+
+
+async def set_auto_title(run_id: str, title: str) -> bool:
+    """Let the pipeline name a task, unless a person already has.
+
+    A topic run is created with the prompt as its title, because at that
+    moment nothing better exists. Once the planner has read the story it has a
+    real name for the carousel, and that is what belongs in the sidebar and in
+    the Telegram notice.
+
+    Guarded on ``title_locked`` rather than on the text, because a rework
+    re-runs the planner: without the guard a name the user chose would be
+    replaced, silently, part-way through their own task.
+
+    Returns True when the title was actually written, so a caller can log the
+    difference between "renamed it" and "left the human's name alone".
+    """
+    clean = (title or "").strip()
+    if not clean:
+        return False
+    pool = await get_pool()
+    result = await pool.execute(
+        "UPDATE runs SET title = $2 WHERE run_id = $1 AND NOT title_locked",
+        str(run_id),
+        clean[:150],
+    )
     return result.rsplit(" ", 1)[-1] != "0"
 
 

@@ -24,7 +24,7 @@
 import * as React from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "react-router"
-import { ListTree, Pencil, Plus } from "lucide-react"
+import { ListTree, PanelRightOpen, Pencil, Plus } from "lucide-react"
 import { toast } from "sonner"
 
 import { AgentAssetRail, AgentAssetStrip } from "@/components/agent/agent-assets"
@@ -33,6 +33,7 @@ import { AgentConversation } from "@/components/agent/agent-conversation"
 import { Skeleton } from "@/components/ui/skeleton"
 import { InlineEdit } from "@/components/ui/inline-edit"
 import { useRenameRun } from "@/hooks/use-rename-run"
+import { useRailPanel } from "@/hooks/use-rail-panel"
 import { invalidateRun, type RunWorkspace } from "@/hooks/use-run-workspace"
 import { ApiError, post } from "@/lib/api"
 import { AGENT_LABELS, PHASE_LABELS } from "@/lib/pipeline"
@@ -272,16 +273,29 @@ export function AgentWorkspace({
    * typing a fresh topic into a finished chat means anyway.
    */
   const [followUp, setFollowUp] = React.useState("")
+  /** The agent this message is addressed to, when the reviewer picked one. */
+  const [target, setTarget] = React.useState<string | null>(null)
 
   const rework = useMutation({
-    mutationFn: (feedback: string) =>
-      post(`/api/runs/${runId}/verdict`, { status: "rejected", feedback }),
-    onSuccess: () => {
+    mutationFn: ({ feedback, to }: { feedback: string; to: string | null }) =>
+      // `targets` is honoured exactly by the server when it is non-empty (see
+      // the sanitizer in app/agents/feedback_router.py); omitted, the router
+      // reads the text and decides, as it always has.
+      post(`/api/runs/${runId}/verdict`, {
+        status: "rejected",
+        feedback,
+        targets: to ? [to] : [],
+      }),
+    onSuccess: (_data, variables) => {
       setFollowUp("")
+      setTarget(null)
       invalidateRun(queryClient, runId)
-      toast.success("Sent to the agents", {
-        description: "Reworking the carousel with your notes.",
-      })
+      toast.success(
+        variables.to
+          ? `Sent to ${AGENT_LABELS[variables.to] ?? variables.to}`
+          : "Sent to the agents",
+        { description: "Reworking the carousel with your notes." },
+      )
     },
     onError: (error) =>
       toast.error(
@@ -316,9 +330,9 @@ export function AgentWorkspace({
   const sendFollowUp = React.useCallback(() => {
     const text = followUp.trim()
     if (text.length < 3 || rework.isPending || startAnother.isPending) return
-    if (state === "review") rework.mutate(text)
+    if (state === "review") rework.mutate({ feedback: text, to: target })
     else startAnother.mutate(text)
-  }, [followUp, state, rework, startAnother])
+  }, [followUp, target, state, rework, startAnother])
 
 
   /**
@@ -335,6 +349,10 @@ export function AgentWorkspace({
    * that is working perfectly.
    */
   const booting = !run.isError && (!run.data || !stream.synced)
+
+  // Gated on `booting`, so the skeleton gets the whole width and the rail
+  // slides in afterwards - the chat narrowing is the arrival.
+  const rail = useRailPanel(!booting)
 
   const conversation = (
     <>
@@ -375,6 +393,8 @@ export function AgentWorkspace({
       value={followUp}
       onChange={setFollowUp}
       onSubmit={sendFollowUp}
+      target={target}
+      onTargetChange={setTarget}
       // Stop stays available for the whole time the agents are up, including
       // the seconds before the first snapshot arrives - a run you cannot
       // cancel because the page has not finished loading is the worst moment
@@ -389,14 +409,21 @@ export function AgentWorkspace({
     return (
       <div className="space-y-6">
         <div className="space-y-6">{conversation}</div>
-        <AgentAssetStrip artifacts={artifacts.data} live={isLive} runId={runId} />
+        {!booting && (
+          <AgentAssetStrip
+            artifacts={artifacts.data}
+            live={isLive}
+            runId={runId}
+            className="animate-strip-in"
+          />
+        )}
         {composer}
       </div>
     )
   }
 
   return (
-    <div className="agent-workspace-grid">
+    <div className="agent-workspace-grid" data-rail={rail.open ? "open" : "closed"}>
       <section className="agent-conversation-pane">
         <header className="agent-workspace-header">
           {/* The title alone. The activity line that used to sit under it -
@@ -427,6 +454,24 @@ export function AgentWorkspace({
               <ListTree className="size-4.5" />
               <span className="sr-only">Open the agent trace</span>
             </Link>
+            {/* Only while the panel is shut, and last in the row - the
+                rightmost control is the one nearest the edge the panel comes
+                back from. Open, this lives inside the rail beside its own
+                heading, so the control is always attached to the thing it
+                acts on. Keyed off the PREFERENCE rather than whether the rail
+                is currently showing, so it does not blink into the header for
+                the second a chat spends loading. */}
+            {!rail.preferred && (
+              <button
+                type="button"
+                onClick={rail.toggle}
+                className="rail-toggle size-9 shrink-0 place-items-center rounded-[10px] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                title="Show the assets panel"
+              >
+                <PanelRightOpen className="size-4.5" />
+                <span className="sr-only">Show the assets panel</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -441,11 +486,18 @@ export function AgentWorkspace({
         </div>
       </section>
 
+      {/* Always mounted, because the grid track animates to its width and
+          cannot animate to the width of something absent. What changes is the
+          track: 0 while the chat is still a skeleton or the panel is shut,
+          15rem when it is open - so the conversation widens back over the
+          space rather than leaving a hole. */}
       <AgentAssetRail
         artifacts={artifacts.data}
         loading={artifacts.isLoading}
         live={isLive}
         runId={runId}
+        hidden={!rail.open}
+        onCollapse={rail.toggle}
       />
     </div>
   )

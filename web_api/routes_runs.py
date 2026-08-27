@@ -120,6 +120,17 @@ class VerdictRequest(BaseModel):
     feedback: str = ""
     #: Which cover to publish when the run produced both a clip and a still.
     cover: Optional[str] = Field(None, pattern="^(video|image)$")
+    #: Agents the reviewer POINTED AT, from ``state.REWORKABLE_AGENTS`` (or any
+    #: alias the feedback router understands, such as "cover" or "design").
+    #:
+    #: Left empty, routing works exactly as it always has: the router LLM reads
+    #: the feedback and decides. Named, they are honoured exactly - the console
+    #: lets a reviewer pick an agent or click the slide they are unhappy with,
+    #: and being overruled by a model would defeat the point of pointing.
+    #:
+    #: Capped at the number of reworkable agents, since naming more than all of
+    #: them is either a mistake or an attempt to make the list unbounded.
+    targets: list[str] = Field(default_factory=list, max_length=6)
 
 
 class EnqueueRequest(BaseModel):
@@ -694,6 +705,7 @@ async def post_verdict(
         payload.feedback,
         reviewer=identity.email,
         source="web",
+        targets=payload.targets,
     )
     if outcome.ok:
         return {

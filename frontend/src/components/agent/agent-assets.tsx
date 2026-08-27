@@ -1,7 +1,8 @@
-import { Check, Image as ImageIcon, LoaderCircle } from "lucide-react"
+import { Check, LoaderCircle, PanelRightClose } from "lucide-react"
 import { Link } from "react-router"
 
 import type { RunArtifacts } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 type AssetItem = {
   key: string
@@ -48,27 +49,63 @@ export function AgentAssetRail({
   loading,
   live,
   runId,
+  className,
+  hidden,
+  onCollapse,
 }: {
   artifacts: RunArtifacts | null | undefined
   loading: boolean
   live: boolean
   runId: string
+  /** Entrance animation; see `.animate-rail-in`. */
+  className?: string
+  /** Shut: the grid track is 0 wide, so nothing here is reachable. */
+  hidden?: boolean
+  /** Collapse the panel. The control lives in here while it is open. */
+  onCollapse?: () => void
 }) {
   const items = readyAssets(artifacts)
   const expected = Math.max(artifacts?.expected_count ?? 0, items.length, live ? 3 : 0)
   const skeletons = Math.min(Math.max(expected - items.length, loading && !items.length ? 2 : 0), 4)
 
   return (
-    <aside className="agent-asset-rail border-[var(--border)] bg-[var(--background)]">
-      <div className="sticky top-0 z-10 flex items-center justify-between bg-[var(--background)]/92 px-4 pb-3 pt-5 backdrop-blur">
-        <div>
+    <aside
+      // Clipped to nothing by the closed grid track, so it must also be
+      // inert: without this, Tab still walks into a panel that is not there
+      // and a screen reader still reads out every asset.
+      aria-hidden={hidden || undefined}
+      inert={hidden || undefined}
+      className={cn(
+        "agent-asset-rail border-[var(--border)] bg-[var(--background)]",
+        className,
+      )}
+    >
+      {/* pt-2.5, not pt-5: this row has to line up with the chat header beside
+          it, so that the collapse control and the trace control sit on one
+          line rather than ten pixels apart. Measured, not guessed - see
+          measure-toggle in the harness. */}
+      <div className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--background)]/92 px-4 pb-3 pt-2.5 backdrop-blur">
+        {/* Closing the panel belongs to the panel, beside its own name. The
+            chat header only carries this control while the rail is shut,
+            because that is the only state where the rail cannot carry it. */}
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            title="Hide the assets panel"
+            className="-ml-2 grid size-9 shrink-0 place-items-center rounded-[10px] text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+          >
+            <PanelRightClose className="size-4.5" />
+            <span className="sr-only">Hide the assets panel</span>
+          </button>
+        )}
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold">Assets</h2>
           <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
             <span className="size-1.5 rounded-full bg-[var(--brand)]" />
             {items.length}{expected ? ` of ${expected}` : ""} ready
           </p>
         </div>
-        <ImageIcon className="size-4 text-[var(--muted-foreground)]" />
       </div>
 
       <div className="grid grid-cols-2 gap-3 px-4 pb-5 sm:grid-cols-3 lg:grid-cols-1">
@@ -119,16 +156,19 @@ export function AgentAssetStrip({
   artifacts,
   live,
   runId,
+  className,
 }: {
   artifacts: RunArtifacts | null | undefined
   live: boolean
   runId: string
+  /** Entrance animation; see `.animate-strip-in`. */
+  className?: string
 }) {
   const items = readyAssets(artifacts)
   if (!items.length && !live) return null
 
   return (
-    <section className="agent-asset-strip space-y-2">
+    <section className={cn("agent-asset-strip space-y-2", className)}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-medium text-[var(--muted-foreground)]">
           Assets · {items.length}{artifacts?.expected_count ? ` of ${artifacts.expected_count}` : ""} ready

@@ -1,6 +1,11 @@
 import * as React from "react"
 import { ArrowUp, Plus, Square } from "lucide-react"
 
+import {
+  TargetChip,
+  TargetMenu,
+  useTargetPicker,
+} from "@/components/agent/agent-target-picker"
 import { cn } from "@/lib/utils"
 
 /**
@@ -37,6 +42,8 @@ export function AgentComposer({
   onStop,
   state,
   stopping = false,
+  target = null,
+  onTargetChange,
 }: {
   value: string
   onChange: (value: string) => void
@@ -45,6 +52,9 @@ export function AgentComposer({
   state: ComposerState
   /** A stop is in flight; the button says so instead of looking ignored. */
   stopping?: boolean
+  /** The agent this message is addressed to, when one was picked. */
+  target?: string | null
+  onTargetChange?: (target: string | null) => void
 }) {
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
 
@@ -53,6 +63,15 @@ export function AgentComposer({
   const working = state === "running" || state === "starting"
   const composing = state === "idle"
   const canType = !working
+
+  // Pointing only exists while the pipeline is paused on a review. See the
+  // hook for why offering it anywhere else would be a menu that does nothing.
+  const picker = useTargetPicker({
+    value,
+    onChange,
+    onPick: (agent) => onTargetChange?.(agent),
+    enabled: state === "review" && !!onTargetChange,
+  })
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -63,13 +82,21 @@ export function AgentComposer({
     <form
       onSubmit={submit}
       className={cn(
-        "agent-composer rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-2 shadow-[var(--shadow-lift)]",
+        "agent-composer relative rounded-[20px] border border-[var(--border)] bg-[var(--card)] p-2 shadow-[var(--shadow-lift)]",
         // Only the empty composer is tall. Once a task exists the bar is a
         // single line for the rest of its life - working, waiting on you,
         // finished or stopped.
         !composing && "agent-composer--thin",
       )}
     >
+      {picker.open && (
+        <TargetMenu
+          matches={picker.matches}
+          active={picker.active}
+          onChoose={picker.choose}
+        />
+      )}
+
       {/* The collapsing half. It keeps rendering while closed rather than
           unmounting, because a grid row cannot animate to the height of
           something that is not there - and the textarea is `disabled` when
@@ -115,13 +142,27 @@ export function AgentComposer({
           // says where this message will go, and it differs by state on
           // purpose: asking for a change while the carousel waits on you is a
           // completely different act from starting another one.
-          <input
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder={PLACEHOLDER[state]}
-            aria-label={PLACEHOLDER[state]}
-            className="min-w-0 flex-1 bg-transparent px-3 text-[15px] outline-none placeholder:text-[var(--muted-foreground)]"
-          />
+          <>
+            {target && (
+              <TargetChip name={target} onClear={() => onTargetChange?.(null)} />
+            )}
+            <input
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              // The menu gets first refusal on arrows and Enter while it is
+              // open, so choosing an agent cannot also submit the message.
+              onKeyDown={(event) => picker.onKeyDown(event)}
+              placeholder={
+                target
+                  ? "What should it change?"
+                  : state === "review"
+                    ? "Ask for a change, or type / to pick an agent…"
+                    : PLACEHOLDER[state]
+              }
+              aria-label={PLACEHOLDER[state]}
+              className="min-w-0 flex-1 bg-transparent px-3 text-[15px] outline-none placeholder:text-[var(--muted-foreground)]"
+            />
+          </>
         ) : (
           // Working: bare. The button says what it does, and the conversation
           // above says what the agents are doing.
