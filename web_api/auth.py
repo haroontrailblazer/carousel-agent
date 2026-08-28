@@ -254,15 +254,44 @@ def read_session_token(raw: str, *, secret: str) -> Optional[Identity]:
     Returns ``None`` rather than raising: an expired or tampered cookie is an
     ordinary event (someone left a tab open overnight), and the caller's answer
     is the same in every case - ask them to sign in again.
+
+    **Expiry here is EXACT, unlike in SupabaseJWTVerifier.** The clock-skew
+    allowance was written for tokens minted on Supabase's machines and checked
+    against ours, where the two clocks genuinely differ. This token was minted
+    by ``issue_session_token`` in THIS process against THIS clock, so there is
+    no skew to accommodate - and the only thing the allowance bought was sixty
+    seconds of extra life for every session that had already ended.
+
+    The allowance is still applied to ``iat``/``nbf``, because those fail in
+    the opposite, harmless direction: a clock that steps backwards mid-session
+    would otherwise log everybody out at once.
+
+    ``exp`` is also REQUIRED. PyJWT only checks the claim when it is present,
+    so a token minted without one never expires at all. Every token this
+    module issues carries ``exp``; one that does not came from somewhere else
+    and is refused on that basis alone.
     """
     if not raw or not secret:
         return None
     try:
         claims = jwt.decode(
-            raw, secret, algorithms=["HS256"], leeway=CLOCK_SKEW_LEEWAY_S
+            raw,
+            secret,
+            algorithms=["HS256"],
+            leeway=CLOCK_SKEW_LEEWAY_S,
+            options={"require": ["exp"]},
         )
     except jwt.InvalidTokenError:
         return None
+
+    # exp a second time, without the allowance the decode above applied.
+    expires_at = claims.get("exp")
+    try:
+        if expires_at is None or float(expires_at) <= time.time():
+            return None
+    except (TypeError, ValueError):
+        return None
+
     email = str(claims.get("email") or "")
     if not email:
         return None

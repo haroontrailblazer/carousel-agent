@@ -11,7 +11,7 @@ Three jobs (see docs/CONTRACTS.md file map):
    trim it into the configured cover window (settings.cover_clip_min_s..max_s,
    default 4-15 s), silent H.264 mp4.
 3. ``compose_cover(...)``       - subject-aware edge-to-edge crop across the
-   visible cover stage, composite the STRANGE-COVER overlay template plus a
+   visible cover stage, composite the configured cover overlay (optional) plus a
    Pillow-rendered title block (warm-white, condensed extra-bold uppercase,
    solid green highlight phrase), and produce the final cover mp4 + poster.
 
@@ -96,8 +96,10 @@ _TITLE_MAX_WIDTH_FRAC = 0.78
 _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
 
 # Region of the template occupied by its baked-in EXAMPLE title text
-# ("STOP PROMPTING YOUR AI, GIVE IT A LOOP") - measured on the shipped
-# STRANGE-COVER (1).png. It is scrubbed before compositing the real title.
+# ("STOP PROMPTING YOUR AI, GIVE IT A LOOP") - measured on the original
+# STRANGE-COVER (1).png, which is no longer in this repository. The numbers
+# still describe the geometry any replacement overlay must match; the region
+# is scrubbed before compositing the real title.
 # Fractions of width/height; excludes the side arrow glyphs (0.093-0.167 and
 # 0.839-0.907) and the grid floor.
 _TEMPLATE_TEXT_BOX = (0.175, 0.705, 0.83, 0.872)  # (x0, y0, x1, y1)
@@ -998,7 +1000,7 @@ def placeholder_background(workdir: str = "") -> str:
     """Build the deterministic dark 1080x1350 fallback background still.
 
     Used when NO sourced media exists at all: a subtle top-to-bottom dark
-    gradient the STRANGE-COVER overlay + title composite onto, so a cover is
+    gradient the cover overlay + title composite onto, so a cover is
     ALWAYS produced. Pure Pillow - this is a drawn background, not AI-generated
     imagery, so it does not violate the sourced-cover rule.
 
@@ -1187,7 +1189,7 @@ _SCRUBBED_TEMPLATE_CACHE: dict[tuple[str, float], Image.Image] = {}
 def _scrub_template_text(tpl: Image.Image) -> Image.Image:
     """Remove the template's baked-in example title text, in place.
 
-    The shipped STRANGE-COVER template contains its reference title
+    An overlay template may carry a baked-in reference title
     ("STOP PROMPTING YOUR AI, GIVE IT A LOOP") rendered into the dissolve
     zone. Clear the complete reserved title box, interpolating the surrounding
     overlay alpha across each row. Clearing the whole reservation removes the
@@ -1512,7 +1514,7 @@ def compose_cover(
 
     The media fills the visible upper cover stage with a subject-aware crop;
     the lower headline area is black rather than a blurred/shrunken duplicate.
-    The STRANGE-COVER overlay template plus the Pillow-rendered title block are
+    The cover overlay, when one is configured, plus the Pillow-rendered title
     composited on top, and ffmpeg renders a silent H.264 mp4 (``+faststart``)
     with a first-frame poster PNG. Still images become a 6 s restrained
     slow-zoom video (static video fallback if the zoom filter fails).
