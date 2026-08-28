@@ -102,8 +102,6 @@ services:
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false          # public by design; ships in the browser bundle
-      - key: SUPABASE_SERVICE_KEY
-        sync: false          # server-side only, never sent to the browser
       - key: SUPABASE_S3_REGION
         value: us-west-1
       - key: SUPABASE_S3_ACCESS_KEY

@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -43,6 +44,20 @@ def _s3_endpoint() -> str:
         return explicit
     base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
     return f"{base}/storage/v1/s3" if base else ""
+
+
+def _cover_overlay_template() -> Optional[Path]:
+    """The configured cover overlay, or ``None`` when there is none.
+
+    ``None`` and not ``Path("")``: an empty string becomes ``Path(".")``, and
+    the current directory exists - so every ``.exists()`` guard downstream
+    would pass and the loader would try to open a directory as an image.
+    """
+    configured = os.getenv("COVER_OVERLAY_TEMPLATE", "").strip()
+    if not configured:
+        return None
+    path = Path(configured).expanduser()
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 #: ADK derives an app's name from the AGENT PACKAGE DIRECTORY, so every session
@@ -80,7 +95,6 @@ class Settings:
     # --- storage / db (Supabase) ---
     database_url: str = os.getenv("DATABASE_URL", "")  # postgresql+asyncpg://...
     supabase_url: str = os.getenv("SUPABASE_URL", "")
-    supabase_service_key: str = os.getenv("SUPABASE_SERVICE_KEY", "")
     media_bucket: str = os.getenv("MEDIA_BUCKET", "carousel-media")
     # S3-compatible credentials for the artifact service adapter.
     #
@@ -150,7 +164,8 @@ class Settings:
 
     # --- web console + auth ---
     # The anon key is PUBLIC by design - it ships inside the browser bundle, so
-    # it is served to the SPA by /api/auth/config. The service key never is.
+    # it is served to the SPA by /api/auth/config. There is no service key here:
+    # nothing in this codebase ever used one.
     supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
     # Supabase signs JWTs two ways depending on project age: a shared HS256
     # secret (legacy) or asymmetric keys published as JWKS (current). Set this
@@ -175,7 +190,7 @@ class Settings:
     # --- observability (Langfuse; empty keys = tracing disabled) ---
     langfuse_public_key: str = os.getenv("LANGFUSE_PUBLIC_KEY", "")
     langfuse_secret_key: str = os.getenv("LANGFUSE_SECRET_KEY", "")
-    langfuse_base_url: str = os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
+    langfuse_base_url: str = os.getenv("https://cloud.langfuse.com")
 
     # --- media / design assets ---
     ffmpeg_bin: str = os.getenv("FFMPEG_BIN", "ffmpeg")
@@ -184,14 +199,25 @@ class Settings:
     cover_clip_max_s: float = float(os.getenv("COVER_CLIP_MAX_S", "15"))
     skills_dir: Path = PROJECT_ROOT / "skills"
     workdir: Path = Path(os.getenv("WORKDIR", str(PROJECT_ROOT / ".work")))
-    cover_overlay_template: Path = Path(
-        os.getenv("COVER_OVERLAY_TEMPLATE", str(PROJECT_ROOT / "STRANGE-COVER (1).png"))
-    )
-    cover_reference_images: tuple[str, ...] = (
-        str(PROJECT_ROOT / "CONFIG-INSTA-1.png"),
-        str(PROJECT_ROOT / "STRANGE-COVER (1).png"),
-        str(PROJECT_ROOT / "WhatsApp Image 2026-08-11 at 4.25.57 PM.jpeg"),
-    )
+    # Optional brand overlay composited onto the cover. EMPTY by default, and
+    # deliberately not a filename.
+    #
+    # It used to default to "STRANGE-COVER (1).png" in the repository root - a
+    # file that is not in git and no longer exists on disk. So the default
+    # could only ever resolve to a missing file, and media_tools logged
+    # "template not found" on a path nobody had configured, which reads as a
+    # broken install rather than as an unset option.
+    #
+    # Unset now means unset: covers render with a plain gradient and say
+    # nothing. Point this at a real file to get the branded overlay back.
+    #
+    # (A `cover_reference_images` tuple lived here too, naming three more
+    # deleted files. It had zero consumers anywhere in the codebase.)
+    #
+    # None rather than Path("") when unset: Path("") is Path("."), and the
+    # current directory EXISTS - so an `.exists()` guard would pass and the
+    # loader would try to open a directory as an image.
+    cover_overlay_template: Optional[Path] = _cover_overlay_template()
     slide_width: int = 1080
     slide_height: int = 1350  # 4:5 - first item's aspect ratio governs the carousel
 
