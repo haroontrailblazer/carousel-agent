@@ -42,6 +42,20 @@ logger = logging.getLogger(__name__)
 #: Domain attribute and requires Secure, which breaks plain-HTTP localhost
 #: development; the attributes set in ``session_cookie_headers`` cover the same
 #: ground for this deployment shape.
+#: Tolerance, in seconds, for clock drift when checking a token's time claims.
+#:
+#: JWT times are compared against the LOCAL clock, and no two machines agree
+#: exactly. This one measured 2.5 seconds behind internet time - enough for
+#: PyJWT to reject a freshly minted Supabase token with "The token is not yet
+#: valid (iat)" and fail every sign-in, while Supabase itself was perfectly
+#: healthy. That is the worst shape of error: the right component, the wrong
+#: clock, and a message that points at neither.
+#:
+#: A minute is the conventional allowance. It gives up nothing that matters:
+#: `iat` is informational per RFC 7519, and 60 seconds of slack on `exp` is
+#: noise against a session measured in hours.
+CLOCK_SKEW_LEEWAY_S = 60
+
 COOKIE_NAME = "carousel_session"
 
 #: Paths that must work with no credentials at all.
@@ -178,6 +192,7 @@ class SupabaseJWTVerifier:
                     self._jwt_secret,
                     algorithms=["HS256"],
                     audience=self._audience,
+                    leeway=CLOCK_SKEW_LEEWAY_S,
                 )
             else:
                 signing_key = self._jwks().get_signing_key_from_jwt(token)
@@ -186,9 +201,21 @@ class SupabaseJWTVerifier:
                     signing_key.key,
                     algorithms=["RS256", "ES256"],
                     audience=self._audience,
+                    leeway=CLOCK_SKEW_LEEWAY_S,
                 )
         except jwt.ExpiredSignatureError as exc:
             raise AuthError("token_expired", "That sign-in has expired.") from exc
+        except jwt.ImmatureSignatureError as exc:
+            # Past the leeway above, so this is no longer ordinary drift - the
+            # clock is wrong by more than a minute. Say so, because the generic
+            # message ("The token is not yet valid") reads like a Supabase
+            # fault and sends people to check a service that is working.
+            raise AuthError(
+                "clock_skew",
+                "This machine's clock is behind Supabase's by more than a "
+                "minute, so a valid sign-in looks like it was issued in the "
+                "future. Sync the system clock and try again.",
+            ) from exc
         except jwt.InvalidTokenError as exc:
             raise AuthError("token_invalid", f"Invalid access token: {exc}") from exc
         except Exception as exc:  # JWKS fetch failure, etc.
@@ -231,7 +258,9 @@ def read_session_token(raw: str, *, secret: str) -> Optional[Identity]:
     if not raw or not secret:
         return None
     try:
-        claims = jwt.decode(raw, secret, algorithms=["HS256"])
+        claims = jwt.decode(
+            raw, secret, algorithms=["HS256"], leeway=CLOCK_SKEW_LEEWAY_S
+        )
     except jwt.InvalidTokenError:
         return None
     email = str(claims.get("email") or "")

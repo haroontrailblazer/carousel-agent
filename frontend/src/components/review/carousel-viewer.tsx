@@ -1,6 +1,6 @@
 import * as React from "react"
 import { preload } from "react-dom"
-import { Check, Copy, ImageOff, Play } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Copy, ImageOff, Play } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -193,13 +193,11 @@ function Cover({
 
   if (!hasImage) return video
 
-  // Both exist: present them as a deliberate either/or.
-  const option = (
-    key: Exclude<CoverChoice, null>,
-    label: string,
-    hint: string,
-    preview: React.ReactNode,
-  ) => {
+  // Both exist: the choice sits above one full-size preview. Showing two
+  // portrait frames side by side made each too small to review and consumed
+  // most of the viewport; the switch keeps both options explicit while the
+  // selected asset gets the same inspection area as every other slide.
+  const option = (key: Exclude<CoverChoice, null>, label: string, hint: string) => {
     const picked = choice === key
     return (
       <button
@@ -207,41 +205,42 @@ function Cover({
         onClick={() => onChoose(key)}
         aria-pressed={picked}
         className={cn(
-          "group rounded-[var(--radius-md)] border-2 p-1.5 text-left transition-colors",
-          fit && "md:flex md:min-h-0 md:flex-col",
+          "flex min-w-0 items-center gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-left transition-colors",
           picked
             ? "border-[var(--brand)] bg-[var(--brand-soft)]"
             : "border-[var(--border)] hover:border-[var(--muted-foreground)]",
         )}
       >
         <span
+          aria-hidden
           className={cn(
-            "pointer-events-none block",
-            fit && "md:min-h-0 md:flex-1",
+            "grid size-4 shrink-0 place-items-center rounded-full border",
+            picked
+              ? "border-[var(--brand)] bg-[var(--brand)]"
+              : "border-[var(--muted-foreground)]",
           )}
         >
-          {preview}
+          {picked && <Check className="size-3 text-[var(--brand-foreground)]" />}
         </span>
-        <span className="mt-1.5 flex items-center gap-1.5 px-1">
-          <span
-            aria-hidden
-            className={cn(
-              "grid size-3.5 shrink-0 place-items-center rounded-full border",
-              picked
-                ? "border-[var(--brand)] bg-[var(--brand)]"
-                : "border-[var(--muted-foreground)]",
-            )}
-          >
-            {picked && <Check className="size-2.5 text-[var(--brand-foreground)]" />}
+        <span className="min-w-0">
+          <span className="block text-xs font-semibold">{label}</span>
+          <span className="block truncate text-[11px] text-[var(--muted-foreground)]">
+            {hint}
           </span>
-          <span className="text-xs font-medium">{label}</span>
-        </span>
-        <span className="mt-0.5 block px-1 text-[11px] text-[var(--muted-foreground)]">
-          {hint}
         </span>
       </button>
     )
   }
+
+  const image = (
+    <SlideFrame
+      artifact={cover.poster}
+      alt="Cover still"
+      onExpired={onExpired}
+      fit={fit}
+      className={fit ? "md:h-full" : undefined}
+    />
+  )
 
   return (
     <div
@@ -250,29 +249,18 @@ function Cover({
         fit && "md:flex md:h-full md:min-h-0 md:flex-col md:space-y-0 md:gap-2",
       )}
     >
-      <div className={cn("grid grid-cols-2 gap-2", fit && "md:min-h-0 md:flex-1")}>
+      <div className="grid shrink-0 grid-cols-2 gap-2">
         {option(
           "video",
           "Video cover",
           cover.is_still
             ? `${Math.round(cover.duration_s)}s slow zoom on the still`
             : `${Math.round(cover.duration_s)}s clip from the story`,
-          <span className={cn("pointer-events-auto block", fit && "md:h-full")}>
-            {video}
-          </span>,
         )}
-        {option(
-          "image",
-          "Image cover",
-          "Still frame",
-          <SlideFrame
-            artifact={cover.poster}
-            alt="Cover still"
-            onExpired={onExpired}
-            fit={fit}
-            className={fit ? "md:h-full" : undefined}
-          />,
-        )}
+        {option("image", "Image cover", "Still frame")}
+      </div>
+      <div className={cn(fit && "md:min-h-0 md:flex-1")}>
+        {choice === "video" ? video : image}
       </div>
       {!choice && (
         <p
@@ -298,12 +286,15 @@ export function CarouselViewer({
   coverChoice,
   onCoverChoice,
   onExpired,
+  decision,
   fit = false,
 }: {
   artifacts: RunArtifacts
   coverChoice: CoverChoice
   onCoverChoice: (choice: CoverChoice) => void
   onExpired?: () => void
+  /** The verdict controls share the persistent inspector with the caption. */
+  decision?: React.ReactNode
   /**
    * Fill the height it is given instead of flowing down the page.
    *
@@ -356,18 +347,62 @@ export function CarouselViewer({
     <div
       className={cn(
         fit
-          ? "flex min-h-0 flex-col gap-4 md:min-h-0 md:flex-1 md:flex-row md:gap-5"
+          ? "review-workbench min-h-0 md:flex-1"
           : "grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]",
       )}
     >
-      <div
+      <nav
+        aria-label="Carousel slides"
         className={cn(
           fit
-            ? "flex min-h-0 flex-col gap-2 md:min-w-0 md:flex-1"
-            : "space-y-3",
+            ? "review-filmstrip"
+            : "flex gap-2 overflow-x-auto pb-1 lg:col-span-2",
         )}
       >
-        <div className={cn(fit && "md:flex md:min-h-0 md:flex-1 md:justify-center")}>
+        {frames.map((frame, i) => {
+          const art =
+            i === 0
+              ? artifacts.cover.poster
+              : i === frames.length - 1
+                ? artifacts.cta
+                : artifacts.slides[i - 1]
+          return (
+            <button
+              key={frame.key}
+              type="button"
+              onClick={() => setIndex(i)}
+              className={cn(
+                "review-filmstrip-item group",
+                i === index && "review-filmstrip-item--active",
+              )}
+              aria-label={frame.label}
+              aria-current={i === index ? "step" : undefined}
+            >
+              <span className="review-filmstrip-number" aria-hidden>
+                {i + 1}
+              </span>
+              <span className="review-filmstrip-thumb">
+                {art?.url ? (
+                  <img
+                    src={art.url}
+                    alt=""
+                    className="h-full w-full object-contain"
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="grid h-full w-full place-items-center bg-[var(--muted)]">
+                    {i === 0 ? <Play className="size-3" /> : null}
+                  </span>
+                )}
+              </span>
+              <span className="review-filmstrip-label">{frame.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+
+      <section className={cn(fit ? "review-preview" : "space-y-3")}>
+        <div className={cn(fit && "review-preview-stage")}>
           {index === 0 && (
             <Cover
               cover={artifacts.cover}
@@ -395,120 +430,73 @@ export function CarouselViewer({
           )}
         </div>
 
-        <div className={cn("flex items-center justify-between", fit && "md:shrink-0")}>
-          <span className="text-xs text-[var(--muted-foreground)]">
+        <div className={cn("review-preview-controls", !fit && "mt-3")}>
+          <Button
+            size="sm"
+            variant="default"
+            className="rounded-[var(--radius-md)]"
+            onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            disabled={index === 0}
+          >
+            <ChevronLeft /> Prev
+          </Button>
+          <span className="text-xs font-medium text-[var(--muted-foreground)]">
             {index + 1} / {frames.length} · {frames[index]?.label}
           </span>
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setIndex((i) => Math.max(0, i - 1))}
-              disabled={index === 0}
-            >
-              Prev
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setIndex((i) => Math.min(frames.length - 1, i + 1))}
-              disabled={index === frames.length - 1}
-            >
-              Next
-            </Button>
-          </div>
+          <Button
+            size="sm"
+            variant="default"
+            className="rounded-[var(--radius-md)]"
+            onClick={() =>
+              setIndex((i) => Math.min(frames.length - 1, i + 1))
+            }
+            disabled={index === frames.length - 1}
+          >
+            Next <ChevronRight />
+          </Button>
         </div>
+      </section>
 
-        {/* Thumbnail rail - the fastest way to spot a bad slide in a set. */}
-        <div className={cn("flex gap-2 overflow-x-auto pb-1", fit && "md:shrink-0")}>
-          {frames.map((frame, i) => {
-            const art =
-              i === 0
-                ? artifacts.cover.poster
-                : i === frames.length - 1
-                  ? artifacts.cta
-                  : artifacts.slides[i - 1]
-            return (
-              <button
-                key={frame.key}
-                type="button"
-                onClick={() => setIndex(i)}
-                className={cn(
-                  "shrink-0 overflow-hidden rounded-md border-2 transition-colors",
-                  i === index ? "border-[var(--brand)]" : "border-transparent",
-                )}
-                aria-label={frame.label}
+      <Card className={cn(fit ? "review-inspector" : "p-5")}>
+        <section className={cn(fit ? "review-caption" : "min-h-0")}>
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Caption</h3>
+            <div className="flex items-center gap-1.5">
+              <MutedChip
+                style={
+                  overLimit
+                    ? {
+                        background: "var(--phase-failed-soft)",
+                        color: "var(--phase-failed-fg)",
+                      }
+                    : undefined
+                }
               >
-                {art?.url ? (
-                  <img
-                    src={art.url}
-                    alt=""
-                    className="h-14 w-[45px] object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <span className="grid h-14 w-[45px] place-items-center bg-[var(--muted)]">
-                    {i === 0 ? <Play className="size-3" /> : null}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <Card
-        className={cn(
-          fit
-            ? "flex min-h-0 flex-col p-4 md:w-[19rem] md:shrink-0 lg:w-[21rem]"
-            : "p-5",
-        )}
-      >
-        <div
-          className={cn(
-            "mb-3 flex items-center justify-between gap-3",
-            fit && "md:shrink-0",
-          )}
-        >
-          <h3 className="text-sm font-semibold">Caption</h3>
-          <div className="flex items-center gap-2">
-            <MutedChip
-              style={
-                overLimit
-                  ? {
-                      background: "var(--phase-failed-soft)",
-                      color: "var(--phase-failed-fg)",
-                    }
-                  : undefined
-              }
-            >
-              {captionLength} / {IG_CAPTION_LIMIT}
-            </MutedChip>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                void navigator.clipboard.writeText(artifacts.caption)
-                toast.success("Caption copied")
-              }}
-            >
-              <Copy /> Copy
-            </Button>
+                {captionLength} / {IG_CAPTION_LIMIT}
+              </MutedChip>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-[var(--radius-md)] px-2.5"
+                onClick={() => {
+                  void navigator.clipboard.writeText(artifacts.caption)
+                  toast.success("Caption copied")
+                }}
+              >
+                <Copy /> Copy
+              </Button>
+            </div>
           </div>
-        </div>
-        {/* The caption is the one thing here with no natural size - it can be
-            two lines or two thousand characters - so it is the one thing that
-            gets a scrollbar of its own rather than giving the page one. */}
-        <p
-          className={cn(
-            "whitespace-pre-wrap text-sm leading-relaxed",
-            fit && "md:min-h-0 md:flex-1 md:overflow-y-auto md:pr-1",
-          )}
-        >
-          {artifacts.caption || (
-            <span className="text-[var(--muted-foreground)]">No caption yet.</span>
-          )}
-        </p>
+          <div className={cn(fit && "review-caption-scroll")}>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              {artifacts.caption || (
+                <span className="text-[var(--muted-foreground)]">No caption yet.</span>
+              )}
+            </p>
+          </div>
+        </section>
+
+        {decision ? <section className="review-decision">{decision}</section> : null}
       </Card>
     </div>
   )

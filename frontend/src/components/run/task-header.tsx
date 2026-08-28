@@ -11,20 +11,40 @@ export function TaskHeader({
   data,
   live,
   stale,
+  compact = false,
 }: {
   data: RunDetail
   live: boolean
   stale: boolean
+  /** Use the shorter production-workbench header on viewport-fitted screens. */
+  compact?: boolean
 }) {
   const statusTone = STATUS_TOKEN[data.status]
 
   return (
-    <header className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-5">
-        <h1 className="max-w-2xl text-[1.9rem] font-semibold leading-[1.08] tracking-[-0.035em] sm:text-4xl">
+    <header className={cn(compact ? "space-y-2" : "space-y-5")}>
+      <div
+        className={cn(
+          "flex flex-wrap items-start justify-between",
+          compact ? "gap-3" : "gap-5",
+        )}
+      >
+        <h1
+          className={cn(
+            "max-w-2xl font-semibold tracking-[-0.035em]",
+            compact
+              ? "text-xl leading-tight sm:text-2xl"
+              : "text-[1.9rem] leading-[1.08] sm:text-4xl",
+          )}
+        >
           {data.title || data.news.title || data.run_id}
         </h1>
-        <div className="flex shrink-0 items-center gap-2 [&_button]:h-10 [&_button]:rounded-[10px]">
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2 [&_button]:rounded-[10px]",
+            compact ? "[&_button]:h-8" : "[&_button]:h-10",
+          )}
+        >
           {/* Several carousels can run at once, so starting another does not
               cost you this one - it keeps working and stays in Tasks. */}
           <NewChatButton showLabel />

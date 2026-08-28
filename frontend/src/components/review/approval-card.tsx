@@ -13,6 +13,7 @@ import {
   predictRework,
 } from "@/lib/pipeline"
 import type { RunDetail } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 /**
  * The decision surface.
@@ -49,6 +50,7 @@ export function ApprovalCard({
   busy,
   onResend,
   resending = false,
+  embedded = false,
 }: {
   run: RunDetail
   publishConfigured: boolean
@@ -60,6 +62,8 @@ export function ApprovalCard({
   /** Retry the review notification. Only offered when one has failed. */
   onResend?: () => void
   resending?: boolean
+  /** Render inside the review inspector instead of drawing a second card. */
+  embedded?: boolean
 }) {
   const [rejecting, setRejecting] = React.useState(false)
   const [feedback, setFeedback] = React.useState("")
@@ -73,11 +77,15 @@ export function ApprovalCard({
     return predictRework(targets)
   }, [picked])
 
+  const panelClass = embedded
+    ? "rounded-none border-0 bg-transparent p-0 shadow-none"
+    : "p-5"
+
   // --- state 2: already decided ------------------------------------------
   if (!run.pending_review && run.verdict) {
     const approved = run.verdict.status === "approved"
     return (
-      <Card className="p-5">
+      <Card className={panelClass}>
         <div className="flex items-start gap-3">
           {approved ? (
             <CheckCircle2 className="mt-0.5 size-5" style={{ color: "var(--phase-done)" }} />
@@ -131,7 +139,7 @@ export function ApprovalCard({
     // reason. Three restatements of one fact is not more informative than one.
     if (isStopped(run.status)) return null
     return (
-      <Card className="p-5">
+      <Card className={panelClass}>
         <div className="flex items-start gap-3">
           <Loader2 className="mt-0.5 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
           <div className="min-w-0 flex-1">
@@ -196,7 +204,7 @@ export function ApprovalCard({
     // yet") only repeated the header, one paragraph lower and louder.
     if (isStopped(run.status)) return null
     return (
-      <Card className="p-5">
+      <Card className={panelClass}>
         <div className="flex items-start gap-3">
           <Loader2 className="mt-0.5 size-4 animate-spin-slow text-[var(--muted-foreground)]" />
           <div className="min-w-0">
@@ -213,7 +221,7 @@ export function ApprovalCard({
 
   // --- state 1: waiting for a human --------------------------------------
   return (
-    <Card className="p-5">
+    <Card className={panelClass}>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Chip tone="review" dot pulse>
           Waiting for your review
@@ -274,9 +282,15 @@ export function ApprovalCard({
       )}
 
       {!rejecting && !confirming && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className={cn(
+            "flex gap-2",
+            embedded ? "grid grid-cols-1" : "flex-wrap items-center",
+          )}
+        >
           <Button
             variant="brand"
+            className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
             onClick={() => setConfirming(true)}
             disabled={busy || coverChoiceNeeded}
             title={
@@ -285,7 +299,12 @@ export function ApprovalCard({
           >
             <CheckCircle2 /> Approve &amp; publish
           </Button>
-          <Button variant="ghost" onClick={() => setRejecting(true)} disabled={busy}>
+          <Button
+            variant={embedded ? "default" : "ghost"}
+            className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
+            onClick={() => setRejecting(true)}
+            disabled={busy}
+          >
             Reject
           </Button>
         </div>
@@ -296,11 +315,21 @@ export function ApprovalCard({
           <p className="text-sm">
             This posts the carousel to Instagram publicly. Continue?
           </p>
-          <div className="flex gap-2">
-            <Button variant="brand" onClick={onApprove} disabled={busy}>
+          <div className={cn("flex gap-2", embedded && "grid grid-cols-1")}>
+            <Button
+              variant="brand"
+              className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
+              onClick={onApprove}
+              disabled={busy}
+            >
               {busy ? "Approving…" : "Yes, approve and publish"}
             </Button>
-            <Button variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>
+            <Button
+              variant={embedded ? "default" : "ghost"}
+              className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
+              onClick={() => setConfirming(false)}
+              disabled={busy}
+            >
               Cancel
             </Button>
           </div>
@@ -354,9 +383,10 @@ export function ApprovalCard({
             </p>
           )}
 
-          <div className="flex gap-2">
+          <div className={cn("flex gap-2", embedded && "grid grid-cols-1")}>
             <Button
               variant="destructive"
+              className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
               onClick={() => {
                 const categories = picked.length ? `[${picked.join(", ")}] ` : ""
                 onReject(`${categories}${feedback.trim()}`.trim())
@@ -365,7 +395,12 @@ export function ApprovalCard({
             >
               {busy ? "Sending…" : "Reject and rework"}
             </Button>
-            <Button variant="ghost" onClick={() => setRejecting(false)} disabled={busy}>
+            <Button
+              variant={embedded ? "default" : "ghost"}
+              className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
+              onClick={() => setRejecting(false)}
+              disabled={busy}
+            >
               Cancel
             </Button>
           </div>

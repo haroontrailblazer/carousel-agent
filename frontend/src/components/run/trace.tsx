@@ -1,13 +1,15 @@
 import * as React from "react"
-import { AlertTriangle, ChevronRight, Clock, Coins, Wrench } from "lucide-react"
+import {
+  Activity,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Coins,
+  Wrench,
+} from "lucide-react"
 
 import { Chip } from "@/components/ui/chip"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { groupByAuthor } from "@/hooks/use-run-stream"
 import { compactNumber } from "@/lib/format"
 import { AGENT_BLURBS, AGENT_LABELS, PHASES, PHASE_LABELS } from "@/lib/pipeline"
@@ -169,28 +171,8 @@ export function PhaseRail({
   )
 }
 
-/**
- * One tool call as a pill, with its wall-clock cost on the face of it.
- *
- * The latency belongs ON the pill rather than inside the tooltip: "which tool
- * was slow" is the question people open a trace to answer, and making them
- * hover over fourteen pills to find out defeats the purpose. The tooltip
- * carries the detail - full arguments and the response - which you want only
- * once you have found the pill worth looking at.
- */
-/**
- * One tool call, with its arguments and result behind a tooltip.
- *
- * Memoised because there are a lot of these - a finished run has dozens - and
- * each one mounts a Radix tooltip. While a run is live the trace is refetched
- * every three seconds, so without this every pill in the history rebuilds its
- * tooltip on every poll to render exactly what it rendered before.
- *
- * The default shallow comparison is the right one here: React Query does
- * structural sharing, so a `tool` object that did not change between two
- * responses comes back as the SAME object, and this bails out.
- */
-const ToolPill = React.memo(function ToolPill({ tool }: { tool: ToolCall }) {
+/** One tool call, with its full payload available without relying on hover. */
+const ToolCallRow = React.memo(function ToolCallRow({ tool }: { tool: ToolCall }) {
   const tone =
     tool.status === "error"
       ? "failed"
@@ -199,63 +181,54 @@ const ToolPill = React.memo(function ToolPill({ tool }: { tool: ToolCall }) {
         : heatTone(tool.ms)
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex min-h-10 min-w-64 max-w-full items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-[13px] font-medium leading-none transition-colors hover:border-[var(--muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+    <details className="group border-b border-[var(--border)] last:border-b-0">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] [&::-webkit-details-marker]:hidden">
+        <span
+          className="grid size-7 shrink-0 place-items-center rounded-[8px]"
           style={{
+            backgroundColor: `var(--phase-${tone}-soft)`,
             color: `var(--phase-${tone}-fg)`,
           }}
         >
-          <Wrench className="size-3.5 shrink-0" />
-          <span className="truncate font-mono">{tool.name}</span>
-          {tool.status === "running" ? (
-            <span className="font-mono opacity-70">· running</span>
-          ) : (
-            <span className="ml-1 tabular-nums opacity-80">{duration(tool.ms)}</span>
-          )}
-        </button>
-      </TooltipTrigger>
+          <Wrench className="size-3.5" />
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-xs font-semibold">
+          {tool.name}
+        </span>
+        <Chip tone={tool.status === "error" ? "failed" : tool.status === "running" ? "generate" : "done"}>
+          {tool.status}
+        </Chip>
+        <span className="w-16 text-right font-mono text-[11px] tabular-nums text-[var(--muted-foreground)]">
+          {duration(tool.ms)}
+        </span>
+        <ChevronDown className="size-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
+      </summary>
 
-      <TooltipContent side="top" align="start">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] pb-1.5">
-            <span className="font-mono text-[13px] font-semibold">{tool.name}</span>
-            <span className="flex items-center gap-2">
-              <span className="tabular-nums text-[var(--muted-foreground)]">
-                {duration(tool.ms)}
-              </span>
-              <Chip tone={tool.status === "error" ? "failed" : "done"}>
-                {tool.status}
-              </Chip>
-            </span>
-          </div>
-
+      {(tool.args || tool.result) && (
+        <div className="grid gap-3 bg-[var(--muted)] px-3 py-3 lg:grid-cols-2">
           {tool.args && (
-            <div>
-              <p className="mb-1 font-semibold text-[var(--muted-foreground)]">
+            <div className="min-w-0">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
                 Arguments
               </p>
-              <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--muted)] p-2 font-mono text-[11px] leading-relaxed">
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-[var(--border)] bg-[var(--background)] p-2.5 font-mono text-[11px] leading-relaxed">
                 {tool.args}
               </pre>
             </div>
           )}
-
           {tool.result && (
-            <div>
-              <p className="mb-1 font-semibold text-[var(--muted-foreground)]">
+            <div className="min-w-0">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
                 Result
               </p>
-              <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded bg-[var(--muted)] p-2 font-mono text-[11px] leading-relaxed">
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-[var(--border)] bg-[var(--background)] p-2.5 font-mono text-[11px] leading-relaxed">
                 {tool.result}
               </pre>
             </div>
           )}
         </div>
-      </TooltipContent>
-    </Tooltip>
+      )}
+    </details>
   )
 })
 
@@ -298,25 +271,33 @@ export function TraceSummaryBar({
       label: "Tool calls",
       value: String(summary.tool_calls ?? 0),
     },
+    {
+      key: "events",
+      icon: Activity,
+      label: "Events",
+      value: String(summary.event_count),
+    },
   ]
 
   return (
-    <div className="grid grid-cols-3 border-y border-[var(--border)] py-4 sm:flex sm:items-center sm:py-5">
+    <div className="grid grid-cols-2 border-y border-[var(--border)] sm:grid-cols-4">
       {stats.map(({ key, icon: Icon, label, value, title }, index) => (
         <div
           key={key}
           title={title}
           className={cn(
-            "min-w-0 px-3 sm:flex sm:items-center sm:gap-3 sm:px-6",
-            index === 0 ? "pl-0 sm:pl-0" : "border-l border-[var(--border)]",
+            "min-w-0 px-3 py-3 sm:px-4",
+            index % 2 !== 0 && "border-l border-[var(--border)]",
+            index >= 2 && "border-t border-[var(--border)] sm:border-t-0",
+            index > 0 && "sm:border-l sm:border-[var(--border)]",
           )}
         >
-          <div className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)] sm:text-sm">
+          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
             <Icon className="size-3.5" />
             {label}
           </div>
-          <div className="mt-1 flex items-baseline gap-1.5 sm:mt-0">
-            <span className="font-mono text-lg font-semibold leading-none tabular-nums sm:text-base">
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="font-mono text-base font-semibold leading-none tabular-nums">
               {value}
             </span>
             {live && key === "ms" && (
@@ -388,8 +369,8 @@ function groupStat(events: RunEvent[]): GroupStat {
 /**
  * A string that changes whenever anything a block RENDERS changes.
  *
- * Paired with the memo on AgentGroup - see the comment there for why the
- * events array itself cannot be the comparison.
+ * The master-detail view uses this to recompute only the selected block's
+ * derived tool list when a streamed event actually changes.
  */
 function blockSignature(
   author: string,
@@ -402,7 +383,11 @@ function blockSignature(
     textChars += event.text?.length ?? 0
     for (const tool of event.tools ?? []) {
       toolChars +=
-        tool.name.length + (tool.args?.length ?? 0) + (tool.result?.length ?? 0)
+        tool.name.length +
+        tool.status.length +
+        (tool.ms ?? 0) +
+        (tool.args?.length ?? 0) +
+        (tool.result?.length ?? 0)
     }
   }
   return [
@@ -418,63 +403,61 @@ function blockSignature(
   ].join("|")
 }
 
-type AgentGroupProps = {
+type AgentBlock = {
   author: string
   events: RunEvent[]
   stat: GroupStat
   occurrence: number
   totalOccurrences: number
-  active: boolean
-  defaultOpen: boolean
-  /** Everything about this block that can change. See the memo below. */
   signature: string
 }
 
-function AgentGroupImpl({
-  author,
-  events,
-  stat,
-  occurrence,
-  totalOccurrences,
+function agentLabel(block: AgentBlock): string {
+  const base = AGENT_LABELS[block.author] ?? block.author
+  return block.totalOccurrences > 1
+    ? `${base} · pass ${block.occurrence}`
+    : base
+}
+
+function eventTime(event: RunEvent): string {
+  const stamp = event.ts ?? event.created_at
+  if (!stamp) return "—"
+  const parsed = new Date(stamp)
+  if (Number.isNaN(parsed.getTime())) return "—"
+  return parsed.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
+}
+
+const AgentRunRow = React.memo(function AgentRunRow({
+  block,
   active,
-  signature,
-  defaultOpen,
-}: AgentGroupProps) {
-  const [open, setOpen] = React.useState(defaultOpen)
-  // Derived from the events, so they are recomputed when the events change and
-  // not once per poll. `signature` is the dependency rather than `events`:
-  // grouping rebuilds its arrays every time, so the array identity changes
-  // even when not one frame in it did.
-  const { failed, tools } = React.useMemo(
-    () => ({
-      failed: events.some((e) => e.kind === "error"),
-      tools: events.flatMap((e) => e.tools ?? []),
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [signature],
-  )
-  const base = AGENT_LABELS[author] ?? author
-  // An agent that runs more than once (the orchestrator between every child,
-  // or any agent in a rework round) needs its passes told apart.
-  const label =
-    totalOccurrences > 1 ? `${base} · pass ${occurrence}` : base
+  selected,
+  onSelect,
+}: {
+  block: AgentBlock
+  active: boolean
+  selected: boolean
+  onSelect: () => void
+}) {
+  const failed = block.events.some((event) => event.kind === "error")
+  const label = agentLabel(block)
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
       className={cn(
-        "relative border-b border-[var(--border)] transition-colors",
-        open && "bg-[var(--card)]",
-        active &&
-          "before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-[var(--brand)]",
-        failed && "before:bg-[var(--destructive)]",
+        "relative w-full border-b border-[var(--border)] px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--muted)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)]",
+        selected && "bg-[var(--card)]",
+        selected && "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[var(--brand)]",
+        failed && selected && "before:bg-[var(--destructive)]",
       )}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="grid min-h-[4.5rem] w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 px-3 py-3 text-left sm:grid-cols-[auto_minmax(0,1fr)_7rem_6rem_5rem_auto] sm:px-4"
-        aria-expanded={open}
-      >
+      <span className="flex items-center gap-2">
         <span
           aria-hidden
           className={cn("size-2 shrink-0 rounded-full", active && "animate-pip-pulse")}
@@ -486,130 +469,135 @@ function AgentGroupImpl({
                 : "var(--brand)",
           }}
         />
-
-        <span className="min-w-0">
-          <span className="flex items-center gap-2 text-[15px] sm:text-base">
-            <span className="truncate font-semibold">{label}</span>
-            {failed && <AlertTriangle className="size-3.5 text-[var(--destructive)]" />}
-          </span>
-          <span className="mt-1 block text-xs text-[var(--muted-foreground)] sm:hidden">
-            {stat.tokens.total ? `${compactNumber(stat.tokens.total)} tokens` : "— tokens"}
-            <span aria-hidden> · </span>
-            {stat.toolCalls || "—"} {stat.toolCalls === 1 ? "call" : "calls"}
-          </span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{label}</span>
+        {failed && <AlertTriangle className="size-3.5 shrink-0 text-[var(--destructive)]" />}
+        <ChevronRight className={cn("size-3.5 shrink-0 text-[var(--muted-foreground)]", selected && "text-[var(--foreground)]")} />
+      </span>
+      <span className="mt-2 grid grid-cols-3 gap-2 pl-4 font-mono text-[10px] tabular-nums text-[var(--muted-foreground)]">
+        <span>{active ? "running" : duration(block.stat.ms)}</span>
+        <span>{block.stat.tokens.total ? `${compactNumber(block.stat.tokens.total)} tok` : "— tok"}</span>
+        <span>
+          {block.stat.toolCalls || "—"} {block.stat.toolCalls === 1 ? "call" : "calls"}
         </span>
+      </span>
+    </button>
+  )
+})
 
-        <span className="text-right font-mono text-xs font-medium tabular-nums sm:text-left">
-          {active ? (
-            <span
-              className="inline-flex items-center gap-1.5 font-sans font-normal"
-              style={{ color: "var(--phase-qa-fg)" }}
-            >
-              <span
-                aria-hidden
-                className="size-1.5 animate-pip-pulse rounded-full bg-[var(--phase-qa)]"
-              />
-              running
-            </span>
-          ) : (
-            duration(stat.ms)
-          )}
-        </span>
+function TraceBlockDetails({
+  block,
+  active,
+}: {
+  block: AgentBlock
+  active: boolean
+}) {
+  const [view, setView] = React.useState<"activity" | "tools">("activity")
+  const failed = block.events.some((event) => event.kind === "error")
+  const tools = React.useMemo(
+    () => block.events.flatMap((event) => event.tools ?? []),
+    // The signature changes when a streamed tool response fills in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [block.signature],
+  )
+  const label = agentLabel(block)
 
-        <span
-          className="hidden font-mono text-xs tabular-nums text-[var(--muted-foreground)] sm:block"
-          title={`${stat.tokens.prompt.toLocaleString()} in · ${stat.tokens.output.toLocaleString()} out`}
-        >
-          {stat.tokens.total ? compactNumber(stat.tokens.total) : "—"}
-        </span>
-
-        <span className="hidden font-mono text-xs tabular-nums text-[var(--muted-foreground)] sm:block">
-          {stat.toolCalls || "—"}
-        </span>
-
-        <ChevronRight
-          className={cn(
-            "size-4 shrink-0 text-[var(--muted-foreground)] transition-transform",
-            open && "rotate-90",
-          )}
-        />
-      </button>
-
-      {open && (
-        <div className="space-y-4 px-4 pb-5 pl-10 sm:pl-[3.25rem] sm:pr-8">
-          {AGENT_BLURBS[author] && (
-            <p className="max-w-3xl text-sm leading-relaxed text-[var(--muted-foreground)]">
-              {AGENT_BLURBS[author]}
-            </p>
-          )}
-
-          <div className="space-y-2">
-            {events.map((event) => {
-              const text =
-                event.text ||
-                (event.kind === "error" ? String(event.data?.error ?? "error") : "")
-              if (!text) return null
-              return (
-                <div
-                  key={event.seq}
-                  className="animate-line-reveal flex gap-3 font-mono text-xs leading-relaxed"
-                >
-                  <span className="shrink-0 select-none tabular-nums text-[var(--muted-foreground)]">
-                    {String(event.seq).padStart(2, "0")}
-                  </span>
-                  <span
-                    className={cn(
-                      "min-w-0 whitespace-pre-wrap break-words",
-                      event.kind === "error"
-                        ? "text-[var(--destructive)]"
-                        : "text-[var(--foreground)]",
-                    )}
-                  >
-                    {text}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          {tools.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {tools.map((tool, i) => (
-                <ToolPill key={`${tool.id || tool.name}-${i}`} tool={tool} />
-              ))}
+  return (
+    <div className="flex min-h-0 flex-col">
+      <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-[15px] font-semibold">{label}</h3>
+              {active && <Chip tone="generate" dot pulse>running</Chip>}
+              {failed && <Chip tone="failed" dot>error</Chip>}
             </div>
-          )}
+            {AGENT_BLURBS[block.author] && (
+              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--muted-foreground)]">
+                {AGENT_BLURBS[block.author]}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 gap-4 font-mono text-[11px] tabular-nums text-[var(--muted-foreground)]">
+            <span>{active ? "running" : duration(block.stat.ms)}</span>
+            <span title={`${block.stat.tokens.prompt.toLocaleString()} in · ${block.stat.tokens.output.toLocaleString()} out`}>
+              {block.stat.tokens.total ? compactNumber(block.stat.tokens.total) : "—"} tokens
+            </span>
+            <span>{block.stat.toolCalls || 0} calls</span>
+          </div>
         </div>
-      )}
+
+        <div className="mt-4 inline-flex rounded-[9px] bg-[var(--muted)] p-0.5" role="tablist" aria-label="Selected agent details">
+          {(["activity", "tools"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              role="tab"
+              aria-selected={view === item}
+              onClick={() => setView(item)}
+              className={cn(
+                "rounded-[7px] px-3 py-1.5 text-xs font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+                view === item
+                  ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
+              )}
+            >
+              {item === "tools" ? `Tool calls (${tools.length})` : `Activity (${block.events.length})`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        {view === "activity" ? (
+          <div role="tabpanel" aria-label="Activity">
+            <div className="sticky top-0 z-[1] hidden grid-cols-[3.25rem_6.5rem_6rem_minmax(0,1fr)] gap-3 border-b border-[var(--border)] bg-[var(--card)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)] sm:grid">
+              <span>#</span>
+              <span>Time</span>
+              <span>Event</span>
+              <span>Details</span>
+            </div>
+            <div>
+              {block.events.map((event, index) => {
+                const text = event.text || (event.kind === "error" ? String(event.data?.error ?? "error") : "No text payload")
+                return (
+                  <div
+                    key={event.id ?? `${event.seq}-${index}`}
+                    className="grid gap-1 border-b border-[var(--border)] px-4 py-3 text-xs last:border-b-0 sm:grid-cols-[3.25rem_6.5rem_6rem_minmax(0,1fr)] sm:gap-3"
+                  >
+                    <span className="hidden font-mono tabular-nums text-[var(--muted-foreground)] sm:block">
+                      {String(event.seq).padStart(2, "0")}
+                    </span>
+                    <span className="font-mono text-[10px] tabular-nums text-[var(--muted-foreground)] sm:text-[11px]">
+                      {eventTime(event)}
+                    </span>
+                    <span className="w-fit rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-medium capitalize text-[var(--muted-foreground)]">
+                      {event.kind}
+                    </span>
+                    <span className={cn("min-w-0 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed", event.kind === "error" && "text-[var(--destructive)]")}>
+                      {text}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ) : (
+          <div role="tabpanel" aria-label="Tool calls">
+            {tools.length ? (
+              tools.map((tool, index) => (
+                <ToolCallRow key={tool.key ?? `${tool.id || tool.name}-${index}`} tool={tool} />
+              ))
+            ) : (
+              <p className="p-8 text-center text-sm text-[var(--muted-foreground)]">
+                This agent pass did not use any tools.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
-
-/**
- * Re-render a block only when something about IT changed.
- *
- * This is the hot path of the whole console. While a run is live the trace is
- * refetched every three seconds for up to fifteen minutes, and each response
- * carries the entire history - so by the end of a run, a poll that adds one
- * frame was re-rendering every agent group and every tool pill that came
- * before it, several hundred times over.
- *
- * `events` cannot drive the comparison: grouping allocates a fresh array per
- * response, so the props are never shallow-equal and `React.memo` alone would
- * bail out of nothing. `signature` is built in `AgentTrace` from the things
- * that actually identify a block - which agent, which frames, how long, how
- * many tokens - and a trace is append-only, so a block whose signature is
- * unchanged genuinely rendered the same content.
- *
- * `defaultOpen` is deliberately not compared. It seeds `useState` on mount and
- * is ignored afterwards, so a change to it can never affect what is on screen,
- * and including it would defeat the memo on every append.
- */
-const AgentGroup = React.memo(
-  AgentGroupImpl,
-  (prev, next) =>
-    prev.signature === next.signature && prev.active === next.active,
-)
 
 /**
  * The run trace.
@@ -666,6 +654,23 @@ export function AgentTrace({
       }
     })
   }, [events])
+  const [selectedKey, setSelectedKey] = React.useState<string | null>(null)
+  const runListRef = React.useRef<HTMLDivElement>(null)
+  const blockKey = React.useCallback(
+    (block: AgentBlock) => `${block.author}:${block.occurrence}`,
+    [],
+  )
+  const selected =
+    blocks.find((block) => blockKey(block) === selectedKey) ?? blocks[blocks.length - 1]
+
+  React.useLayoutEffect(() => {
+    // The newest pass is selected by default. Keep that row visible in the
+    // compact mobile master list instead of showing the first rows while the
+    // inspector describes a row below the fold.
+    if (!selectedKey && runListRef.current) {
+      runListRef.current.scrollTop = runListRef.current.scrollHeight
+    }
+  }, [blocks.length, selectedKey])
 
   if (!synced && events.length === 0) {
     return (
@@ -690,41 +695,46 @@ export function AgentTrace({
   }
 
   return (
-    <TooltipProvider delayDuration={120} skipDelayDuration={300}>
-      <div>
-        <TraceSummaryBar summary={summary} live={live} />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)]">
+      <TraceSummaryBar summary={summary} live={live} />
 
-        <div className="hidden grid-cols-[auto_minmax(0,1fr)_7rem_6rem_5rem_auto] items-center gap-x-3 border-b border-[var(--border)] px-4 py-3 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)] sm:grid">
-          <span className="size-2" />
-          <span>Agent activity</span>
-          <span>Time</span>
-          <span>Tokens</span>
-          <span>Calls</span>
-          <span className="size-4" />
-        </div>
+      <div className="grid min-h-[30rem] md:min-h-0 md:flex-1 md:grid-cols-[17rem_minmax(0,1fr)]">
+        <aside className="border-b border-[var(--border)] md:min-h-0 md:border-b-0 md:border-r">
+          <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+              Agent runs
+            </h3>
+            <span className="font-mono text-[10px] tabular-nums text-[var(--muted-foreground)]">
+              {blocks.length}
+            </span>
+          </div>
+          <div
+            ref={runListRef}
+            className="max-h-64 overflow-auto md:max-h-none md:h-[calc(100%-2.375rem)]"
+          >
+            {blocks.map((block, index) => {
+              const key = blockKey(block)
+              return (
+                <AgentRunRow
+                  key={key}
+                  block={block}
+                  active={live && index === blocks.length - 1}
+                  selected={selected === block}
+                  onSelect={() => setSelectedKey(key)}
+                />
+              )
+            })}
+          </div>
+        </aside>
 
-        <div>
-          {blocks.map((block, index) => (
-            <AgentGroup
-              key={`${block.author}-${index}`}
-              author={block.author}
-              events={block.events}
-              stat={block.stat}
-              occurrence={block.occurrence}
-              totalOccurrences={block.totalOccurrences}
-              signature={block.signature}
-              active={live && index === blocks.length - 1}
-              defaultOpen={index === blocks.length - 1}
-            />
-          ))}
-        </div>
-
-        {summary?.agents?.length ? (
-          <p className="border-t border-[var(--border)] py-3 text-center text-[11px] text-[var(--muted-foreground)]">
-            Hover a tool call for its arguments and result.
-          </p>
-        ) : null}
+        {selected && (
+          <TraceBlockDetails
+            key={blockKey(selected)}
+            block={selected}
+            active={live && selected === blocks[blocks.length - 1]}
+          />
+        )}
       </div>
-    </TooltipProvider>
+    </div>
   )
 }

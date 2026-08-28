@@ -117,6 +117,20 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
     artifacts.isError &&
     (artifacts.error instanceof ApiError ? artifacts.error.status === 404 : false)
 
+  const approval = (
+    <ApprovalCard
+      run={run}
+      publishConfigured={meta.data?.publish_configured ?? true}
+      coverChoiceNeeded={coverChoiceNeeded}
+      busy={decide.isPending}
+      onApprove={() => decide.mutate({ status: "approved", feedback: "" })}
+      onReject={(feedback) => decide.mutate({ status: "rejected", feedback })}
+      onResend={() => resend.mutate()}
+      resending={resend.isPending}
+      embedded={!!artifacts.data}
+    />
+  )
+
   return (
     <div
       className={
@@ -125,22 +139,11 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
           : "space-y-6"
       }
     >
-      {/* Capped rather than fixed: the decision card grows when the reject
-          form opens, and the carousel below gives up the height for it. Past
-          the cap the card scrolls on its own instead of pushing the slides
-          off the screen. */}
-      <div className={fit ? "shrink-0 md:max-h-[55%] md:overflow-y-auto" : undefined}>
-      <ApprovalCard
-        run={run}
-        publishConfigured={meta.data?.publish_configured ?? true}
-        coverChoiceNeeded={coverChoiceNeeded}
-        busy={decide.isPending}
-        onApprove={() => decide.mutate({ status: "approved", feedback: "" })}
-        onReject={(feedback) => decide.mutate({ status: "rejected", feedback })}
-        onResend={() => resend.mutate()}
-        resending={resend.isPending}
-      />
-      </div>
+      {!artifacts.data && (
+        <div className={fit ? "shrink-0 md:max-h-[55%] md:overflow-y-auto" : undefined}>
+          {approval}
+        </div>
+      )}
 
       {artifacts.isLoading && (
         <div
@@ -188,6 +191,7 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
           coverChoice={coverChoice}
           onCoverChoice={setCoverChoice}
           onExpired={() => void artifacts.refetch()}
+          decision={approval}
           fit={fit}
         />
       )}

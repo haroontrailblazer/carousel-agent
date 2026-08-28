@@ -17,7 +17,6 @@ import { TaskSkeleton } from "@/components/layout/route-skeleton"
 import { MutedChip } from "@/components/ui/chip"
 import { TabPanel, Tabs } from "@/components/ui/tabs"
 import { isStopped } from "@/lib/pipeline"
-import { cn } from "@/lib/utils"
 import { useRunWorkspace } from "@/hooks/use-run-workspace"
 import type { RunStatus } from "@/lib/types"
 
@@ -105,9 +104,9 @@ export function RunDetailRoute() {
   // has to catch the URL up.
   const active: TaskTab = tab ?? (status ? defaultTab(status) : "trace")
 
-  // The review fits one screen; the trace is a transcript and scrolls. Both
-  // shapes exist in the same tree, switched here.
-  const fitted = active === "review"
+  // Both views own the available task viewport. Their dense content scrolls
+  // inside its own pane instead of turning the entire page into a document.
+  const isReview = active === "review"
 
 
   if (run.isLoading) {
@@ -135,14 +134,14 @@ export function RunDetailRoute() {
   return (
     <div
       className={
-        fitted
-          ? "flex min-h-0 flex-col gap-4 md:min-h-0 md:flex-1 md:gap-5"
-          : "space-y-8"
+        "flex min-h-0 flex-col gap-4 md:min-h-0 md:flex-1 md:gap-5"
       }
     >
-      <TaskHeader data={data} live={live} stale={stream.stale} />
+      <TaskHeader data={data} live={live} stale={stream.stale} compact />
 
-      <PhaseRail phase={data.phase} live={live} stopped={isStopped(data.status)} />
+      {!isReview && (
+        <PhaseRail phase={data.phase} live={live} stopped={isStopped(data.status)} />
+      )}
 
       {/* NO card for a stopped task.
 
@@ -173,7 +172,7 @@ export function RunDetailRoute() {
       {data.qa.issues.length > 0 && (
         // Capped when fitted: a long QA list is worth reading, but not at the
         // price of the slide it is about.
-        <Card className={cn("p-4", fitted && "md:max-h-28 md:shrink-0 md:overflow-y-auto")}>
+        <Card className="p-4 md:max-h-28 md:shrink-0 md:overflow-y-auto">
           <p className="mb-2 text-sm font-semibold">QA found {data.qa.issues.length} issue(s)</p>
           <ul className="space-y-1 text-sm">
             {data.qa.issues.map((issue, i) => (
@@ -194,9 +193,7 @@ export function RunDetailRoute() {
       )}
 
       <section
-        className={
-          fitted ? "flex min-h-0 flex-col gap-3 md:flex-1" : "space-y-4"
-        }
+        className="flex min-h-0 flex-col gap-3 md:flex-1"
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Tabs
@@ -242,7 +239,11 @@ export function RunDetailRoute() {
           </div>
         </div>
 
-        <TabPanel value="trace" selected={active === "trace"}>
+        <TabPanel
+          value="trace"
+          selected={active === "trace"}
+          className="min-h-0 md:flex-1"
+        >
           <AgentTrace
             events={stream.events}
             summary={stream.summary}
