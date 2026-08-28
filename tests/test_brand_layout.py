@@ -24,6 +24,7 @@ from app.tools.brand_layout import (
     apply_cta_brand_rail,
     apply_slide_typography,
 )
+from app.tools import brand_identity
 
 
 class BrandLayoutTests(unittest.TestCase):
@@ -77,7 +78,12 @@ class BrandLayoutTests(unittest.TestCase):
 
     def test_cta_rail_leaves_top_counter_zone_unnumbered(self) -> None:
         image = Image.new("RGB", (1080, 1350), INK)
-        rendered = apply_cta_brand_rail(image, "@baskaranbuilds")
+        # The rails draw the RUN's account now, so one has to be in context;
+        # see tests/test_brand_rail_account.py for why there is no default.
+        with brand_identity.use(
+            brand_identity.BrandIdentity(handle="@acme", favicon_png=b"")
+        ):
+            rendered = apply_cta_brand_rail(image, "@acme")
         number_zone = rendered.crop(
             (
                 SLIDE_NUMBER_LEFT,

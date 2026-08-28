@@ -225,9 +225,23 @@ export type Meta = {
   statuses: RunStatus[]
   reject_question: string
   max_slides: number
-  /** False when IG_USER_ID / IG_ACCESS_TOKEN are unset: approving will still
+  /** False when no connected Instagram account can publish right now - none
+   *  connected, or every one of them needs reconnecting. Approving will still
    *  record the verdict, but publishing will fail loudly. */
   publish_configured: boolean
+  /** The connected accounts a run can be created for, default first. */
+  accounts: InstagramAccountSummary[]
+}
+
+/** One connected Instagram account, as /meta and the profile page report it. */
+export type InstagramAccountSummary = {
+  id: string
+  username: string
+  handle: string
+  name: string
+  is_default: boolean
+  needs_reconnect: boolean
+  expires_in_days: number | null
 }
 
 export type Identity = {

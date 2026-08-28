@@ -97,14 +97,28 @@ class Settings:
     secrets_key: str = os.getenv("SECRETS_KEY", "")
 
     # --- instagram ---
-    ig_user_id: str = os.getenv("IG_USER_ID", "")
-    ig_access_token: str = os.getenv("IG_ACCESS_TOKEN", "")
+    # NOTE: there is deliberately no IG_USER_ID / IG_ACCESS_TOKEN, and no
+    # IG_HANDLE. Accounts are connected from the console (Profile ->
+    # Instagram) through Meta's Instagram Login, and their tokens are stored
+    # ENCRYPTED in the instagram_accounts table - see
+    # app/services/instagram_accounts.py. Same reasoning as Telegram above:
+    # an environment fallback is a bearer credential in plaintext and a second
+    # source of truth that silently overrides what the console shows.
+    #
+    # It also stopped being answerable in the singular. With several accounts
+    # connected, "the handle" is a property of the RUN, not the process, and
+    # lives in app/tools/brand_identity.py.
+    #
+    # These two ARE app-level identifiers rather than user credentials: they
+    # identify this console to Meta, the same for every account connected
+    # through it. They belong in the environment.
+    ig_app_id: str = os.getenv("IG_APP_ID", "")
+    ig_app_secret: str = os.getenv("IG_APP_SECRET", "")
     ig_api_version: str = os.getenv("IG_API_VERSION", "v23.0")
 
     # --- CTA destinations ---
     substack_url: str = os.getenv("SUBSTACK_URL", "")
     youtube_url: str = os.getenv("YOUTUBE_URL", "")
-    ig_handle: str = os.getenv("IG_HANDLE", "@baskaranbuilds")
 
     # --- fetcher sources ---
     rss_feeds: list[str] = field(default_factory=lambda: _csv("RSS_FEEDS"))
