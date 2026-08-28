@@ -20,6 +20,31 @@ def _csv(name: str, default: str = "") -> list[str]:
     return [x.strip() for x in os.getenv(name, default).split(",") if x.strip()]
 
 
+def _s3_endpoint() -> str:
+    """The storage endpoint, derived from ``SUPABASE_URL`` unless overridden.
+
+    Supabase publishes exactly one S3 endpoint per project, always at
+    ``<project url>/storage/v1/s3``. Asking for it separately meant the same
+    project identity written twice, and the failure mode when they drifted was
+    quiet rather than loud: the console would authenticate against one project
+    and read slides from another, which looks like missing artifacts rather
+    than like a configuration mistake.
+
+    An explicit ``SUPABASE_S3_ENDPOINT`` still wins - a self-hosted or proxied
+    deployment can legitimately put storage somewhere else.
+
+    Returns empty when there is no project URL at all, rather than a hostless
+    ``/storage/v1/s3``: ``app/runtime.py`` reads an empty endpoint as "storage
+    is not configured", and a bare path would read as configured and fail
+    later, further from the cause.
+    """
+    explicit = os.getenv("SUPABASE_S3_ENDPOINT", "").strip()
+    if explicit:
+        return explicit
+    base = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    return f"{base}/storage/v1/s3" if base else ""
+
+
 #: ADK derives an app's name from the AGENT PACKAGE DIRECTORY, so every session
 #: it writes is keyed on "app". Defaulting app_name to anything else (it used to
 #: default to "carousel_factory") means the fetcher, the review API and the web
@@ -57,8 +82,13 @@ class Settings:
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_service_key: str = os.getenv("SUPABASE_SERVICE_KEY", "")
     media_bucket: str = os.getenv("MEDIA_BUCKET", "carousel-media")
-    # S3-compatible credentials for the artifact service adapter
-    s3_endpoint: str = os.getenv("SUPABASE_S3_ENDPOINT", "")
+    # S3-compatible credentials for the artifact service adapter.
+    #
+    # The endpoint is DERIVED from supabase_url (see _s3_endpoint); the keys
+    # are not derivable from anything - Supabase issues them separately from
+    # the anon key and the database password, because they authenticate a
+    # different protocol.
+    s3_endpoint: str = _s3_endpoint()
     s3_region: str = os.getenv("SUPABASE_S3_REGION", "us-east-1")
     s3_access_key: str = os.getenv("SUPABASE_S3_ACCESS_KEY", "")
     s3_secret_key: str = os.getenv("SUPABASE_S3_SECRET_KEY", "")
