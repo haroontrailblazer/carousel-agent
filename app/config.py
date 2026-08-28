@@ -20,12 +20,6 @@ def _csv(name: str, default: str = "") -> list[str]:
     return [x.strip() for x in os.getenv(name, default).split(",") if x.strip()]
 
 
-def _project_path(name: str, default: Path) -> Path:
-    """Resolve relative path settings against the repository root."""
-    configured = Path(os.getenv(name, str(default))).expanduser()
-    return configured if configured.is_absolute() else PROJECT_ROOT / configured
-
-
 #: ADK derives an app's name from the AGENT PACKAGE DIRECTORY, so every session
 #: it writes is keyed on "app". Defaulting app_name to anything else (it used to
 #: default to "carousel_factory") means the fetcher, the review API and the web
@@ -70,14 +64,12 @@ class Settings:
     s3_secret_key: str = os.getenv("SUPABASE_S3_SECRET_KEY", "")
 
     # --- mail ---
-    gmail_sender: str = os.getenv("GMAIL_SENDER", "")
-    gmail_credentials_path: str = os.getenv(
-        "GMAIL_CREDENTIALS_PATH", str(PROJECT_ROOT / "secrets" / "gmail-credentials.json")
-    )
-    gmail_token_path: str = os.getenv(
-        "GMAIL_TOKEN_PATH", str(PROJECT_ROOT / "secrets" / "gmail-token.json")
-    )
-    reviewer_emails: list[str] = field(default_factory=lambda: _csv("REVIEWER_EMAILS"))
+    # There is none. This console reviews through Telegram and never sends
+    # mail, so GMAIL_SENDER / GMAIL_CREDENTIALS_PATH / GMAIL_TOKEN_PATH /
+    # REVIEWER_EMAILS are gone - all four had zero consumers, and the last
+    # thing reading them (a Gmail newsletter SOURCE in fetcher/fetch_news.py)
+    # was removed with them. With no credentials on a host it failed on every
+    # scheduler tick, hourly, and produced nothing but log noise.
 
     # --- telegram (the review channel) ---
     # Carries the same review request the mail path did: slide previews plus
@@ -121,11 +113,10 @@ class Settings:
     youtube_url: str = os.getenv("YOUTUBE_URL", "")
 
     # --- fetcher sources ---
+    # Two, not three. NEWSLETTER_QUERY and the Gmail source it drove are gone;
+    # see the mail note above.
     rss_feeds: list[str] = field(default_factory=lambda: _csv("RSS_FEEDS"))
     youtube_channels: list[str] = field(default_factory=lambda: _csv("YOUTUBE_CHANNELS"))
-    newsletter_query: str = os.getenv(
-        "NEWSLETTER_QUERY", "label:newsletters newer_than:2d"
-    )
 
     # --- web console + auth ---
     # The anon key is PUBLIC by design - it ships inside the browser bundle, so

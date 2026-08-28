@@ -106,8 +106,8 @@ async def run_fetch_once() -> dict:
             logger.info("Another process is already fetching; skipping this tick.")
             return {"skipped": "locked"}
 
-        # Deferred import: the fetcher pulls in feedparser, Gmail auth and the
-        # agent stack. The scheduler module itself must stay cheap to import.
+        # Deferred import: the fetcher pulls in feedparser and the agent
+        # stack. The scheduler module itself must stay cheap to import.
         #
         # Two calls, not one: fetch_all() only POLLS the sources and returns
         # payloads - enqueue_items() is what writes them to news_queue and
