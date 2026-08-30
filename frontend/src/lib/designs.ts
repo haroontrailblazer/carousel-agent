@@ -29,6 +29,8 @@ export type ElementTransform = {
 }
 
 export type SlideDesign = {
+  logoVisible: boolean
+  handleVisible: boolean
   titleSize: number
   titlePosition: DesignPosition
   titleAlign: "left" | "center" | "right"
@@ -73,6 +75,8 @@ function transformForPosition(
 }
 
 const baseSlide: SlideDesign = {
+  logoVisible: true,
+  handleVisible: true,
   titleSize: 76,
   titlePosition: "top-left",
   titleAlign: "left",
@@ -102,6 +106,7 @@ export const PREBUILT_DESIGNS: CarouselDesign[] = [
     handleSize: 32,
     cover: {
       ...baseSlide,
+      handleVisible: false,
       titleSize: 128,
       titlePosition: "bottom-center",
       titleTransform: transformForPosition("bottom-center", 76, 24),
@@ -125,6 +130,7 @@ export const PREBUILT_DESIGNS: CarouselDesign[] = [
     handleSize: 28,
     cover: {
       ...baseSlide,
+      handleVisible: false,
       titleSize: 112,
       titlePosition: "middle-left",
       titleTransform: transformForPosition("middle-left", 76, 22),
@@ -161,6 +167,7 @@ export const PREBUILT_DESIGNS: CarouselDesign[] = [
     handleSize: 28,
     cover: {
       ...baseSlide,
+      handleVisible: false,
       titleSize: 104,
       titlePosition: "bottom-left",
       titleTransform: transformForPosition("bottom-left", 68, 22),
@@ -223,6 +230,7 @@ function normalizeSlide(
   value: Partial<SlideDesign> | undefined,
   logoPosition: DesignPosition,
   handlePosition: DesignPosition,
+  surface: "cover" | "inside",
 ): SlideDesign {
   const slide = { ...baseSlide, ...value }
   const handleFallback = transformForPosition(handlePosition, 28, 5)
@@ -233,6 +241,8 @@ function normalizeSlide(
   }
   return {
     ...slide,
+    logoVisible: value?.logoVisible ?? true,
+    handleVisible: value?.handleVisible ?? surface === "inside",
     titleTransform: normalizeTransform(
       value?.titleTransform,
       transformForPosition(slide.titlePosition, 76, 20),
@@ -263,8 +273,8 @@ function normalizeDesign(value: Partial<CarouselDesign>): CarouselDesign {
     name: value.name || "Untitled design",
     logoPosition,
     handlePosition,
-    cover: normalizeSlide(value.cover, logoPosition, handlePosition),
-    inside: normalizeSlide(value.inside, logoPosition, handlePosition),
+    cover: normalizeSlide(value.cover, logoPosition, handlePosition, "cover"),
+    inside: normalizeSlide(value.inside, logoPosition, handlePosition, "inside"),
   }
 }
 
@@ -319,6 +329,8 @@ export function designPayload(design: CarouselDesign) {
     handle_position: design.handlePosition,
     handle_size: design.handleSize,
     cover: {
+      logo_visible: design.cover.logoVisible,
+      handle_visible: design.cover.handleVisible,
       title_size: design.cover.titleSize,
       title_position: design.cover.titlePosition,
       title_align: design.cover.titleAlign,
@@ -336,6 +348,8 @@ export function designPayload(design: CarouselDesign) {
       handle_transform: design.cover.handleTransform,
     },
     inside: {
+      logo_visible: design.inside.logoVisible,
+      handle_visible: design.inside.handleVisible,
       title_size: design.inside.titleSize,
       title_position: design.inside.titlePosition,
       title_align: design.inside.titleAlign,

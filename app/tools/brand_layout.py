@@ -812,12 +812,14 @@ def apply_body_brand_rail(
         margin = design.inside.safe_margin
         shared_anchor = (
             design.logo_visible
+            and design.inside.logo_visible
             and design.handle_visible
+            and design.inside.handle_visible
             and design.handle_position == design.logo_position
             and design.inside.logo_transform is None
             and design.inside.handle_transform is None
         )
-        if design.logo_visible and not shared_anchor:
+        if design.logo_visible and design.inside.logo_visible and not shared_anchor:
             favicon = _favicon_from_source(design.logo_size)
             left, top = (
                 _transform_origin(design.inside.logo_transform, design.logo_size, design.logo_size)
@@ -830,7 +832,7 @@ def apply_body_brand_rail(
                 )
             )
             result.paste(favicon, (left, top), favicon)
-        if design.handle_visible:
+        if design.handle_visible and design.inside.handle_visible:
             # When both marks intentionally share one anchor, keep the handle
             # beside the logo rather than drawing both into the same pixels.
             if shared_anchor:
@@ -883,12 +885,14 @@ def apply_cta_brand_rail(
     else:
         shared_anchor = (
             design.logo_visible
+            and design.inside.logo_visible
             and design.handle_visible
+            and design.inside.handle_visible
             and design.logo_position == design.handle_position
             and design.inside.logo_transform is None
             and design.inside.handle_transform is None
         )
-        if design.logo_visible and not shared_anchor:
+        if design.logo_visible and design.inside.logo_visible and not shared_anchor:
             favicon = _favicon_from_source(design.logo_size)
             left, top = (
                 _transform_origin(design.inside.logo_transform, design.logo_size, design.logo_size)
@@ -920,7 +924,7 @@ def apply_cta_brand_rail(
                 font=font,
                 fill=text,
             )
-        elif design.handle_visible:
+        elif design.handle_visible and design.inside.handle_visible:
             _draw_handle_positioned(
                 result,
                 handle,

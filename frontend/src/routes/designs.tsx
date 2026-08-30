@@ -3,10 +3,15 @@ import {
   AlignCenter,
   AlignLeft,
   AlignRight,
+  Bot,
+  Check,
+  ChevronRight,
   Copy,
   Eye,
   EyeOff,
+  HardDrive,
   Image as ImageIcon,
+  ImageOff,
   Layers3,
   Lock,
   MousePointer2,
@@ -14,6 +19,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Sparkles,
   Trash2,
   Unlock,
   ZoomIn,
@@ -319,7 +325,9 @@ function DesignCanvas({
       }}
       onPointerDown={() => onSelectElement(null)}
     >
-      <div className="design-canvas-safe" style={{ inset: `${(slide.safeMargin / 1080) * 100}%` }} />
+      <div className="design-canvas-safe" style={{ inset: `${(slide.safeMargin / 1080) * 100}%` }}>
+        <span>Safe area · {slide.safeMargin}px</span>
+      </div>
 
       {slide.imageType !== "none" ? (
         <CanvasElement
@@ -334,11 +342,26 @@ function DesignCanvas({
           className={`design-image-${slide.imageType} ${surface === "cover" ? "design-canvas-image--cover" : ""}`}
         >
           <div className="design-canvas-image-content">
-            <ImageIcon />
-            <span>{IMAGE_TYPES.find((item) => item.value === slide.imageType)?.label}</span>
+            <span className="design-canvas-image-kicker"><Sparkles /> Agent-generated visual</span>
+            <ImageIcon className="design-canvas-image-icon" />
+            <strong>
+              {surface === "cover"
+                ? "Generated cover art fills this frame"
+                : `${IMAGE_TYPES.find((item) => item.value === slide.imageType)?.label} goes here`}
+            </strong>
+            <small>
+              {surface === "cover"
+                ? "The agent creates the background, then places your title and brand layers above it."
+                : "The agent creates and crops the image to this exact movable box."}
+            </small>
           </div>
         </CanvasElement>
-      ) : null}
+      ) : (
+        <button type="button" className="design-canvas-no-image" onClick={() => onSelectElement("image")}>
+          <ImageOff />
+          <span><strong>Text-only slide</strong><small>No generated image will be added.</small></span>
+        </button>
+      )}
 
       <CanvasElement
         kind="title"
@@ -360,16 +383,17 @@ function DesignCanvas({
             alignItems: slide.titleAlign === "left" ? "flex-start" : slide.titleAlign === "right" ? "flex-end" : "center",
           }}
         >
+          <span className="design-canvas-slot-label">Title · agent copy</span>
           {title}
-          <span style={{ background: slide.accentColor }} />
+          <span className="design-canvas-title-accent" style={{ background: slide.accentColor }} />
         </div>
       </CanvasElement>
 
       {surface === "inside" ? (
-        <p className="design-canvas-copy">A clear supporting thought sits beneath the headline.</p>
+        <p className="design-canvas-copy"><span>Body copy · agent copy</span>A clear supporting thought sits beneath the headline.</p>
       ) : null}
 
-      {design.logoVisible ? (
+      {design.logoVisible && slide.logoVisible ? (
         <CanvasElement
           kind="logo"
           transform={slide.logoTransform}
@@ -384,7 +408,7 @@ function DesignCanvas({
         </CanvasElement>
       ) : null}
 
-      {design.handleVisible ? (
+      {design.handleVisible && slide.handleVisible ? (
         <CanvasElement
           kind="handle"
           transform={slide.handleTransform}
@@ -521,10 +545,23 @@ export function DesignsRoute() {
     updateElementTransform(selectedElement, defaults[selectedElement])
   }
 
-  function toggleVisibility(kind: ElementKind) {
-    if (kind === "logo") updateDesign((design) => ({ ...design, logoVisible: !design.logoVisible }))
-    if (kind === "handle") updateDesign((design) => ({ ...design, handleVisible: !design.handleVisible }))
-    if (kind === "image") updateSlide({ imageType: slide?.imageType === "none" ? "editorial" : "none" })
+  function setLayerVisibility(kind: ElementKind, visible: boolean) {
+    if (kind === "logo") {
+      updateDesign((design) => ({
+        ...design,
+        logoVisible: visible ? true : design.logoVisible,
+        [surface]: { ...design[surface], logoVisible: visible },
+      }))
+    }
+    if (kind === "handle") {
+      updateDesign((design) => ({
+        ...design,
+        handleVisible: visible ? true : design.handleVisible,
+        [surface]: { ...design[surface], handleVisible: visible },
+      }))
+    }
+    if (kind === "image") updateSlide({ imageType: visible ? "editorial" : "none" })
+    if (!visible && selectedElement === kind) setSelectedElement(null)
   }
 
   if (!selected || !slide) return null
@@ -582,6 +619,11 @@ export function DesignsRoute() {
           <MousePointer2 />
           <p><strong>Edit on canvas</strong><span>Click, drag, or resize any layer.</span></p>
         </div>
+        <div className="design-storage-note">
+          <HardDrive />
+          <p><strong>Saved in this browser</strong><span>Every edit is auto-saved on this device.</span></p>
+          <Check />
+        </div>
       </section>
 
       <section className="designs-stage">
@@ -609,7 +651,12 @@ export function DesignsRoute() {
             >
               <Copy className="size-4" /> Duplicate
             </Button>
-            <Button variant="brand" onClick={() => toast.success(`${selected.name} is ready to use`)}>
+            <Button
+              variant="brand"
+              onClick={() => toast.success(`${selected.name} saved in this browser`, {
+                description: "Choose this design in New carousel and its exact rules will be copied into the agent run.",
+              })}
+            >
               <Save className="size-4" /> Save design
             </Button>
           </div>
@@ -631,15 +678,39 @@ export function DesignsRoute() {
             <button type="button" aria-label="Zoom in" onClick={() => setZoom((value) => clamp(value + 10, 60, 130))}><ZoomIn /></button>
           </div>
         </div>
-        <p className="designs-stage-note">Live 4:5 preview · 1080 × 1350 output · Arrow keys nudge selected layers</p>
+        <div className="designs-stage-note">
+          <div className="designs-stage-legend" aria-label="Slide skeleton legend">
+            <span><i className="design-legend-dot design-legend-dot--visual" />Generated visual</span>
+            <span><i className="design-legend-dot design-legend-dot--copy" />Agent-written copy</span>
+            <span><i className="design-legend-dot design-legend-dot--brand" />Your brand layer</span>
+          </div>
+          <p>Live 4:5 skeleton · 1080 × 1350 output · Arrow keys nudge selected layers</p>
+        </div>
       </section>
 
       <aside className="designs-inspector">
         <div className="design-inspector-section design-inspector-design">
-          <h2>Design</h2>
+          <div className="design-inspector-heading">
+            <div><span className="design-field-label">Auto-saved locally</span><h2>Design contract</h2></div>
+            <Check />
+          </div>
           <Field label="Name">
             <input value={selected.name} onChange={(event) => updateDesign((design) => ({ ...design, name: event.target.value }))} />
           </Field>
+        </div>
+
+        <div className="design-inspector-section design-agent-handoff">
+          <div className="design-inspector-heading"><h2>How agents copy this design</h2><Bot /></div>
+          <ol>
+            <li><span>1</span><p><strong>Save this named format</strong><small>Stored in this browser with cover and inside-slide rules.</small></p></li>
+            <li><span>2</span><p><strong>Choose it in New carousel</strong><small>You must select a design before the agents can start.</small></p></li>
+            <li><span>3</span><p><strong>A frozen snapshot joins the run</strong><small>Image box, typography, colors, safe area and brand settings are copied exactly. Later edits do not change a running carousel.</small></p></li>
+          </ol>
+          <div className="design-agent-contract-summary">
+            <Sparkles />
+            <span><strong>{surface === "cover" ? "Cover contract" : "Inside-slide contract"}</strong><small>{slide.imageType === "none" ? "Text only" : IMAGE_TYPES.find((item) => item.value === slide.imageType)?.label} · {slide.titleSize}px title · {slide.safeMargin}px safe area</small></span>
+            <ChevronRight />
+          </div>
         </div>
 
         <div className="design-inspector-section">
@@ -716,22 +787,31 @@ export function DesignsRoute() {
               </select>
             </Field>
             <NumberField label="Generation scale" value={slide.imageScale} min={30} max={100} suffix="%" onChange={(imageScale) => updateSlide({ imageScale })} />
+            <Button variant="ghost" className="design-remove-layer" onClick={() => setLayerVisibility("image", false)}>
+              <Trash2 className="size-4" /> Remove from {surface === "cover" ? "cover" : "inside slides"}
+            </Button>
           </div>
         ) : null}
 
         {selectedElement === "logo" ? (
           <div className="design-inspector-section">
             <h2>Logo settings</h2>
-            <div className="design-toggle-row"><span>Show connected account logo</span><input type="checkbox" checked={selected.logoVisible} onChange={(event) => updateDesign((design) => ({ ...design, logoVisible: event.target.checked }))} /></div>
+            <div className="design-toggle-row"><span>Show on {surface === "cover" ? "cover" : "inside slides"}</span><input type="checkbox" checked={selected.logoVisible && slide.logoVisible} onChange={(event) => setLayerVisibility("logo", event.target.checked)} /></div>
             <NumberField label="Output size" value={selected.logoSize} min={24} max={120} onChange={(logoSize) => updateDesign((design) => ({ ...design, logoSize }))} />
+            <Button variant="ghost" className="design-remove-layer" onClick={() => setLayerVisibility("logo", false)}>
+              <Trash2 className="size-4" /> Remove from {surface === "cover" ? "cover" : "inside slides"}
+            </Button>
           </div>
         ) : null}
 
         {selectedElement === "handle" ? (
           <div className="design-inspector-section">
             <h2>Instagram handle</h2>
-            <div className="design-toggle-row"><span>Show connected account handle</span><input type="checkbox" checked={selected.handleVisible} onChange={(event) => updateDesign((design) => ({ ...design, handleVisible: event.target.checked }))} /></div>
+            <div className="design-toggle-row"><span>Show on {surface === "cover" ? "cover" : "inside slides"}</span><input type="checkbox" checked={selected.handleVisible && slide.handleVisible} onChange={(event) => setLayerVisibility("handle", event.target.checked)} /></div>
             <NumberField label="Font size" value={selected.handleSize} min={16} max={64} onChange={(handleSize) => updateDesign((design) => ({ ...design, handleSize }))} />
+            <Button variant="ghost" className="design-remove-layer" onClick={() => setLayerVisibility("handle", false)}>
+              <Trash2 className="size-4" /> Remove from {surface === "cover" ? "cover" : "inside slides"}
+            </Button>
           </div>
         ) : null}
 
@@ -750,10 +830,10 @@ export function DesignsRoute() {
         <div className="design-inspector-section">
           <div className="design-inspector-heading"><h2>Layers</h2><Layers3 /></div>
           <div className="design-layer-list">
-            <LayerRow kind="handle" visible={selected.handleVisible} locked={slide.handleTransform.locked} selected={selectedElement === "handle"} onSelect={() => setSelectedElement("handle")} onVisibility={() => toggleVisibility("handle")} />
-            <LayerRow kind="logo" visible={selected.logoVisible} locked={slide.logoTransform.locked} selected={selectedElement === "logo"} onSelect={() => setSelectedElement("logo")} onVisibility={() => toggleVisibility("logo")} />
+            <LayerRow kind="handle" visible={selected.handleVisible && slide.handleVisible} locked={slide.handleTransform.locked} selected={selectedElement === "handle"} onSelect={() => setSelectedElement("handle")} onVisibility={() => setLayerVisibility("handle", !(selected.handleVisible && slide.handleVisible))} />
+            <LayerRow kind="logo" visible={selected.logoVisible && slide.logoVisible} locked={slide.logoTransform.locked} selected={selectedElement === "logo"} onSelect={() => setSelectedElement("logo")} onVisibility={() => setLayerVisibility("logo", !(selected.logoVisible && slide.logoVisible))} />
             <LayerRow kind="title" visible locked={slide.titleTransform.locked} selected={selectedElement === "title"} onSelect={() => setSelectedElement("title")} />
-            <LayerRow kind="image" visible={slide.imageType !== "none"} locked={surface === "cover" || slide.imageTransform.locked} selected={selectedElement === "image"} onSelect={() => setSelectedElement("image")} onVisibility={() => toggleVisibility("image")} />
+            <LayerRow kind="image" visible={slide.imageType !== "none"} locked={surface === "cover" || slide.imageTransform.locked} selected={selectedElement === "image"} onSelect={() => setSelectedElement("image")} onVisibility={() => setLayerVisibility("image", slide.imageType === "none")} />
           </div>
         </div>
 

@@ -52,6 +52,8 @@ class ElementTransform(BaseModel):
 class SlideDesign(BaseModel):
     """Editable geometry and art direction for one slide family."""
 
+    logo_visible: bool = True
+    handle_visible: bool = True
     title_size: int = Field(76, ge=44, le=160)
     title_position: DesignPosition = "top-left"
     title_align: Literal["left", "center", "right"] = "left"
@@ -85,6 +87,7 @@ class CarouselDesign(BaseModel):
     handle_size: int = Field(32, ge=16, le=64)
     cover: SlideDesign = Field(
         default_factory=lambda: SlideDesign(
+            handle_visible=False,
             title_size=128,
             title_position="bottom-center",
             title_align="center",

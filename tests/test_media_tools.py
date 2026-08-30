@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from PIL import Image
 
+from app.schemas import CarouselDesign
 from app.tools import media_tools
 from app.tools.brand_layout import ACCENT_GREEN, HEADLINE_FONT_SIZE, headline_font
 
@@ -281,6 +282,27 @@ class ImageQualityTests(unittest.TestCase):
 
 
 class CoverTypographyTests(unittest.TestCase):
+    def test_default_design_omits_handle_from_cover_only(self) -> None:
+        design = CarouselDesign(logo_visible=False)
+        self.assertFalse(design.cover.handle_visible)
+        self.assertTrue(design.inside.handle_visible)
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.object(media_tools, "_load_scrubbed_template", return_value=None),
+            patch.object(
+                media_tools.brand_identity,
+                "require_handle",
+                side_effect=AssertionError("cover should not request a handle"),
+            ),
+        ):
+            path = media_tools._build_overlay_png(
+                "TITLE",
+                "",
+                Path(temp_dir),
+                design,
+            )
+            self.assertTrue(path.is_file())
+
     def test_cover_overlay_leaves_counter_zone_empty(self) -> None:
         transparent = Image.new("RGBA", (1080, 1350), (0, 0, 0, 0))
         with (
