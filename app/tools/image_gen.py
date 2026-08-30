@@ -354,21 +354,33 @@ def _finalize(
     destination = Path(out_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(BytesIO(png_bytes)) as img:
-        scale = (slide_design.image_scale / 100) if slide_design else 1.0
-        target = (
-            max(1, round(_VISUAL_WIDTH * scale)),
-            max(1, round(_VISUAL_HEIGHT * scale)),
-        )
+        transform = slide_design.image_transform if slide_design else None
+        if transform is not None:
+            target = (
+                max(1, round(SLIDE_WIDTH * transform.width / 100)),
+                max(1, round(SLIDE_HEIGHT * transform.height / 100)),
+            )
+        else:
+            scale = (slide_design.image_scale / 100) if slide_design else 1.0
+            target = (
+                max(1, round(_VISUAL_WIDTH * scale)),
+                max(1, round(_VISUAL_HEIGHT * scale)),
+            )
         visual = _contain_without_crop(img, target, background)
     slide = Image.new("RGB", (SLIDE_WIDTH, SLIDE_HEIGHT), background)
-    if slide_design:
+    if transform is not None:
+        left = round(SLIDE_WIDTH * transform.x / 100)
+        top_offset = round(SLIDE_HEIGHT * transform.y / 100)
+        slide.paste(visual, (left, top_offset))
+    elif slide_design:
         vertical, horizontal = slide_design.image_position.split("-", 1)
         left = 0 if horizontal == "left" else SLIDE_WIDTH - visual.width if horizontal == "right" else (SLIDE_WIDTH - visual.width) // 2
         room = _VISUAL_HEIGHT - visual.height
         top_offset = 0 if vertical == "top" else room if vertical == "bottom" else room // 2
+        slide.paste(visual, (left, TEXT_PANEL_BOTTOM + top_offset))
     else:
         left, top_offset = 0, _VISUAL_HEIGHT - visual.height
-    slide.paste(visual, (left, TEXT_PANEL_BOTTOM + top_offset))
+        slide.paste(visual, (left, TEXT_PANEL_BOTTOM + top_offset))
     slide.save(destination, format="PNG")
     return str(destination)
 
@@ -385,13 +397,20 @@ def _composite_subject_reference(
         return result
     _filename, data, _mime = reference
     with Image.open(BytesIO(data)) as source:
-        scale = (slide_design.image_scale / 100) if slide_design else 1.0
-        fitted = ImageOps.contain(
-            source.convert("RGB"),
-            (round(_VISUAL_WIDTH * scale), round(_VISUAL_HEIGHT * scale)),
-            method=Image.Resampling.LANCZOS,
-        )
-    if slide_design:
+        transform = slide_design.image_transform if slide_design else None
+        if transform is not None:
+            target = (
+                max(1, round(SLIDE_WIDTH * transform.width / 100)),
+                max(1, round(SLIDE_HEIGHT * transform.height / 100)),
+            )
+        else:
+            scale = (slide_design.image_scale / 100) if slide_design else 1.0
+            target = (round(_VISUAL_WIDTH * scale), round(_VISUAL_HEIGHT * scale))
+        fitted = ImageOps.contain(source.convert("RGB"), target, method=Image.Resampling.LANCZOS)
+    if transform is not None:
+        left = round(SLIDE_WIDTH * transform.x / 100)
+        top = round(SLIDE_HEIGHT * transform.y / 100)
+    elif slide_design:
         vertical, horizontal = slide_design.image_position.split("-", 1)
         left = 0 if horizontal == "left" else SLIDE_WIDTH - fitted.width if horizontal == "right" else (SLIDE_WIDTH - fitted.width) // 2
         room = _VISUAL_HEIGHT - fitted.height
@@ -461,6 +480,7 @@ def generate_slide_image(
             f"image type={slide_design.image_type}; "
             f"image position={slide_design.image_position}; "
             f"image scale={slide_design.image_scale}%; "
+            f"freeform image box={slide_design.image_transform.model_dump() if slide_design.image_transform else 'legacy anchor'}; "
             f"background={slide_design.background}; "
             f"accent={slide_design.accent_color}. "
             "Follow this selected design over generic style guidance."

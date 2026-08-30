@@ -12,6 +12,7 @@ import httpx
 from openai import APIStatusError
 from PIL import Image, ImageChops, ImageDraw
 
+from app.schemas import ElementTransform, SlideDesign
 from app.tools import image_gen
 from app.tools.brand_layout import PAPER, RAIL_DIVIDER_Y, TEXT_PANEL_BOTTOM
 
@@ -138,6 +139,29 @@ class GenerationSizeTests(unittest.TestCase):
 
 
 class VisualMergeTests(unittest.TestCase):
+    def test_freeform_image_box_is_used_as_native_slide_geometry(self) -> None:
+        visual = Image.new("RGB", (80, 100), (22, 133, 211))
+        design = SlideDesign(
+            image_transform=ElementTransform(x=25, y=40, width=20, height=20)
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = Path(temp_dir) / "freeform-slide.png"
+            image_gen._finalize(
+                _png_bytes(visual),
+                str(output),
+                theme="paper",
+                slide_design=design,
+            )
+            with Image.open(output) as rendered:
+                self.assertEqual(rendered.getpixel((270, 540)), (22, 133, 211))
+                self.assertEqual(rendered.getpixel((485, 809)), (22, 133, 211))
+                self.assertEqual(rendered.getpixel((269, 540)), PAPER)
+                self.assertEqual(rendered.getpixel((486, 809)), PAPER)
+
+    def test_freeform_box_cannot_escape_the_slide(self) -> None:
+        with self.assertRaises(ValueError):
+            ElementTransform(x=90, y=10, width=20, height=20)
+
     def test_generated_visual_is_merged_into_exact_lower_slot(self) -> None:
         visual = Image.new("RGB", (1536, 768), (20, 30, 40))
         with tempfile.TemporaryDirectory() as temp_dir:

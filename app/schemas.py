@@ -33,6 +33,22 @@ DesignImageType = Literal["editorial", "product", "illustration", "diagram", "no
 DesignFont = Literal["condensed", "sans", "serif"]
 
 
+class ElementTransform(BaseModel):
+    """A freeform element box measured as percentages of the 4:5 slide."""
+
+    x: float = Field(8, ge=0, le=100)
+    y: float = Field(8, ge=0, le=100)
+    width: float = Field(76, ge=1, le=100)
+    height: float = Field(20, ge=1, le=100)
+    locked: bool = False
+
+    @model_validator(mode="after")
+    def validate_inside_canvas(self) -> "ElementTransform":
+        if self.x + self.width > 100.01 or self.y + self.height > 100.01:
+            raise ValueError("element transform must stay inside the slide canvas")
+        return self
+
+
 class SlideDesign(BaseModel):
     """Editable geometry and art direction for one slide family."""
 
@@ -47,6 +63,13 @@ class SlideDesign(BaseModel):
     image_type: DesignImageType = "editorial"
     image_position: DesignPosition = "bottom-center"
     image_scale: int = Field(100, ge=30, le=100)
+    # Optional for compatibility with saved runs and API clients created before
+    # the direct-manipulation editor. Legacy anchor fields remain authoritative
+    # when a freeform box is absent.
+    title_transform: Optional[ElementTransform] = None
+    image_transform: Optional[ElementTransform] = None
+    logo_transform: Optional[ElementTransform] = None
+    handle_transform: Optional[ElementTransform] = None
 
 
 class CarouselDesign(BaseModel):

@@ -410,11 +410,23 @@ def apply_slide_typography(
         headline_text = headline_text.upper()
     clean_body = [" ".join(str(line).split()) for line in body_lines if str(line).strip()]
 
-    content_left = slide.safe_margin if slide is not None else TEXT_CONTENT_LEFT
-    content_right = SLIDE_WIDTH - content_left
-    panel_top = max(84, content_left) if slide is not None else TEXT_PANEL_TOP
-    panel_bottom = TEXT_PANEL_BOTTOM
-    max_width = content_right - content_left
+    title_transform = slide.title_transform if slide is not None else None
+    if title_transform is not None:
+        content_left = round(SLIDE_WIDTH * title_transform.x / 100)
+        max_width = max(1, round(SLIDE_WIDTH * title_transform.width / 100))
+        content_right = min(SLIDE_WIDTH, content_left + max_width)
+        panel_top = round(SLIDE_HEIGHT * title_transform.y / 100)
+        panel_bottom = max(
+            panel_top + 160,
+            round(SLIDE_HEIGHT * (title_transform.y + title_transform.height) / 100),
+        )
+        panel_bottom = min(panel_bottom, SLIDE_HEIGHT - slide.safe_margin)
+    else:
+        content_left = slide.safe_margin if slide is not None else TEXT_CONTENT_LEFT
+        content_right = SLIDE_WIDTH - content_left
+        panel_top = max(84, content_left) if slide is not None else TEXT_PANEL_TOP
+        panel_bottom = TEXT_PANEL_BOTTOM
+        max_width = content_right - content_left
     layout = _fit_typography_layout(
         headline_text,
         clean_body,
@@ -430,12 +442,17 @@ def apply_slide_typography(
     wrapped_body = layout.wrapped_body
 
     draw = ImageDraw.Draw(result)
-    draw.rectangle((0, 0, SLIDE_WIDTH, TEXT_PANEL_BOTTOM), fill=background)
+    # Freeform layouts may intentionally place the visual behind or beside the
+    # title. Preserve that layer instead of repainting the whole legacy panel.
+    if title_transform is None:
+        draw.rectangle((0, 0, SLIDE_WIDTH, TEXT_PANEL_BOTTOM), fill=background)
     highlight = _headline_highlight(headline_text)
     highlight_start = headline_text.rfind(highlight) if highlight else -1
     highlight_end = highlight_start + len(highlight) if highlight_start >= 0 else -1
     global_index = 0
-    if slide is None or slide.title_position.startswith("top"):
+    if title_transform is not None:
+        y = panel_top
+    elif slide is None or slide.title_position.startswith("top"):
         y = panel_top
     elif slide.title_position.startswith("middle"):
         y = panel_top + max(0, (panel_bottom - panel_top - layout.total_height) // 2)
@@ -443,18 +460,24 @@ def apply_slide_typography(
         y = max(panel_top, panel_bottom - layout.total_height - 18)
     widest_headline = max((_line_width(head_font, line) for line in headline_lines), default=0)
     horizontal = slide.title_position.split("-", 1)[1] if slide else "left"
-    if horizontal == "center":
+    if title_transform is not None:
+        block_left = float(content_left)
+        alignment_width = float(max_width)
+    elif horizontal == "center":
         block_left = (SLIDE_WIDTH - widest_headline) / 2
+        alignment_width = float(widest_headline)
     elif horizontal == "right":
         block_left = content_right - widest_headline
+        alignment_width = float(widest_headline)
     else:
         block_left = float(content_left)
+        alignment_width = float(widest_headline)
     for line in headline_lines:
         line_width = _line_width(head_font, line)
         if slide is not None and slide.title_align == "center":
-            x = float(block_left + (widest_headline - line_width) / 2)
+            x = float(block_left + (alignment_width - line_width) / 2)
         elif slide is not None and slide.title_align == "right":
-            x = float(block_left + widest_headline - line_width)
+            x = float(block_left + alignment_width - line_width)
         else:
             x = float(block_left)
         for char in line:
@@ -691,6 +714,16 @@ def _position_box(
     return left, top
 
 
+def _transform_origin(transform: object, width: int, height: int) -> tuple[int, int]:
+    """Convert a normalized editor box into a native slide origin."""
+    left = round(SLIDE_WIDTH * float(getattr(transform, "x")) / 100)
+    top = round(SLIDE_HEIGHT * float(getattr(transform, "y")) / 100)
+    return (
+        max(0, min(left, SLIDE_WIDTH - width)),
+        max(0, min(top, SLIDE_HEIGHT - height)),
+    )
+
+
 def _draw_handle_positioned(
     image: Image.Image,
     handle: str,
@@ -699,6 +732,7 @@ def _draw_handle_positioned(
     font_size: int,
     margin: int,
     fill: tuple[int, int, int],
+    transform: object | None = None,
 ) -> None:
     text = handle.strip()
     if not text:
@@ -709,7 +743,11 @@ def _draw_handle_positioned(
     draw = ImageDraw.Draw(image)
     box = draw.textbbox((0, 0), text, font=font)
     width, height = box[2] - box[0], box[3] - box[1]
-    left, top = _position_box(position, width, height, margin=margin)
+    left, top = (
+        _transform_origin(transform, width, height)
+        if transform is not None
+        else _position_box(position, width, height, margin=margin)
+    )
     draw.text((left - box[0], top - box[1]), text, font=font, fill=fill)
 
 
@@ -776,14 +814,20 @@ def apply_body_brand_rail(
             design.logo_visible
             and design.handle_visible
             and design.handle_position == design.logo_position
+            and design.inside.logo_transform is None
+            and design.inside.handle_transform is None
         )
         if design.logo_visible and not shared_anchor:
             favicon = _favicon_from_source(design.logo_size)
-            left, top = _position_box(
-                design.logo_position,
-                design.logo_size,
-                design.logo_size,
-                margin=margin,
+            left, top = (
+                _transform_origin(design.inside.logo_transform, design.logo_size, design.logo_size)
+                if design.inside.logo_transform is not None
+                else _position_box(
+                    design.logo_position,
+                    design.logo_size,
+                    design.logo_size,
+                    margin=margin,
+                )
             )
             result.paste(favicon, (left, top), favicon)
         if design.handle_visible:
@@ -817,6 +861,7 @@ def apply_body_brand_rail(
                     font_size=design.handle_size,
                     margin=margin,
                     fill=text,
+                    transform=design.inside.handle_transform,
                 )
     _draw_swipe_arrow(result, text)
     return result
@@ -840,14 +885,20 @@ def apply_cta_brand_rail(
             design.logo_visible
             and design.handle_visible
             and design.logo_position == design.handle_position
+            and design.inside.logo_transform is None
+            and design.inside.handle_transform is None
         )
         if design.logo_visible and not shared_anchor:
             favicon = _favicon_from_source(design.logo_size)
-            left, top = _position_box(
-                design.logo_position,
-                design.logo_size,
-                design.logo_size,
-                margin=design.inside.safe_margin,
+            left, top = (
+                _transform_origin(design.inside.logo_transform, design.logo_size, design.logo_size)
+                if design.inside.logo_transform is not None
+                else _position_box(
+                    design.logo_position,
+                    design.logo_size,
+                    design.logo_size,
+                    margin=design.inside.safe_margin,
+                )
             )
             result.paste(favicon, (left, top), favicon)
         if shared_anchor:
@@ -877,6 +928,7 @@ def apply_cta_brand_rail(
                 font_size=design.handle_size,
                 margin=design.inside.safe_margin,
                 fill=text,
+                transform=design.inside.handle_transform,
             )
     return result
 

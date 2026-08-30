@@ -54,6 +54,7 @@ from app.tools.brand_layout import (
     ACCENT_GREEN,
     HEADLINE_MAX_LINES,
     _position_box,
+    _transform_origin,
     design_font,
     hex_color,
     headline_font,
@@ -1162,7 +1163,12 @@ def _render_title_block(
 
     slide = design.cover if design is not None else None
     safe_margin = slide.safe_margin if slide else round(width * (1 - _TITLE_MAX_WIDTH_FRAC) / 2)
-    max_w = width - safe_margin * 2
+    title_transform = slide.title_transform if slide else None
+    max_w = (
+        max(1, round(width * title_transform.width / 100))
+        if title_transform is not None
+        else width - safe_margin * 2
+    )
     title_size = slide.title_size if slide else _COVER_TITLE_FONT_SIZE
     font = _load_title_font(title_size, slide.font_family if slide else "condensed")
     lines = _wrap_title(text, font, max_w)
@@ -1180,23 +1186,31 @@ def _render_title_block(
     gap = int(line_h * 0.10)
     total_h = len(lines) * line_h + (len(lines) - 1) * gap
     vertical = slide.title_position.split("-", 1)[0] if slide else "bottom"
-    if vertical == "top":
+    if title_transform is not None:
+        top = round(height * title_transform.y / 100)
+    elif vertical == "top":
         top = safe_margin
     elif vertical == "middle":
         top = round((height - total_h) / 2)
     else:
         top = int(height * _TITLE_CENTER_Y_FRAC - total_h / 2)
-    top = min(top, height - int(height * 0.06) - total_h)  # keep off the grid floor
+    top = max(0, min(top, height - int(height * 0.02) - total_h))
 
     global_idx = 0  # char index into `text` (lines re-join with single spaces)
     block_width = max((_line_width(font, line) for line in lines), default=0)
     horizontal = slide.title_position.split("-", 1)[1] if slide else "center"
-    if horizontal == "left":
+    if title_transform is not None:
+        block_left = float(round(width * title_transform.x / 100))
+        alignment_width = float(max_w)
+    elif horizontal == "left":
         block_left = float(safe_margin)
+        alignment_width = float(block_width)
     elif horizontal == "right":
         block_left = float(width - safe_margin - block_width)
+        alignment_width = float(block_width)
     else:
         block_left = (width - block_width) / 2
+        alignment_width = float(block_width)
     for line_no, line in enumerate(lines):
         y = top + line_no * (line_h + gap)
         line_width = _line_width(font, line)
@@ -1204,9 +1218,9 @@ def _render_title_block(
         if align == "left":
             x = block_left
         elif align == "right":
-            x = block_left + block_width - line_width
+            x = block_left + alignment_width - line_width
         else:
-            x = block_left + (block_width - line_width) / 2
+            x = block_left + (alignment_width - line_width) / 2
         for ch in line:
             if hl_start <= global_idx < hl_end:
                 color = (*hex_color(slide.accent_color, ACCENT_GREEN), 255) if slide else _highlight_color()
@@ -1354,11 +1368,15 @@ def _build_overlay_png(
         margin = design.cover.safe_margin
         if design.logo_visible:
             favicon = brand_identity.require_favicon(design.logo_size)
-            left, top = _position_box(
-                design.logo_position,
-                design.logo_size,
-                design.logo_size,
-                margin=margin,
+            left, top = (
+                _transform_origin(design.cover.logo_transform, design.logo_size, design.logo_size)
+                if design.cover.logo_transform is not None
+                else _position_box(
+                    design.logo_position,
+                    design.logo_size,
+                    design.logo_size,
+                    margin=margin,
+                )
             )
             canvas.alpha_composite(favicon, (left, top))
         if design.handle_visible:
@@ -1366,14 +1384,23 @@ def _build_overlay_png(
             font = design_font(design.handle_size, "sans")
             box = draw.textbbox((0, 0), handle, font=font)
             text_width, text_height = box[2] - box[0], box[3] - box[1]
-            left, top = _position_box(
-                design.handle_position,
-                text_width,
-                text_height,
-                margin=margin,
+            left, top = (
+                _transform_origin(design.cover.handle_transform, text_width, text_height)
+                if design.cover.handle_transform is not None
+                else _position_box(
+                    design.handle_position,
+                    text_width,
+                    text_height,
+                    margin=margin,
+                )
             )
             # If both marks share an anchor, nudge the handle beside the mark.
-            if design.logo_visible and design.handle_position == design.logo_position:
+            if (
+                design.logo_visible
+                and design.handle_position == design.logo_position
+                and design.cover.logo_transform is None
+                and design.cover.handle_transform is None
+            ):
                 left += design.logo_size + 16
             draw.text(
                 (left - box[0], top - box[1]),
