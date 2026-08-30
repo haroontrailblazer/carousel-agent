@@ -5,7 +5,7 @@ import unittest
 from PIL import Image, ImageDraw
 from pydantic import ValidationError
 
-from app.schemas import CopySet
+from app.schemas import CarouselDesign, CopySet
 from app.agents.template_design import _body_display_numbers
 from app.tools.brand_layout import (
     ACCENT_GREEN,
@@ -104,6 +104,27 @@ class BrandLayoutTests(unittest.TestCase):
         )
         self.assertEqual(rendered.getpixel((20, 20)), PAPER)
         self.assertEqual(rendered.getpixel((20, 300)), PAPER)
+
+    def test_body_typography_uses_exact_saved_text_and_highlight_colors(self) -> None:
+        design = CarouselDesign(
+            logo_visible=False,
+            handle_visible=False,
+            inside={
+                "text_color": "#654321",
+                "highlight_text_color": "#123456",
+                "accent_color": "#abcdef",
+            },
+        )
+        rendered = apply_slide_typography(
+            Image.new("RGB", (1080, 1350), PAPER),
+            "ONE EXACT SYSTEM",
+            [],
+            design=design,
+        )
+        colors = set(rendered.getdata())
+        self.assertIn((0x65, 0x43, 0x21), colors)
+        self.assertIn((0x12, 0x34, 0x56), colors)
+        self.assertNotIn((0xAB, 0xCD, 0xEF), colors)
 
     def test_dominant_visual_is_bottom_aligned_without_stretching(self) -> None:
         image = Image.new("RGB", (1080, 1350), PAPER)

@@ -209,6 +209,27 @@ CREATE TABLE IF NOT EXISTS app_users (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- User-owned design contracts edited in the console and copied verbatim into
+-- run session state. The API owns access; anon/authenticated cannot query this
+-- table directly through Supabase's generated REST surface.
+CREATE TABLE IF NOT EXISTS carousel_designs (
+    owner_email text        NOT NULL,
+    design_id   text        NOT NULL,
+    name        text        NOT NULL,
+    payload     jsonb       NOT NULL,
+    sort_order  integer     NOT NULL DEFAULT 0,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (owner_email, design_id),
+    CHECK (jsonb_typeof(payload) = 'object')
+);
+
+CREATE INDEX IF NOT EXISTS idx_carousel_designs_owner_order
+    ON carousel_designs (owner_email, sort_order);
+
+ALTER TABLE carousel_designs ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE carousel_designs FROM anon, authenticated;
+
 -- Long-term memory for the Learner. Mirrored in memory_service.py's
 -- _SCHEMA_DDL, same rule as `feedback` above.
 CREATE TABLE IF NOT EXISTS memory_entries (

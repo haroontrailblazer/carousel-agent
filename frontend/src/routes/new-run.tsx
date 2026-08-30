@@ -181,12 +181,18 @@ export function NewRunRoute() {
   const [designs] = useCarouselDesigns()
   const [designId, setDesignId] = React.useState(() => designs.length === 1 ? designs[0].id : "")
 
+  React.useEffect(() => {
+    if (designId && designs.some((design) => design.id === designId)) return
+    setDesignId(designs.length === 1 ? designs[0].id : "")
+  }, [designId, designs])
+
   const start = useMutation({
     mutationFn: (payload: {
       source: string
       topic?: string
       url?: string
       account_id?: string
+      design_id?: string
       design?: ReturnType<typeof designPayload>
     }) => post<{ run_id: string; title: string }>("/api/runs", payload),
     onSuccess: (data) => {
@@ -234,6 +240,7 @@ export function NewRunRoute() {
     start.mutate({
       ...(isUrl ? { source: "url", url: trimmed } : { source: "topic", topic: trimmed }),
       account_id: accountId,
+      design_id: design.id,
       design: designPayload(design),
     })
   }

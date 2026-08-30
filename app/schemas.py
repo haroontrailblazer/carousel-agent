@@ -54,12 +54,18 @@ class SlideDesign(BaseModel):
 
     logo_visible: bool = True
     handle_visible: bool = True
+    shadow_visible: bool = False
+    shadow_opacity: int = Field(64, ge=0, le=100)
+    shadow_height: int = Field(44, ge=18, le=72)
+    shadow_softness: int = Field(36, ge=0, le=100)
+    shadow_color: str = Field("#000000", pattern=r"^#[0-9a-fA-F]{6}$")
     title_size: int = Field(76, ge=44, le=160)
     title_position: DesignPosition = "top-left"
     title_align: Literal["left", "center", "right"] = "left"
     font_family: DesignFont = "condensed"
     background: str = Field("#f7f7f5", pattern=r"^#[0-9a-fA-F]{6}$")
     text_color: str = Field("#161811", pattern=r"^#[0-9a-fA-F]{6}$")
+    highlight_text_color: str = Field("#8fb832", pattern=r"^#[0-9a-fA-F]{6}$")
     accent_color: str = Field("#8fb832", pattern=r"^#[0-9a-fA-F]{6}$")
     safe_margin: int = Field(88, ge=48, le=160)
     image_type: DesignImageType = "editorial"
@@ -88,6 +94,10 @@ class CarouselDesign(BaseModel):
     cover: SlideDesign = Field(
         default_factory=lambda: SlideDesign(
             handle_visible=False,
+            shadow_visible=True,
+            shadow_opacity=72,
+            shadow_height=48,
+            shadow_softness=42,
             title_size=128,
             title_position="bottom-center",
             title_align="center",

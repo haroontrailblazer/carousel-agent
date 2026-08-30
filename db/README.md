@@ -13,6 +13,7 @@ the same data and the same media, and change nothing in the application.
 | `migrations/004_title_lock.sql` | `runs.title_locked`. **Never applied to the live database** — see below. |
 | `migrations/005_transfer_baseline.sql` | **Every table, in one file.** Apply this to an empty database and you have the whole structure. |
 | `migrations/006_instagram_accounts.sql` | `instagram_accounts` + `runs.account_id`. Apply after `005`. |
+| `migrations/007_carousel_designs.sql` | User-owned carousel design contracts. Apply after `005`. |
 | `../scripts/db_export.py` | Dump every table to JSONL. |
 | `../scripts/db_import.py` | Load a dump into a target. |
 | `../scripts/db_verify_baseline.py` | Check `005` against a live database. |

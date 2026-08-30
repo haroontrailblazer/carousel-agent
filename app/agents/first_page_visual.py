@@ -3,8 +3,8 @@
 The cover is a 4-8 second 1080x1350 video composed from media SOURCED from the
 news update itself (never AI-generated): the announcement/event clip, or - as a
 fallback - the update's best image turned into a 6 s slow-zoom video.  The
-configured cover overlay - optional - plus the plan's hook title (white, with the
-solid #8FB832 highlight phrase) are composited on top by
+configured cover overlay - optional - plus the plan's hook title in the selected
+design's exact text and highlight colors are composited on top by
 ``app.tools.media_tools.compose_cover``.
 
 The agent's tools write the final :class:`~app.schemas.CoverSpec` into session
@@ -319,8 +319,8 @@ async def build_cover(
     """Compose the final cover, save its artifacts, and write CoverSpec state.
 
     Smart-crops the media around its evaluated subject across the edge-to-edge
-    upper cover stage, composites the configured cover overlay (if any) plus the
-    hook title (warm-white uppercase, solid #8FB832 highlight phrase), renders
+    full 4:5 cover, composites the configured cover overlay (if any) plus the
+    hook title in the selected exact text and highlight colors, renders
     the mp4 + first-frame poster PNG, saves both to the artifact service, and
     stores the CoverSpec in session state. Call this exactly once at the end
     (again after rework to replace the cover).

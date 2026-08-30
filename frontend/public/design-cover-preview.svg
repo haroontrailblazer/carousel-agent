@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1350" role="img" aria-labelledby="title desc">
+  <title id="title">Editorial mountain cover preview</title>
+  <desc id="desc">A cinematic mountain landscape used to demonstrate a full-bleed cropped source image.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#82909b"/>
+      <stop offset="0.48" stop-color="#b5b3a9"/>
+      <stop offset="1" stop-color="#7a766b"/>
+    </linearGradient>
+    <linearGradient id="ridge" x1="0.18" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#777a72"/>
+      <stop offset="0.48" stop-color="#373b38"/>
+      <stop offset="1" stop-color="#151817"/>
+    </linearGradient>
+    <linearGradient id="foreground" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#454a43"/>
+      <stop offset="1" stop-color="#0f1210"/>
+    </linearGradient>
+    <radialGradient id="light" cx="72%" cy="23%" r="45%">
+      <stop offset="0" stop-color="#f1e6ca" stop-opacity="0.8"/>
+      <stop offset="0.48" stop-color="#e7dbc1" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#e7dbc1" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="grain" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="3" seed="7" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0" result="mono"/>
+      <feComponentTransfer in="mono" result="faded">
+        <feFuncA type="table" tableValues="0 0.075"/>
+      </feComponentTransfer>
+      <feBlend in="SourceGraphic" in2="faded" mode="soft-light"/>
+    </filter>
+  </defs>
+  <g filter="url(#grain)">
+    <rect width="1080" height="1350" fill="url(#sky)"/>
+    <rect width="1080" height="920" fill="url(#light)"/>
+    <path d="M-100 900 120 650 245 760 360 560 480 742 610 390 760 605 868 510 1180 850 1180 1350-100 1350Z" fill="url(#ridge)"/>
+    <path d="m610 390-41 279 81-91 54 114 56-87Z" fill="#d8d3c5" opacity="0.72"/>
+    <path d="M-100 1050 95 872 232 950 372 778 506 920 665 715 806 860 936 716 1180 970 1180 1350-100 1350Z" fill="url(#foreground)"/>
+    <path d="M-80 1110 205 947 380 1070 575 892 730 1038 922 876 1160 1070 1160 1350-80 1350Z" fill="#111512" opacity="0.76"/>
+    <g fill="#d9d4c8" opacity="0.16">
+      <ellipse cx="292" cy="455" rx="330" ry="82"/>
+      <ellipse cx="790" cy="610" rx="365" ry="90"/>
+      <ellipse cx="905" cy="355" rx="240" ry="64"/>
+    </g>
+  </g>
+</svg>

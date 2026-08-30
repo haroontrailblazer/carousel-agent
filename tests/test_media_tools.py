@@ -249,7 +249,7 @@ class ImageQualityTests(unittest.TestCase):
         source.paste((20, 20, 20), (1260, 260, 1300, 310))
         source.paste((235, 235, 220), (1350, 430, 1460, 520))
 
-        target_aspect = 2160 / round(2700 * media_tools._COVER_VISUAL_HEIGHT_FRAC)
+        target_aspect = media_tools.settings.slide_width / media_tools.settings.slide_height
         left, _top, right, _bottom = media_tools._smart_crop_box(
             source,
             target_aspect,
@@ -260,7 +260,7 @@ class ImageQualityTests(unittest.TestCase):
         self.assertGreaterEqual(right, 1480)
         self.assertGreater(anchor_x, 0.5)
 
-    def test_prepared_still_fills_visual_stage_without_blurred_border(self) -> None:
+    def test_prepared_still_fills_the_full_cover_without_black_footer(self) -> None:
         source = Image.new("RGB", (1600, 900), (210, 120, 50))
         source.paste((30, 70, 160), (500, 0, 1100, source.height))
 
@@ -269,16 +269,18 @@ class ImageQualityTests(unittest.TestCase):
             source.save(source_path)
             result_path = media_tools._prepare_still_cover(source_path, Path(temp_dir))
             with Image.open(result_path) as fitted:
-                visual_h = round(
-                    fitted.height * media_tools._COVER_VISUAL_HEIGHT_FRAC
-                )
+                fitted_size = fitted.size
                 top_left = fitted.getpixel((0, 50))
                 top_right = fitted.getpixel((fitted.width - 1, 50))
-                lower = fitted.getpixel((fitted.width // 2, visual_h + 50))
+                lower = fitted.getpixel((fitted.width // 2, fitted.height - 50))
 
+        self.assertEqual(
+            fitted_size,
+            (media_tools.settings.slide_width * 2, media_tools.settings.slide_height * 2),
+        )
         self.assertNotEqual(top_left, (0, 0, 0))
         self.assertNotEqual(top_right, (0, 0, 0))
-        self.assertEqual(lower, (0, 0, 0))
+        self.assertNotEqual(lower, (0, 0, 0))
 
 
 class CoverTypographyTests(unittest.TestCase):
@@ -302,6 +304,22 @@ class CoverTypographyTests(unittest.TestCase):
                 design,
             )
             self.assertTrue(path.is_file())
+
+    def test_cover_shadow_is_a_separate_configurable_overlay_layer(self) -> None:
+        design = CarouselDesign(logo_visible=False)
+        transparent = Image.new("RGBA", (1080, 1350), (0, 0, 0, 0))
+        with (
+            tempfile.TemporaryDirectory() as temp_dir,
+            patch.object(media_tools, "_load_scrubbed_template", return_value=None),
+            patch.object(media_tools, "_render_title_block", return_value=transparent),
+        ):
+            path = media_tools._build_overlay_png("TITLE", "", Path(temp_dir), design)
+            with Image.open(path) as overlay:
+                top_alpha = overlay.getpixel((540, 100))[3]
+                bottom_alpha = overlay.getpixel((540, 1349))[3]
+
+        self.assertEqual(top_alpha, 0)
+        self.assertGreaterEqual(bottom_alpha, 180)
 
     def test_cover_overlay_leaves_counter_zone_empty(self) -> None:
         transparent = Image.new("RGBA", (1080, 1350), (0, 0, 0, 0))
@@ -355,6 +373,24 @@ class CoverTypographyTests(unittest.TestCase):
         ).convert("RGBA")
         accent = (*ACCENT_GREEN, 255)
         self.assertIn(accent, rendered.getdata())
+
+    def test_cover_uses_saved_highlight_text_color_not_accent_shades(self) -> None:
+        design = CarouselDesign(
+            logo_visible=False,
+            cover={
+                "text_color": "#fefefe",
+                "highlight_text_color": "#123456",
+                "accent_color": "#abcdef",
+            },
+        )
+        rendered = media_tools._render_title_block(
+            "AGENTS FAIL IN PRODUCTION",
+            "IN PRODUCTION",
+            design,
+        ).convert("RGBA")
+        colors = set(rendered.getdata())
+        self.assertIn((0x12, 0x34, 0x56, 255), colors)
+        self.assertNotIn((0xAB, 0xCD, 0xEF, 255), colors)
 
 
 if __name__ == "__main__":

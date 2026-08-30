@@ -12,8 +12,8 @@ Three jobs (see docs/CONTRACTS.md file map):
    default 4-15 s), silent H.264 mp4.
 3. ``compose_cover(...)``       - subject-aware edge-to-edge crop across the
    visible cover stage, composite the configured cover overlay (optional) plus a
-   Pillow-rendered title block (warm-white, condensed extra-bold uppercase,
-   solid green highlight phrase), and produce the final cover mp4 + poster.
+   Pillow-rendered title block (selected font, size, exact text color and exact
+   highlight text color), and produce the final cover mp4 + poster.
 
 The cover is NEVER AI-generated (skills/cover-style.md): a sourced clip, or -
 fallback - the update's own image turned into a 6 s slow-zoom video.
@@ -111,7 +111,8 @@ _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
 _TEMPLATE_TEXT_BOX = (0.175, 0.705, 0.83, 0.872)  # (x0, y0, x1, y1)
 _STILL_COVER_SECONDS = 6.0
 _COVER_FPS = 30
-_COVER_VISUAL_HEIGHT_FRAC = 0.75
+# Sourced cover media is a locked, full-bleed 4:5 layer. Readability belongs
+# to the separate configurable shadow overlay, not to an empty black footer.
 _SALIENCY_MAX_SIZE = 320
 _MIN_COVER_IMAGE_PIXELS = 450_000
 _MIN_COVER_IMAGE_SIDE = 360
@@ -1149,8 +1150,9 @@ def _render_title_block(
 
     Centered in the lower third, up to three lines, 128 px condensed bold
     grotesk typography,
-    uppercase, white, with the highlight phrase in a per-character horizontal
-    single brand green (#8FB832), with no gradient or shade variation.
+    uppercase, with normal and highlighted characters painted deterministically
+    from the selected design's exact hexadecimal text colors. No gradients or
+    shade variation are introduced.
     """
     width, height = settings.slide_width, settings.slide_height
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -1223,7 +1225,7 @@ def _render_title_block(
             x = block_left + (alignment_width - line_width) / 2
         for ch in line:
             if hl_start <= global_idx < hl_end:
-                color = (*hex_color(slide.accent_color, ACCENT_GREEN), 255) if slide else _highlight_color()
+                color = (*hex_color(slide.highlight_text_color, ACCENT_GREEN), 255) if slide else _highlight_color()
             else:
                 color = (*hex_color(slide.text_color, _TEXT_PRIMARY[:3]), 255) if slide else _TEXT_PRIMARY
             draw.text((x, y), ch, font=font, fill=color)
@@ -1349,9 +1351,9 @@ def _build_overlay_png(
         canvas.alpha_composite(
             template.resize((width, height), Image.Resampling.LANCZOS)
         )
-    else:
+    elif design is None:
         # Emergency stand-in: black rising from the bottom ~40%.
-        fallback_rgb = hex_color(design.cover.background, (0, 0, 0)) if design else (0, 0, 0)
+        fallback_rgb = (0, 0, 0)
         ramp_top = int(height * 0.55)
         solid_top = int(height * 0.75)
         px = canvas.load()
@@ -1362,6 +1364,21 @@ def _build_overlay_png(
                 alpha = int(255 * (y - ramp_top) / max(solid_top - ramp_top, 1))
             for x in range(width):
                 px[x, y] = (*fallback_rgb, alpha)
+    if design is not None and design.cover.shadow_visible:
+        shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow)
+        shadow_rgb = hex_color(design.cover.shadow_color, (0, 0, 0))
+        shadow_top = height - round(height * design.cover.shadow_height / 100)
+        shadow_span = max(1, height - shadow_top - 1)
+        max_alpha = round(255 * design.cover.shadow_opacity / 100)
+        # High softness produces a long, gentle fade; low softness keeps the
+        # dark region close to the bottom edge.
+        exponent = 0.6 + (100 - design.cover.shadow_softness) / 100 * 2.4
+        for y in range(shadow_top, height):
+            progress = (y - shadow_top) / shadow_span
+            alpha = round(max_alpha * (progress**exponent))
+            shadow_draw.line((0, y, width, y), fill=(*shadow_rgb, alpha))
+        canvas.alpha_composite(shadow)
     canvas.alpha_composite(_render_title_block(title, highlight, design))
     if design is not None:
         draw = ImageDraw.Draw(canvas)
@@ -1550,8 +1567,7 @@ def _crop_anchor(image: Image.Image, target_aspect: float) -> tuple[float, float
 
 def _video_crop_anchor(media: Path, wd: Path, duration_s: float) -> tuple[float, float]:
     """Evaluate several clip moments and return a stable subject-aware crop."""
-    visual_h = round(settings.slide_height * _COVER_VISUAL_HEIGHT_FRAC)
-    target_aspect = settings.slide_width / visual_h
+    target_aspect = settings.slide_width / settings.slide_height
     if duration_s > 0:
         times = [duration_s * fraction for fraction in (0.16, 0.5, 0.82)]
     else:
@@ -1592,20 +1608,17 @@ def _video_crop_anchor(media: Path, wd: Path, duration_s: float) -> tuple[float,
 
 
 def _prepare_still_cover(media_path: str, wd: Path) -> Path:
-    """Smart-crop a still edge-to-edge across the visible cover stage."""
+    """Smart-crop a still edge-to-edge across the full 4:5 cover."""
     target_w, target_h = settings.slide_width * 2, settings.slide_height * 2
-    visual_h = round(target_h * _COVER_VISUAL_HEIGHT_FRAC)
-    target_aspect = target_w / visual_h
+    target_aspect = target_w / target_h
     with Image.open(media_path) as img:
         source = img.convert("RGB")
         cropped = source.crop(_smart_crop_box(source, target_aspect)).resize(
-            (target_w, visual_h),
+            (target_w, target_h),
             Image.Resampling.LANCZOS,
         )
-        background = Image.new("RGB", (target_w, target_h), (0, 0, 0))
-        background.paste(cropped, (0, 0))
         out = wd / "still-base.png"
-        background.save(out)
+        cropped.save(out)
     return out
 
 
@@ -1619,18 +1632,19 @@ def compose_cover(
 ) -> dict:
     """Compose the final 1080x1350 cover video + poster from sourced media.
 
-    The media fills the visible upper cover stage with a subject-aware crop;
-    the lower headline area is black rather than a blurred/shrunken duplicate.
-    The cover overlay, when one is configured, plus the Pillow-rendered title
-    composited on top, and ffmpeg renders a silent H.264 mp4 (``+faststart``)
-    with a first-frame poster PNG. Still images become a 6 s restrained
-    slow-zoom video (static video fallback if the zoom filter fails).
+    The source media is subject-aware cropped directly to the complete 4:5
+    canvas with no footer, letterbox, or padded area. The optional shadow and
+    Pillow-rendered title are composited inside those same bounds. FFmpeg
+    renders a silent H.264 mp4 (``+faststart``) with a first-frame poster PNG.
+    Still images become a 6 s restrained slow-zoom video (static video fallback
+    if the zoom filter fails).
 
     Args:
         media_path: Local path of the trimmed clip or downloaded image.
         title: Cover hook title (rendered uppercase in the shared inside-slide
             headline style, up to three balanced lines).
-        highlight: Verbatim phrase inside ``title`` rendered in solid #8FB832.
+        highlight: Verbatim phrase inside ``title`` rendered in the selected
+            design's exact ``highlight_text_color``.
         is_video: True when ``media_path`` is a video clip.
         workdir: Run-specific working folder.
 
@@ -1671,13 +1685,11 @@ def compose_cover(
         cap = float(settings.cover_clip_max_s)
         in_duration = _media_duration(media)
         clip_t = f"{min(in_duration, cap):.3f}" if in_duration > 0 else f"{cap:g}"
-        visual_h = round(height * _COVER_VISUAL_HEIGHT_FRAC)
         anchor_x, anchor_y = _video_crop_anchor(media, wd, in_duration)
         filter_complex = (
-            f"[0:v]scale={width}:{visual_h}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{visual_h}:(iw-ow)*{anchor_x:.6f}:"
+            f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}:(iw-ow)*{anchor_x:.6f}:"
             f"(ih-oh)*{anchor_y:.6f},"
-            f"pad={width}:{height}:0:0:black,"
             f"setsar=1,fps={_COVER_FPS}[base];"
             "[base][1:v]overlay=0:0:format=auto[out]"
         )

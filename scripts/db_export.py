@@ -55,6 +55,7 @@ TABLE_ORDER = [
     "user_states",
     "adk_internal_metadata",
     "app_users",
+    "carousel_designs",
     "app_config",
     "news_queue",
     "runs",

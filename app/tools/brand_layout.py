@@ -395,16 +395,16 @@ def apply_slide_typography(
     if slide is not None:
         background = hex_color(slide.background, PAPER)
         text_color = hex_color(slide.text_color, TEXT_DARK)
-        accent_color = hex_color(slide.accent_color, ACCENT_GREEN)
+        highlight_text_color = hex_color(slide.highlight_text_color, ACCENT_GREEN)
     elif theme == "paper":
         background, text_color = PAPER, TEXT_DARK
-        accent_color = ACCENT_GREEN
+        highlight_text_color = ACCENT_GREEN
     elif theme == "ink":
         background, text_color = INK, WARM_WHITE
-        accent_color = ACCENT_GREEN
+        highlight_text_color = ACCENT_GREEN
     else:
         background, text_color, _divider = _visual_field_colors(result)
-        accent_color = ACCENT_GREEN
+        highlight_text_color = ACCENT_GREEN
     headline_text = " ".join(str(headline or "").split())
     if uppercase_headline:
         headline_text = headline_text.upper()
@@ -481,7 +481,7 @@ def apply_slide_typography(
         else:
             x = float(block_left)
         for char in line:
-            color = accent_color if highlight_start <= global_index < highlight_end else text_color
+            color = highlight_text_color if highlight_start <= global_index < highlight_end else text_color
             draw.text((x, y), char, font=head_font, fill=color)
             x += head_font.getlength(char)
             global_index += 1

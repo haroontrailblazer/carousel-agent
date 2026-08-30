@@ -122,6 +122,10 @@ class StartRunRequest(BaseModel):
     #: older API/CLI callers; the service supplies the original editorial
     #: system as a safe backwards-compatible default.
     design: Optional[CarouselDesign] = None
+    #: The saved design selected in the console. When supplied without a full
+    #: payload the server loads it from Supabase; when both are supplied, the
+    #: latest validated payload is saved first and then frozen into the run.
+    design_id: str = Field("", max_length=120)
 
 
 class VerdictRequest(BaseModel):
@@ -250,6 +254,34 @@ async def create_run(
     202, not 200: the pipeline runs for minutes after this responds. The client
     gets a run id and watches the event stream.
     """
+    resolved_design = payload.design
+    selected_design_id = payload.design_id.strip()
+    if resolved_design is not None:
+        if selected_design_id and resolved_design.id != selected_design_id:
+            raise HTTPException(
+                400,
+                {
+                    "code": "design_mismatch",
+                    "message": "The selected design id does not match its saved contract.",
+                },
+            )
+        selected_design_id = resolved_design.id
+        await db.upsert_carousel_design(
+            identity.email,
+            resolved_design.model_dump(mode="json"),
+        )
+    elif selected_design_id:
+        stored_design = await db.get_carousel_design(identity.email, selected_design_id)
+        if stored_design is None:
+            raise HTTPException(
+                404,
+                {
+                    "code": "design_not_found",
+                    "message": "That saved design is not available for this account.",
+                },
+            )
+        resolved_design = CarouselDesign.model_validate(stored_design)
+
     news: Optional[dict] = None
     if payload.source == "queue":
         if not payload.news_id:
@@ -274,7 +306,7 @@ async def create_run(
             news=news,
             requested_by=identity.email,
             account_id=payload.account_id,
-            design=(payload.design.model_dump(mode="json") if payload.design else None),
+            design=(resolved_design.model_dump(mode="json") if resolved_design else None),
         )
     except RunRefused as exc:
         # Picking a story from the newsroom CLAIMED it (queued -> processing)

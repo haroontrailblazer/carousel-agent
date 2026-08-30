@@ -1584,3 +1584,106 @@ async def get_run_account_id(run_id: str) -> str:
         "SELECT account_id FROM runs WHERE run_id = $1", str(run_id)
     )
     return str(value or "")
+
+
+# ---------------------------------------------------------------------------
+# carousel_designs
+# ---------------------------------------------------------------------------
+def _clean_design_owner(owner_email: str) -> str:
+    owner = str(owner_email or "").strip().lower()
+    if not owner:
+        raise ValueError("design owner email is required")
+    return owner
+
+
+async def list_carousel_designs(owner_email: str) -> list[dict]:
+    """Return one user's saved design payloads in their chosen order."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT payload
+        FROM carousel_designs
+        WHERE owner_email = $1
+        ORDER BY sort_order ASC, created_at ASC
+        """,
+        _clean_design_owner(owner_email),
+    )
+    return [dict(row["payload"]) for row in rows]
+
+
+async def get_carousel_design(owner_email: str, design_id: str) -> Optional[dict]:
+    """Return one design only when it belongs to the signed-in user."""
+    pool = await get_pool()
+    payload = await pool.fetchval(
+        """
+        SELECT payload
+        FROM carousel_designs
+        WHERE owner_email = $1 AND design_id = $2
+        """,
+        _clean_design_owner(owner_email),
+        str(design_id),
+    )
+    return dict(payload) if payload is not None else None
+
+
+async def upsert_carousel_design(
+    owner_email: str,
+    design: dict,
+    *,
+    sort_order: Optional[int] = None,
+) -> None:
+    """Store the latest validated contract for one user and design id."""
+    pool = await get_pool()
+    await pool.execute(
+        """
+        INSERT INTO carousel_designs (
+            owner_email, design_id, name, payload, sort_order
+        )
+        VALUES ($1, $2, $3, $4, COALESCE($5, 0))
+        ON CONFLICT (owner_email, design_id) DO UPDATE SET
+            name       = EXCLUDED.name,
+            payload    = EXCLUDED.payload,
+            sort_order = COALESCE($5, carousel_designs.sort_order),
+            updated_at = now()
+        """,
+        _clean_design_owner(owner_email),
+        str(design["id"]),
+        str(design["name"]),
+        dict(design),
+        int(sort_order) if sort_order is not None else None,
+    )
+
+
+async def replace_carousel_designs(owner_email: str, designs: list[dict]) -> None:
+    """Atomically replace one user's complete ordered design library."""
+    owner = _clean_design_owner(owner_email)
+    ids = [str(design["id"]) for design in designs]
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                DELETE FROM carousel_designs
+                WHERE owner_email = $1
+                  AND NOT (design_id = ANY($2::text[]))
+                """,
+                owner,
+                ids,
+            )
+            await conn.executemany(
+                """
+                INSERT INTO carousel_designs (
+                    owner_email, design_id, name, payload, sort_order
+                )
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (owner_email, design_id) DO UPDATE SET
+                    name       = EXCLUDED.name,
+                    payload    = EXCLUDED.payload,
+                    sort_order = EXCLUDED.sort_order,
+                    updated_at = now()
+                """,
+                [
+                    (owner, str(design["id"]), str(design["name"]), dict(design), index)
+                    for index, design in enumerate(designs)
+                ],
+            )

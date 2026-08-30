@@ -182,7 +182,7 @@ _NO_TEXT_RULE = (
     "into the slide. If a chart, interface, sign, poster, or diagram normally contains "
     "writing, remove its labels and use only clear unlabeled shapes. Do not "
     "use lime or any green accent in the visual layer because the typography "
-    "layer owns the slide's single #8FB832 emphasis. Generated illustration "
+    "layer owns the slide's single exact saved highlight-text color. Generated illustration "
     "uses only paper, ink, warm white, and muted neutral tones. Do not use red, "
     "orange, blue, purple, or unrelated gradients. Real source-image colors "
     "are allowed only in the sourced image composited after generation."
@@ -482,8 +482,12 @@ def generate_slide_image(
             f"image scale={slide_design.image_scale}%; "
             f"freeform image box={slide_design.image_transform.model_dump() if slide_design.image_transform else 'legacy anchor'}; "
             f"background={slide_design.background}; "
-            f"accent={slide_design.accent_color}. "
-            "Follow this selected design over generic style guidance."
+            f"text color={slide_design.text_color}; "
+            f"highlight text color={slide_design.highlight_text_color}; "
+            f"accent elements={slide_design.accent_color}. "
+            "These hexadecimal colors are fixed. Do not invent lighter, darker, "
+            "warmer, cooler, translucent, gradient, or alternate shades. Follow "
+            "this selected design over generic style guidance."
         ),
         _meaning_block(headline, copy_lines),
         (

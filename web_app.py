@@ -62,6 +62,7 @@ from app.scheduler import shutdown_scheduler, start_scheduler
 from app.services import db, instagram_accounts, telegram_config
 from web_api.auth import AuthMiddleware, build_verifier, validate_session_secret
 from web_api.routes_auth import router as auth_router
+from web_api.routes_designs import router as designs_router
 from web_api.routes_runs import router as runs_router
 from web_api.routes_settings import router as settings_router
 from web_api.spa import SPAStaticFiles
@@ -189,6 +190,7 @@ def build_app() -> ASGIApp:
         return {"status": "ok"}
 
     root.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+    root.include_router(designs_router, prefix="/api", tags=["designs"])
     root.include_router(runs_router, prefix="/api", tags=["runs"])
     root.include_router(settings_router, prefix="/api", tags=["settings"])
 
