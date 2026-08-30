@@ -1639,11 +1639,11 @@ async def upsert_carousel_design(
         INSERT INTO carousel_designs (
             owner_email, design_id, name, payload, sort_order
         )
-        VALUES ($1, $2, $3, $4, COALESCE($5, 0))
+        VALUES ($1, $2, $3, $4, COALESCE($5::integer, 0))
         ON CONFLICT (owner_email, design_id) DO UPDATE SET
             name       = EXCLUDED.name,
             payload    = EXCLUDED.payload,
-            sort_order = COALESCE($5, carousel_designs.sort_order),
+            sort_order = COALESCE($5::integer, carousel_designs.sort_order),
             updated_at = now()
         """,
         _clean_design_owner(owner_email),
