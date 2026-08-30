@@ -282,6 +282,7 @@ export function NewRunRoute() {
             <span aria-hidden className="ml-1 w-[0.65219em] shrink-0 sm:ml-3 sm:w-[1.30438em]" />
           </h1>
 
+          {/* Design selection intentionally lives only in the slash-command menu. */}
           <AgentComposer
             value={value}
             onChange={setValue}
