@@ -389,11 +389,11 @@ function DesignCanvas({
                 <img
                   className="design-canvas-cover-preview"
                   src="/design-cover-preview.svg"
-                  alt="Sample fetched source media, center-cropped to fill the complete cover"
+                  alt="Sample fetched source media, cropped edge to edge across the complete cover"
                   draggable={false}
                 />
                 <span className="design-canvas-image-kicker"><Lock /> Cover media · locked full-bleed</span>
-                <span className="design-canvas-cover-source"><Sparkles /> Fetched clip or poster · crop to fill</span>
+                <span className="design-canvas-cover-source"><Sparkles /> Agent clip or poster · fills entire 4:5 cover</span>
               </>
             ) : (
               <>
@@ -826,7 +826,7 @@ export function DesignsRoute() {
               </div>
             </>
           ) : fixedCoverVisual ? (
-            <p className="design-inspector-empty">The cover image is fetched from the source, center-cropped to fill 1080 × 1350, and locked full-bleed. The shadow remains a separate editable layer above it.</p>
+            <p className="design-inspector-empty">The agent places its fetched clip or poster edge to edge across the entire 1080 × 1350 cover. It is locked because there is no smaller image box to move or resize. The shadow remains a separate editable layer above it.</p>
           ) : selectedElement === "shadow" ? (
             <p className="design-inspector-empty">The bottom shadow stays anchored to the cover edge. Adjust its height, opacity, softness, and color below.</p>
           ) : (
@@ -866,7 +866,7 @@ export function DesignsRoute() {
                 <Lock />
                 <div>
                   <strong>Required full-cover layer</strong>
-                  <span>The fetched clip frame or poster is center-cropped to fill 1080 × 1350 and cannot be moved, resized, hidden, or deleted.</span>
+                  <span>The agent uses a subject-aware edge-to-edge crop to fill all 1080 × 1350 pixels. This required background layer cannot be moved, resized, hidden, or deleted.</span>
                 </div>
               </div>
             ) : (

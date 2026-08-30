@@ -37,6 +37,30 @@ def _design(design_id: str = "editorial-signal") -> dict:
     ).model_dump(mode="json")
 
 
+class CoverMediaContractTests(unittest.TestCase):
+    def test_legacy_small_cover_image_box_is_migrated_to_locked_full_bleed(self) -> None:
+        design = CarouselDesign(
+            cover={
+                "image_position": "bottom-center",
+                "image_scale": 42,
+                "image_transform": {
+                    "x": 18,
+                    "y": 68,
+                    "width": 64,
+                    "height": 24,
+                    "locked": False,
+                },
+            },
+        )
+
+        self.assertEqual(design.cover.image_position, "middle-center")
+        self.assertEqual(design.cover.image_scale, 100)
+        self.assertEqual(
+            design.cover.image_transform.model_dump(),
+            {"x": 0.0, "y": 0.0, "width": 100.0, "height": 100.0, "locked": True},
+        )
+
+
 class DesignLibraryRouteTests(unittest.TestCase):
     def test_list_returns_only_the_signed_in_users_validated_contracts(self) -> None:
         with patch(

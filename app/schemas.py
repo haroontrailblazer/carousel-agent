@@ -107,6 +107,20 @@ class CarouselDesign(BaseModel):
     )
     inside: SlideDesign = Field(default_factory=SlideDesign)
 
+    @model_validator(mode="after")
+    def enforce_full_bleed_cover_media(self) -> "CarouselDesign":
+        """Cover media always fills the complete 4:5 canvas behind overlays."""
+        self.cover.image_position = "middle-center"
+        self.cover.image_scale = 100
+        self.cover.image_transform = ElementTransform(
+            x=0,
+            y=0,
+            width=100,
+            height=100,
+            locked=True,
+        )
+        return self
+
 
 class PublishedTextModel(BaseModel):
     """Base model that rejects forbidden or unreadable published text."""

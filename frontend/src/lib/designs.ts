@@ -71,6 +71,14 @@ export type CarouselDesign = {
 
 const STORAGE_KEY = "carousel-designs:v1"
 
+const FULL_BLEED_COVER_TRANSFORM: ElementTransform = {
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 100,
+  locked: true,
+}
+
 function transformForPosition(
   position: DesignPosition,
   width: number,
@@ -368,15 +376,22 @@ function normalizeSlide(
         ? 42
         : baseSlide.shadowSoftness,
     shadowColor: value?.shadowColor || baseSlide.shadowColor,
+    imagePosition: surface === "cover" ? "middle-center" : slide.imagePosition,
+    imageScale: surface === "cover" ? 100 : slide.imageScale,
     highlightTextColor: value?.highlightTextColor || value?.accentColor || baseSlide.highlightTextColor,
     titleTransform: normalizeTransform(
       value?.titleTransform,
       transformForPosition(slide.titlePosition, 76, 20),
     ),
-    imageTransform: normalizeTransform(
-      value?.imageTransform,
-      transformForPosition(slide.imagePosition, Math.max(30, slide.imageScale * 0.84), 32),
-    ),
+    // Cover media is not a movable image slot. It is the source clip/poster
+    // cropped across the complete 4:5 canvas. This deliberately migrates old
+    // browser and Supabase designs whose cover image used a small bottom box.
+    imageTransform: surface === "cover"
+      ? { ...FULL_BLEED_COVER_TRANSFORM }
+      : normalizeTransform(
+          value?.imageTransform,
+          transformForPosition(slide.imagePosition, Math.max(30, slide.imageScale * 0.84), 32),
+        ),
     logoTransform: normalizeTransform(
       value?.logoTransform,
       transformForPosition(logoPosition, 6, 5),
