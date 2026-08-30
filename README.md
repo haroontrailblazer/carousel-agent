@@ -1,4 +1,4 @@
-# Carousel Factory
+## Carousel Factory
 
 Carousel Factory turns AI/product news (a new model release, a Lovable or
 Supabase feature drop, a paper worth explaining) into finished Instagram
