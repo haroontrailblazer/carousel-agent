@@ -29,10 +29,11 @@ from google.genai import types
 
 from app.config import agent_instructions, settings
 from app.llm import resolve_model
-from app.schemas import CarouselPlan, CoverSpec, NewsItem
+from app.schemas import CarouselDesign, CarouselPlan, CoverSpec, NewsItem
 from app.state import (
     AGENT_FIRST_PAGE_VISUAL,
     K_COVER,
+    K_DESIGN,
     K_NEWS_ITEM,
     K_PLAN,
     K_RUN_ID,
@@ -343,6 +344,7 @@ async def build_cover(
         On failure: ok (false) and error (str).
     """
     plan = get_model(tool_context.state, K_PLAN, CarouselPlan)
+    design = get_model(tool_context.state, K_DESIGN, CarouselDesign) or CarouselDesign()
     warnings: list[str] = []
 
     final_title = title.strip() or (plan.hook_title.strip() if plan else "")
@@ -377,6 +379,7 @@ async def build_cover(
             final_highlight,
             is_video,
             workdir,
+            design,
         )
     except (RuntimeError, FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
         return {"ok": False, "error": f"cover composition failed: {exc}"}

@@ -18,6 +18,58 @@ CarouselStyle = Literal["points", "prose"]
 CTAType = Literal["follow", "comment", "redirect"]
 VerdictStatus = Literal["approved", "rejected"]
 Severity = Literal["critical", "major", "minor"]
+DesignPosition = Literal[
+    "top-left",
+    "top-center",
+    "top-right",
+    "middle-left",
+    "middle-center",
+    "middle-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+]
+DesignImageType = Literal["editorial", "product", "illustration", "diagram", "none"]
+DesignFont = Literal["condensed", "sans", "serif"]
+
+
+class SlideDesign(BaseModel):
+    """Editable geometry and art direction for one slide family."""
+
+    title_size: int = Field(76, ge=44, le=160)
+    title_position: DesignPosition = "top-left"
+    title_align: Literal["left", "center", "right"] = "left"
+    font_family: DesignFont = "condensed"
+    background: str = Field("#f7f7f5", pattern=r"^#[0-9a-fA-F]{6}$")
+    text_color: str = Field("#161811", pattern=r"^#[0-9a-fA-F]{6}$")
+    accent_color: str = Field("#8fb832", pattern=r"^#[0-9a-fA-F]{6}$")
+    safe_margin: int = Field(88, ge=48, le=160)
+    image_type: DesignImageType = "editorial"
+    image_position: DesignPosition = "bottom-center"
+    image_scale: int = Field(100, ge=30, le=100)
+
+
+class CarouselDesign(BaseModel):
+    """A named, reusable render contract selected before a run starts."""
+
+    id: str = Field("editorial-signal", min_length=1, max_length=120)
+    name: str = Field("Editorial Signal", min_length=1, max_length=120)
+    logo_visible: bool = True
+    logo_position: DesignPosition = "bottom-left"
+    logo_size: int = Field(56, ge=24, le=120)
+    handle_visible: bool = True
+    handle_position: DesignPosition = "bottom-left"
+    handle_size: int = Field(32, ge=16, le=64)
+    cover: SlideDesign = Field(
+        default_factory=lambda: SlideDesign(
+            title_size=128,
+            title_position="bottom-center",
+            title_align="center",
+            background="#161811",
+            text_color="#e8e4d6",
+        )
+    )
+    inside: SlideDesign = Field(default_factory=SlideDesign)
 
 
 class PublishedTextModel(BaseModel):

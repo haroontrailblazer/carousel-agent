@@ -45,6 +45,7 @@ from PIL import Image, ImageOps
 
 from app import observability
 from app.config import load_skill, settings
+from app.schemas import CarouselDesign, SlideDesign
 from app.text_rules import require_no_em_dash, require_readable_text
 from app.tools import brand_identity
 from app.tools.brand_layout import (
@@ -57,6 +58,7 @@ from app.tools.brand_layout import (
     apply_body_brand_rail,
     apply_cta_brand_rail,
     apply_slide_typography,
+    hex_color,
     normalize_accent_green,
 )
 
@@ -344,19 +346,29 @@ def _finalize(
     out_path: str,
     *,
     theme: str = "paper",
+    background_override: tuple[int, int, int] | None = None,
+    slide_design: SlideDesign | None = None,
 ) -> str:
     """Merge an exact-aspect generated visual into the full carousel slide."""
-    background = INK if theme == "ink" else PAPER
+    background = background_override or (INK if theme == "ink" else PAPER)
     destination = Path(out_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(BytesIO(png_bytes)) as img:
-        visual = _contain_without_crop(
-            img,
-            (_VISUAL_WIDTH, _VISUAL_HEIGHT),
-            background,
+        scale = (slide_design.image_scale / 100) if slide_design else 1.0
+        target = (
+            max(1, round(_VISUAL_WIDTH * scale)),
+            max(1, round(_VISUAL_HEIGHT * scale)),
         )
+        visual = _contain_without_crop(img, target, background)
     slide = Image.new("RGB", (SLIDE_WIDTH, SLIDE_HEIGHT), background)
-    slide.paste(visual, (0, TEXT_PANEL_BOTTOM))
+    if slide_design:
+        vertical, horizontal = slide_design.image_position.split("-", 1)
+        left = 0 if horizontal == "left" else SLIDE_WIDTH - visual.width if horizontal == "right" else (SLIDE_WIDTH - visual.width) // 2
+        room = _VISUAL_HEIGHT - visual.height
+        top_offset = 0 if vertical == "top" else room if vertical == "bottom" else room // 2
+    else:
+        left, top_offset = 0, _VISUAL_HEIGHT - visual.height
+    slide.paste(visual, (left, TEXT_PANEL_BOTTOM + top_offset))
     slide.save(destination, format="PNG")
     return str(destination)
 
@@ -364,6 +376,7 @@ def _finalize(
 def _composite_subject_reference(
     image: Image.Image,
     visual_reference: str,
+    slide_design: SlideDesign | None = None,
 ) -> Image.Image:
     """Merge the complete sourced image into the visual slot without cropping."""
     result = image.convert("RGB")
@@ -372,13 +385,20 @@ def _composite_subject_reference(
         return result
     _filename, data, _mime = reference
     with Image.open(BytesIO(data)) as source:
+        scale = (slide_design.image_scale / 100) if slide_design else 1.0
         fitted = ImageOps.contain(
             source.convert("RGB"),
-            (_VISUAL_WIDTH, _VISUAL_HEIGHT),
+            (round(_VISUAL_WIDTH * scale), round(_VISUAL_HEIGHT * scale)),
             method=Image.Resampling.LANCZOS,
         )
-    left = (SLIDE_WIDTH - fitted.width) // 2
-    top = RAIL_DIVIDER_Y - fitted.height
+    if slide_design:
+        vertical, horizontal = slide_design.image_position.split("-", 1)
+        left = 0 if horizontal == "left" else SLIDE_WIDTH - fitted.width if horizontal == "right" else (SLIDE_WIDTH - fitted.width) // 2
+        room = _VISUAL_HEIGHT - fitted.height
+        top = TEXT_PANEL_BOTTOM + (0 if vertical == "top" else room if vertical == "bottom" else room // 2)
+    else:
+        left = (SLIDE_WIDTH - fitted.width) // 2
+        top = RAIL_DIVIDER_Y - fitted.height
     result.paste(fitted, (left, top))
     return result
 
@@ -401,6 +421,7 @@ def generate_slide_image(
     layout_hint: str = "editorial explainer",
     visual_context: str = "",
     visual_reference: str = "",
+    design: CarouselDesign | None = None,
 ) -> str:
     """Render one body slide (1080x1350 PNG) with gpt-image-2.
 
@@ -428,11 +449,22 @@ def generate_slide_image(
     """
     require_no_em_dash([headline, *copy_lines], "body slide copy")
     require_readable_text([headline, *copy_lines], "body slide copy")
+    design = design or CarouselDesign()
+    slide_design = design.inside
     tag = f"{slide_no:02d}"
     allowed = [
         _NO_TEXT_RULE,
         "",
         f'Use the "{layout_hint}" layout archetype from the design system.',
+        (
+            "SELECTED USER DESIGN: "
+            f"image type={slide_design.image_type}; "
+            f"image position={slide_design.image_position}; "
+            f"image scale={slide_design.image_scale}%; "
+            f"background={slide_design.background}; "
+            f"accent={slide_design.accent_color}. "
+            "Follow this selected design over generic style guidance."
+        ),
         _meaning_block(headline, copy_lines),
         (
             "Generate the complete explanatory visual for an exact 2:1 panel. "
@@ -477,18 +509,35 @@ def generate_slide_image(
             f"{_style_prompt()}\n\n{reference_note}{text_spec}"
         )
         input_image = None
-    png = _call_images_api(prompt, input_image)
-    result = _finalize(png, out_path, theme="paper")
+    background = hex_color(slide_design.background, PAPER)
+    if slide_design.image_type == "none":
+        blank = Image.new("RGB", (_VISUAL_WIDTH, _VISUAL_HEIGHT), background)
+        buffer = BytesIO()
+        blank.save(buffer, format="PNG")
+        png = buffer.getvalue()
+    else:
+        png = _call_images_api(prompt, input_image)
+    result = _finalize(
+        png,
+        out_path,
+        theme="paper",
+        background_override=background,
+        slide_design=slide_design,
+    )
     with Image.open(result) as rendered:
-        grounded = _composite_subject_reference(rendered, visual_reference)
-        normalized = normalize_accent_green(grounded)
+        grounded = _composite_subject_reference(rendered, visual_reference, slide_design)
+        normalized = normalize_accent_green(
+            grounded,
+            hex_color(slide_design.accent_color, (143, 184, 50)),
+        )
         typeset = apply_slide_typography(
             normalized,
             headline,
             copy_lines,
             theme="paper",
+            design=design,
         )
-        branded = apply_body_brand_rail(typeset, _current_handle(), slide_no)
+        branded = apply_body_brand_rail(typeset, _current_handle(), slide_no, design)
     branded.save(result, format="PNG")
     logger.info("Rendered body slide %s -> %s", tag, result)
     return result
@@ -501,6 +550,7 @@ def generate_cta_image(
     link_text: str,
     template_ref: str,
     out_path: str,
+    design: CarouselDesign | None = None,
 ) -> str:
     """Render the closing CTA slide (1080x1350 PNG) with gpt-image-2.
 
@@ -521,6 +571,7 @@ def generate_cta_image(
     Returns:
         The absolute/normalized path of the written PNG as a string.
     """
+    design = design or CarouselDesign()
     require_no_em_dash([headline, *lines, link_text], "CTA image copy")
     require_readable_text([headline, *lines, link_text], "CTA image copy")
     variant_hints = {
@@ -564,18 +615,29 @@ def generate_cta_image(
             f"{_style_prompt()}\n\n{text_spec}"
         )
     png = _call_images_api(prompt, template)
-    result = _finalize(png, out_path, theme="ink")
+    result = _finalize(
+        png,
+        out_path,
+        theme="ink",
+        background_override=hex_color(design.inside.background, INK),
+        slide_design=design.inside,
+    )
     with Image.open(result) as rendered:
-        normalized = normalize_accent_green(rendered)
+        normalized = normalize_accent_green(
+            rendered,
+            hex_color(design.inside.accent_color, (143, 184, 50)),
+        )
         typeset = apply_slide_typography(
             normalized,
             headline,
             render_lines,
             theme="ink",
+            design=design,
         )
         branded = apply_cta_brand_rail(
             typeset,
             _current_handle(),
+            design,
         )
     branded.save(result, format="PNG")
     logger.info("Rendered CTA slide (%s) -> %s", cta_type, result)

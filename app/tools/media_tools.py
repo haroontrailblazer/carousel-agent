@@ -47,10 +47,15 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, download_range_func
 
 from app.config import settings
+from app.schemas import CarouselDesign
 from app.text_rules import require_no_em_dash
+from app.tools import brand_identity
 from app.tools.brand_layout import (
     ACCENT_GREEN,
     HEADLINE_MAX_LINES,
+    _position_box,
+    design_font,
+    hex_color,
     headline_font,
 )
 
@@ -1082,9 +1087,12 @@ def download_image(url: str, workdir: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 
-def _load_title_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _load_title_font(
+    size: int,
+    family: str = "condensed",
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Load the exact shared headline face used by the carousel system."""
-    return headline_font(size)
+    return design_font(size, family, bold=True)
 
 
 def _line_width(
@@ -1131,7 +1139,11 @@ def _highlight_color() -> tuple[int, int, int, int]:
     return _ACCENT_GREEN
 
 
-def _render_title_block(title: str, highlight: str) -> Image.Image:
+def _render_title_block(
+    title: str,
+    highlight: str,
+    design: CarouselDesign | None = None,
+) -> Image.Image:
     """Render the cover title onto a transparent 1080x1350 RGBA image.
 
     Centered in the lower third, up to three lines, 128 px condensed bold
@@ -1148,14 +1160,17 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
     hl_start = text.find(hl) if hl else -1
     hl_end = hl_start + len(hl) if hl_start >= 0 else -1
 
-    max_w = width * _TITLE_MAX_WIDTH_FRAC
-    font = _load_title_font(_COVER_TITLE_FONT_SIZE)
+    slide = design.cover if design is not None else None
+    safe_margin = slide.safe_margin if slide else round(width * (1 - _TITLE_MAX_WIDTH_FRAC) / 2)
+    max_w = width - safe_margin * 2
+    title_size = slide.title_size if slide else _COVER_TITLE_FONT_SIZE
+    font = _load_title_font(title_size, slide.font_family if slide else "condensed")
     lines = _wrap_title(text, font, max_w)
     if len(lines) > _TITLE_MAX_LINES or any(
         _line_width(font, line) > max_w for line in lines
     ):
         raise ValueError(
-            f"cover title does not fit at the fixed {_COVER_TITLE_FONT_SIZE}px size "
+            f"cover title does not fit at the selected {title_size}px size "
             f"within {_TITLE_MAX_LINES} lines"
         )
 
@@ -1164,18 +1179,39 @@ def _render_title_block(title: str, highlight: str) -> Image.Image:
     line_h = ascent + descent
     gap = int(line_h * 0.10)
     total_h = len(lines) * line_h + (len(lines) - 1) * gap
-    top = int(height * _TITLE_CENTER_Y_FRAC - total_h / 2)
+    vertical = slide.title_position.split("-", 1)[0] if slide else "bottom"
+    if vertical == "top":
+        top = safe_margin
+    elif vertical == "middle":
+        top = round((height - total_h) / 2)
+    else:
+        top = int(height * _TITLE_CENTER_Y_FRAC - total_h / 2)
     top = min(top, height - int(height * 0.06) - total_h)  # keep off the grid floor
 
     global_idx = 0  # char index into `text` (lines re-join with single spaces)
+    block_width = max((_line_width(font, line) for line in lines), default=0)
+    horizontal = slide.title_position.split("-", 1)[1] if slide else "center"
+    if horizontal == "left":
+        block_left = float(safe_margin)
+    elif horizontal == "right":
+        block_left = float(width - safe_margin - block_width)
+    else:
+        block_left = (width - block_width) / 2
     for line_no, line in enumerate(lines):
         y = top + line_no * (line_h + gap)
-        x = (width - _line_width(font, line)) / 2
+        line_width = _line_width(font, line)
+        align = slide.title_align if slide else "center"
+        if align == "left":
+            x = block_left
+        elif align == "right":
+            x = block_left + block_width - line_width
+        else:
+            x = block_left + (block_width - line_width) / 2
         for ch in line:
             if hl_start <= global_idx < hl_end:
-                color = _highlight_color()
+                color = (*hex_color(slide.accent_color, ACCENT_GREEN), 255) if slide else _highlight_color()
             else:
-                color = _TEXT_PRIMARY
+                color = (*hex_color(slide.text_color, _TEXT_PRIMARY[:3]), 255) if slide else _TEXT_PRIMARY
             draw.text((x, y), ch, font=font, fill=color)
             x += font.getlength(ch)
             global_idx += 1
@@ -1280,7 +1316,12 @@ def _load_scrubbed_template() -> Optional[Image.Image]:
     return cached
 
 
-def _build_overlay_png(title: str, highlight: str, wd: Path) -> Path:
+def _build_overlay_png(
+    title: str,
+    highlight: str,
+    wd: Path,
+    design: CarouselDesign | None = None,
+) -> Path:
     """Composite the overlay template + rendered title into one RGBA PNG.
 
     The template (2160x2700 = 2x output) is scaled to 1080x1350. If the
@@ -1296,6 +1337,7 @@ def _build_overlay_png(title: str, highlight: str, wd: Path) -> Path:
         )
     else:
         # Emergency stand-in: black rising from the bottom ~40%.
+        fallback_rgb = hex_color(design.cover.background, (0, 0, 0)) if design else (0, 0, 0)
         ramp_top = int(height * 0.55)
         solid_top = int(height * 0.75)
         px = canvas.load()
@@ -1305,8 +1347,40 @@ def _build_overlay_png(title: str, highlight: str, wd: Path) -> Path:
             else:
                 alpha = int(255 * (y - ramp_top) / max(solid_top - ramp_top, 1))
             for x in range(width):
-                px[x, y] = (0, 0, 0, alpha)
-    canvas.alpha_composite(_render_title_block(title, highlight))
+                px[x, y] = (*fallback_rgb, alpha)
+    canvas.alpha_composite(_render_title_block(title, highlight, design))
+    if design is not None:
+        draw = ImageDraw.Draw(canvas)
+        margin = design.cover.safe_margin
+        if design.logo_visible:
+            favicon = brand_identity.require_favicon(design.logo_size)
+            left, top = _position_box(
+                design.logo_position,
+                design.logo_size,
+                design.logo_size,
+                margin=margin,
+            )
+            canvas.alpha_composite(favicon, (left, top))
+        if design.handle_visible:
+            handle = brand_identity.require_handle()
+            font = design_font(design.handle_size, "sans")
+            box = draw.textbbox((0, 0), handle, font=font)
+            text_width, text_height = box[2] - box[0], box[3] - box[1]
+            left, top = _position_box(
+                design.handle_position,
+                text_width,
+                text_height,
+                margin=margin,
+            )
+            # If both marks share an anchor, nudge the handle beside the mark.
+            if design.logo_visible and design.handle_position == design.logo_position:
+                left += design.logo_size + 16
+            draw.text(
+                (left - box[0], top - box[1]),
+                handle,
+                font=font,
+                fill=(*hex_color(design.cover.text_color, _TEXT_PRIMARY[:3]), 255),
+            )
     out = wd / "overlay-composite.png"
     canvas.save(out)
     return out
@@ -1508,7 +1582,12 @@ def _prepare_still_cover(media_path: str, wd: Path) -> Path:
 
 
 def compose_cover(
-    media_path: str, title: str, highlight: str, is_video: bool, workdir: str = ""
+    media_path: str,
+    title: str,
+    highlight: str,
+    is_video: bool,
+    workdir: str = "",
+    design: CarouselDesign | None = None,
 ) -> dict:
     """Compose the final 1080x1350 cover video + poster from sourced media.
 
@@ -1542,7 +1621,7 @@ def compose_cover(
     wd = _ensure_workdir(workdir, "cover")
     width, height = settings.slide_width, settings.slide_height
 
-    overlay = _build_overlay_png(title, highlight, wd)
+    overlay = _build_overlay_png(title, highlight, wd, design)
     out_video = wd / "cover.mp4"
     poster = wd / "cover-poster.png"
 

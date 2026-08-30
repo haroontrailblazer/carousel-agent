@@ -8,6 +8,7 @@ import { AgentWorkspace } from "@/components/agent/agent-workspace"
 import { BrandLogo } from "@/components/layout/brand-logo"
 import { useRunWorkspace } from "@/hooks/use-run-workspace"
 import { ApiError, get, post } from "@/lib/api"
+import { designPayload, useCarouselDesigns } from "@/lib/designs"
 import type { InstagramAccountSummary, Meta } from "@/lib/types"
 
 /**
@@ -101,6 +102,42 @@ function AccountPicker({
   )
 }
 
+function DesignPicker({
+  designs,
+  value,
+  onChange,
+  disabled,
+}: {
+  designs: ReturnType<typeof useCarouselDesigns>[0]
+  value: string
+  onChange: (designId: string) => void
+  disabled: boolean
+}) {
+  if (designs.length === 0) return null
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-2" aria-label="Design format">
+      <span className="text-[11px] text-[var(--muted-foreground)]">Design</span>
+      {designs.map((design) => (
+        <button
+          key={design.id}
+          type="button"
+          disabled={disabled}
+          aria-pressed={design.id === value}
+          onClick={() => onChange(design.id)}
+          className={
+            "rounded-[10px] border px-2.5 py-1.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50 " +
+            (design.id === value
+              ? "border-[var(--foreground)] bg-[var(--muted)] text-[var(--foreground)]"
+              : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]")
+          }
+        >
+          {design.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /**
  * The New carousel screen.
  *
@@ -137,6 +174,8 @@ export function NewRunRoute() {
   // Empty means "whichever is default", which is what the server does with an
   // empty account_id - so there is no wrong state while /meta is in flight.
   const [accountId, setAccountId] = React.useState("")
+  const [designs] = useCarouselDesigns()
+  const [designId, setDesignId] = React.useState(() => designs.length === 1 ? designs[0].id : "")
 
   const start = useMutation({
     mutationFn: (payload: {
@@ -144,6 +183,7 @@ export function NewRunRoute() {
       topic?: string
       url?: string
       account_id?: string
+      design?: ReturnType<typeof designPayload>
     }) => post<{ run_id: string; title: string }>("/api/runs", payload),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ["runs"] })
@@ -180,9 +220,17 @@ export function NewRunRoute() {
   function submit() {
     const trimmed = value.trim()
     if (trimmed.length < 3) return
+    const design = designs.find((item) => item.id === designId)
+    if (!design) {
+      toast.error("Choose a design first", {
+        description: "The agents need the cover and slide format before they start.",
+      })
+      return
+    }
     start.mutate({
       ...(isUrl ? { source: "url", url: trimmed } : { source: "topic", topic: trimmed }),
       account_id: accountId,
+      design: designPayload(design),
     })
   }
 
@@ -288,6 +336,13 @@ export function NewRunRoute() {
             accounts={accounts}
             value={accountId || (accounts.find((a) => a.is_default)?.id ?? "")}
             onChange={setAccountId}
+            disabled={start.isPending}
+          />
+
+          <DesignPicker
+            designs={designs}
+            value={designId}
+            onChange={setDesignId}
             disabled={start.isPending}
           />
 

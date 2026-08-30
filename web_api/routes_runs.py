@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from app import runtime
 from app.config import settings
+from app.schemas import CarouselDesign
 from app.review.verdict import REJECT_QUESTION, submit_verdict
 from app.runs.bus import BUS
 from app.runs.stream import load_trace, load_trace_with_summary
@@ -117,6 +118,10 @@ class StartRunRequest(BaseModel):
     #: selects the default. Chosen BEFORE the run because the account's handle
     #: and profile picture are composited into the slide artwork.
     account_id: str = ""
+    #: The named render contract chosen before the agents start. Optional for
+    #: older API/CLI callers; the service supplies the original editorial
+    #: system as a safe backwards-compatible default.
+    design: Optional[CarouselDesign] = None
 
 
 class VerdictRequest(BaseModel):
@@ -269,6 +274,7 @@ async def create_run(
             news=news,
             requested_by=identity.email,
             account_id=payload.account_id,
+            design=(payload.design.model_dump(mode="json") if payload.design else None),
         )
     except RunRefused as exc:
         # Picking a story from the newsroom CLAIMED it (queued -> processing)

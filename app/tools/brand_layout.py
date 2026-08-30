@@ -21,6 +21,7 @@ from typing import Literal
 
 from PIL import Image, ImageDraw, ImageFont, ImageStat
 
+from app.schemas import CarouselDesign, SlideDesign
 from app.tools import brand_identity
 
 
@@ -164,6 +165,38 @@ def headline_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         return ImageFont.load_default(size=size)
 
 
+def design_font(
+    size: int,
+    family: str = "condensed",
+    *,
+    bold: bool = False,
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Resolve the user-selected slide family to an installed safe font."""
+    if family == "serif":
+        candidates = (
+            Path("C:/Windows/Fonts/georgia.ttf"),
+            Path("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"),
+        )
+        for path in candidates:
+            if path.exists():
+                return ImageFont.truetype(str(path), size=size)
+    if family == "sans":
+        return _font(size, bold=bold)
+    return headline_font(size) if bold else _font(size)
+
+
+def hex_color(value: str, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
+    """Parse a validated CSS hex token for Pillow, retaining a safe fallback."""
+    text = str(value or "").lstrip("#")
+    try:
+        if len(text) == 6:
+            return tuple(int(text[index : index + 2], 16) for index in (0, 2, 4))  # type: ignore[return-value]
+    except ValueError:
+        pass
+    return fallback
+
+
 def _line_width(
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     text: str,
@@ -252,30 +285,41 @@ def _fit_typography_layout(
     headline_text: str,
     clean_body: list[str],
     max_width: int,
+    *,
+    preferred_headline_size: int = HEADLINE_FONT_SIZE,
+    font_family: str = "condensed",
+    panel_top: int = TEXT_PANEL_TOP,
+    panel_bottom: int = TEXT_PANEL_BOTTOM,
 ) -> _TypographyLayout:
     """Choose the largest balanced type pair that fits without changing copy."""
-    head_sizes = range(HEADLINE_FONT_SIZE, HEADLINE_MIN_FONT_SIZE - 1, -2)
+    minimum_floor = (
+        HEADLINE_MIN_FONT_SIZE
+        if preferred_headline_size == HEADLINE_FONT_SIZE
+        else 44
+    )
+    minimum_headline = max(minimum_floor, preferred_headline_size - 18)
+    head_sizes = range(preferred_headline_size, minimum_headline - 1, -2)
     body_sizes = range(BODY_FONT_SIZE, BODY_MIN_FONT_SIZE - 1, -1)
     candidates = [
         (head_size, body_size)
         for head_size in head_sizes
         for body_size in body_sizes
     ]
-    head_span = max(HEADLINE_FONT_SIZE - HEADLINE_MIN_FONT_SIZE, 1)
+    head_span = max(preferred_headline_size - minimum_headline, 1)
     body_span = max(BODY_FONT_SIZE - BODY_MIN_FONT_SIZE, 1)
     candidates.sort(
         key=lambda sizes: (
             max(
-                (HEADLINE_FONT_SIZE - sizes[0]) / head_span,
+                (preferred_headline_size - sizes[0]) / head_span,
                 (BODY_FONT_SIZE - sizes[1]) / body_span,
             ),
-            (HEADLINE_FONT_SIZE - sizes[0]) / head_span
+            (preferred_headline_size - sizes[0]) / head_span
             + (BODY_FONT_SIZE - sizes[1]) / body_span,
         )
     )
 
     for headline_size, body_size in candidates:
-        head_font = headline_font(headline_size)
+        head_font = design_font(headline_size, font_family, bold=True)
         body_font = _font(body_size)
         try:
             headline_lines = _balanced_wrap(
@@ -307,7 +351,7 @@ def _fit_typography_layout(
         ) + max(0, len(wrapped_body) - 1) * thought_gap
         section_gap = 28 if wrapped_body else 0
         total_height = headline_height + section_gap + body_height
-        if TEXT_PANEL_TOP + total_height <= TEXT_PANEL_BOTTOM:
+        if panel_top + total_height <= panel_bottom:
             return _TypographyLayout(
                 head_font=head_font,
                 body_font=body_font,
@@ -326,7 +370,7 @@ def _fit_typography_layout(
 
     raise ValueError(
         "approved slide copy does not fit the typography reservation even at "
-        f"the readable minimums ({HEADLINE_MIN_FONT_SIZE}px headline and "
+        f"the readable minimums ({minimum_headline}px headline and "
         f"{BODY_MIN_FONT_SIZE}px body); shorten the copy upstream"
     )
 
@@ -338,6 +382,7 @@ def apply_slide_typography(
     *,
     uppercase_headline: bool = False,
     theme: Literal["auto", "paper", "ink"] = "auto",
+    design: CarouselDesign | None = None,
 ) -> Image.Image:
     """Composite readable Baskaran Builds typography over a text-free visual.
 
@@ -346,19 +391,39 @@ def apply_slide_typography(
     limits, preserving every word and the shared type treatment.
     """
     result = image.convert("RGB")
-    if theme == "paper":
+    slide: SlideDesign | None = design.inside if design is not None else None
+    if slide is not None:
+        background = hex_color(slide.background, PAPER)
+        text_color = hex_color(slide.text_color, TEXT_DARK)
+        accent_color = hex_color(slide.accent_color, ACCENT_GREEN)
+    elif theme == "paper":
         background, text_color = PAPER, TEXT_DARK
+        accent_color = ACCENT_GREEN
     elif theme == "ink":
         background, text_color = INK, WARM_WHITE
+        accent_color = ACCENT_GREEN
     else:
         background, text_color, _divider = _visual_field_colors(result)
+        accent_color = ACCENT_GREEN
     headline_text = " ".join(str(headline or "").split())
     if uppercase_headline:
         headline_text = headline_text.upper()
     clean_body = [" ".join(str(line).split()) for line in body_lines if str(line).strip()]
 
-    max_width = TEXT_CONTENT_RIGHT - TEXT_CONTENT_LEFT
-    layout = _fit_typography_layout(headline_text, clean_body, max_width)
+    content_left = slide.safe_margin if slide is not None else TEXT_CONTENT_LEFT
+    content_right = SLIDE_WIDTH - content_left
+    panel_top = max(84, content_left) if slide is not None else TEXT_PANEL_TOP
+    panel_bottom = TEXT_PANEL_BOTTOM
+    max_width = content_right - content_left
+    layout = _fit_typography_layout(
+        headline_text,
+        clean_body,
+        max_width,
+        preferred_headline_size=(slide.title_size if slide else HEADLINE_FONT_SIZE),
+        font_family=(slide.font_family if slide else "condensed"),
+        panel_top=panel_top,
+        panel_bottom=panel_bottom,
+    )
     head_font = layout.head_font
     body_font = layout.body_font
     headline_lines = layout.headline_lines
@@ -370,11 +435,30 @@ def apply_slide_typography(
     highlight_start = headline_text.rfind(highlight) if highlight else -1
     highlight_end = highlight_start + len(highlight) if highlight_start >= 0 else -1
     global_index = 0
-    y = TEXT_PANEL_TOP
+    if slide is None or slide.title_position.startswith("top"):
+        y = panel_top
+    elif slide.title_position.startswith("middle"):
+        y = panel_top + max(0, (panel_bottom - panel_top - layout.total_height) // 2)
+    else:
+        y = max(panel_top, panel_bottom - layout.total_height - 18)
+    widest_headline = max((_line_width(head_font, line) for line in headline_lines), default=0)
+    horizontal = slide.title_position.split("-", 1)[1] if slide else "left"
+    if horizontal == "center":
+        block_left = (SLIDE_WIDTH - widest_headline) / 2
+    elif horizontal == "right":
+        block_left = content_right - widest_headline
+    else:
+        block_left = float(content_left)
     for line in headline_lines:
-        x = float(TEXT_CONTENT_LEFT)
+        line_width = _line_width(head_font, line)
+        if slide is not None and slide.title_align == "center":
+            x = float(block_left + (widest_headline - line_width) / 2)
+        elif slide is not None and slide.title_align == "right":
+            x = float(block_left + widest_headline - line_width)
+        else:
+            x = float(block_left)
         for char in line:
-            color = ACCENT_GREEN if highlight_start <= global_index < highlight_end else text_color
+            color = accent_color if highlight_start <= global_index < highlight_end else text_color
             draw.text((x, y), char, font=head_font, fill=color)
             x += head_font.getlength(char)
             global_index += 1
@@ -386,7 +470,7 @@ def apply_slide_typography(
     for thought_index, lines in enumerate(wrapped_body):
         for line_index, line in enumerate(lines):
             draw.text(
-                (TEXT_CONTENT_LEFT, y),
+                (content_left, y),
                 line,
                 font=body_font,
                 fill=text_color,
@@ -438,7 +522,10 @@ def _clear_slide_number_zone(
     )
 
 
-def normalize_accent_green(image: Image.Image) -> Image.Image:
+def normalize_accent_green(
+    image: Image.Image,
+    target: tuple[int, int, int] = ACCENT_GREEN,
+) -> Image.Image:
     """Lock every strong lime accent pixel to the one brand green token."""
     result = image.convert("RGB")
     pixels = list(result.getdata())
@@ -453,7 +540,7 @@ def normalize_accent_green(image: Image.Image) -> Image.Image:
             and green - red >= 20
             and green - blue >= 55
         )
-        normalized.append(ACCENT_GREEN if is_lime else (red, green, blue))
+        normalized.append(target if is_lime else (red, green, blue))
     result.putdata(normalized)
     return result
 
@@ -580,6 +667,52 @@ def _draw_handle(
     draw.text((left, center_y - height / 2 - bbox[1]), text, font=font, fill=fill)
 
 
+def _position_box(
+    position: str,
+    width: int,
+    height: int,
+    *,
+    margin: int,
+) -> tuple[int, int]:
+    """Place an editable brand element inside the slide safe area."""
+    vertical, horizontal = position.split("-", 1)
+    if horizontal == "left":
+        left = margin
+    elif horizontal == "right":
+        left = SLIDE_WIDTH - margin - width
+    else:
+        left = (SLIDE_WIDTH - width) // 2
+    if vertical == "top":
+        top = margin
+    elif vertical == "bottom":
+        top = SLIDE_HEIGHT - margin - height
+    else:
+        top = (SLIDE_HEIGHT - height) // 2
+    return left, top
+
+
+def _draw_handle_positioned(
+    image: Image.Image,
+    handle: str,
+    *,
+    position: str,
+    font_size: int,
+    margin: int,
+    fill: tuple[int, int, int],
+) -> None:
+    text = handle.strip()
+    if not text:
+        raise brand_identity.NoBrandIdentity("The brand rail was asked to draw an empty handle.")
+    if not text.startswith("@"):
+        text = "@" + text
+    font = _font(font_size)
+    draw = ImageDraw.Draw(image)
+    box = draw.textbbox((0, 0), text, font=font)
+    width, height = box[2] - box[0], box[3] - box[1]
+    left, top = _position_box(position, width, height, margin=margin)
+    draw.text((left - box[0], top - box[1]), text, font=font, fill=fill)
+
+
 def _draw_swipe_arrow(image: Image.Image, fill: tuple[int, int, int]) -> None:
     """Draw the icon-only right arrow inside the safe-area boundary."""
     draw = ImageDraw.Draw(image)
@@ -602,9 +735,17 @@ def _draw_swipe_arrow(image: Image.Image, fill: tuple[int, int, int]) -> None:
     )
 
 
-def _prepare_rail(image: Image.Image) -> tuple[int, int, int]:
+def _prepare_rail(
+    image: Image.Image,
+    design: CarouselDesign | None = None,
+) -> tuple[int, int, int]:
     """Clear the rail below its divider while preserving visuals that meet it."""
-    background, text, divider = _rail_colors(image)
+    if design is not None:
+        background = hex_color(design.inside.background, PAPER)
+        text = hex_color(design.inside.text_color, TEXT_DARK)
+        divider = tuple(round((background[index] * 3 + text[index]) / 4) for index in range(3))
+    else:
+        background, text, divider = _rail_colors(image)
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, RAIL_FILL_TOP, SLIDE_WIDTH, SLIDE_HEIGHT), fill=background)
     draw.line((SAFE_LEFT, RAIL_DIVIDER_Y, RAIL_RIGHT, RAIL_DIVIDER_Y), fill=divider, width=2)
@@ -615,18 +756,68 @@ def apply_body_brand_rail(
     image: Image.Image,
     handle: str,
     slide_no: int | str | None = None,
+    design: CarouselDesign | None = None,
 ) -> Image.Image:
     """Add the official favicon, exact handle, divider, and arrow."""
     result = image.convert("RGB")
-    background, _, _ = _rail_colors(result)
-    text = _prepare_rail(result)
+    background = hex_color(design.inside.background, PAPER) if design else _rail_colors(result)[0]
+    text = _prepare_rail(result, design)
     if slide_no is not None:
         _clear_slide_number_zone(result, background)
         draw_slide_number(result, slide_no, fill=text)
-    favicon_top = round(RAIL_CENTER_Y - BODY_FAVICON_SIZE / 2)
-    favicon = _favicon_from_source(BODY_FAVICON_SIZE)
-    result.paste(favicon, (BODY_FAVICON_LEFT, favicon_top), favicon)
-    _draw_handle(result, handle, left=BODY_HANDLE_LEFT, center_y=RAIL_CENTER_Y, fill=text)
+    if design is None:
+        favicon_top = round(RAIL_CENTER_Y - BODY_FAVICON_SIZE / 2)
+        favicon = _favicon_from_source(BODY_FAVICON_SIZE)
+        result.paste(favicon, (BODY_FAVICON_LEFT, favicon_top), favicon)
+        _draw_handle(result, handle, left=BODY_HANDLE_LEFT, center_y=RAIL_CENTER_Y, fill=text)
+    else:
+        margin = design.inside.safe_margin
+        shared_anchor = (
+            design.logo_visible
+            and design.handle_visible
+            and design.handle_position == design.logo_position
+        )
+        if design.logo_visible and not shared_anchor:
+            favicon = _favicon_from_source(design.logo_size)
+            left, top = _position_box(
+                design.logo_position,
+                design.logo_size,
+                design.logo_size,
+                margin=margin,
+            )
+            result.paste(favicon, (left, top), favicon)
+        if design.handle_visible:
+            # When both marks intentionally share one anchor, keep the handle
+            # beside the logo rather than drawing both into the same pixels.
+            if shared_anchor:
+                font = _font(design.handle_size)
+                label = handle if handle.startswith("@") else "@" + handle
+                box = ImageDraw.Draw(result).textbbox((0, 0), label, font=font)
+                width, height = box[2] - box[0], box[3] - box[1]
+                logo_left, logo_top = _position_box(
+                    design.logo_position,
+                    design.logo_size + 16 + width,
+                    max(design.logo_size, height),
+                    margin=margin,
+                )
+                # Reposition the logo as one optical group.
+                favicon = _favicon_from_source(design.logo_size)
+                result.paste(favicon, (logo_left, logo_top), favicon)
+                ImageDraw.Draw(result).text(
+                    (logo_left + design.logo_size + 16 - box[0], logo_top + (design.logo_size - height) / 2 - box[1]),
+                    label,
+                    font=font,
+                    fill=text,
+                )
+            else:
+                _draw_handle_positioned(
+                    result,
+                    handle,
+                    position=design.handle_position,
+                    font_size=design.handle_size,
+                    margin=margin,
+                    fill=text,
+                )
     _draw_swipe_arrow(result, text)
     return result
 
@@ -634,14 +825,59 @@ def apply_body_brand_rail(
 def apply_cta_brand_rail(
     image: Image.Image,
     handle: str,
+    design: CarouselDesign | None = None,
 ) -> Image.Image:
     """Add only the official favicon and handle to the unnumbered CTA rail."""
     result = image.convert("RGB")
-    text = _prepare_rail(result)
-    favicon_top = round(RAIL_CENTER_Y - CTA_FAVICON_SIZE / 2)
-    favicon = _favicon_from_source(CTA_FAVICON_SIZE)
-    result.paste(favicon, (CTA_FAVICON_LEFT, favicon_top), favicon)
-    _draw_handle(result, handle, left=CTA_HANDLE_LEFT, center_y=RAIL_CENTER_Y, fill=text)
+    text = _prepare_rail(result, design)
+    if design is None:
+        favicon_top = round(RAIL_CENTER_Y - CTA_FAVICON_SIZE / 2)
+        favicon = _favicon_from_source(CTA_FAVICON_SIZE)
+        result.paste(favicon, (CTA_FAVICON_LEFT, favicon_top), favicon)
+        _draw_handle(result, handle, left=CTA_HANDLE_LEFT, center_y=RAIL_CENTER_Y, fill=text)
+    else:
+        shared_anchor = (
+            design.logo_visible
+            and design.handle_visible
+            and design.logo_position == design.handle_position
+        )
+        if design.logo_visible and not shared_anchor:
+            favicon = _favicon_from_source(design.logo_size)
+            left, top = _position_box(
+                design.logo_position,
+                design.logo_size,
+                design.logo_size,
+                margin=design.inside.safe_margin,
+            )
+            result.paste(favicon, (left, top), favicon)
+        if shared_anchor:
+            label = handle if handle.startswith("@") else "@" + handle
+            font = _font(design.handle_size)
+            box = ImageDraw.Draw(result).textbbox((0, 0), label, font=font)
+            width, height = box[2] - box[0], box[3] - box[1]
+            left, top = _position_box(
+                design.logo_position,
+                design.logo_size + 16 + width,
+                max(design.logo_size, height),
+                margin=design.inside.safe_margin,
+            )
+            favicon = _favicon_from_source(design.logo_size)
+            result.paste(favicon, (left, top), favicon)
+            ImageDraw.Draw(result).text(
+                (left + design.logo_size + 16 - box[0], top + (design.logo_size - height) / 2 - box[1]),
+                label,
+                font=font,
+                fill=text,
+            )
+        elif design.handle_visible:
+            _draw_handle_positioned(
+                result,
+                handle,
+                position=design.handle_position,
+                font_size=design.handle_size,
+                margin=design.inside.safe_margin,
+                fill=text,
+            )
     return result
 
 
@@ -747,6 +983,8 @@ __all__ = [
     "apply_slide_typography",
     "anchor_dominant_visual_to_divider",
     "draw_slide_number",
+    "design_font",
+    "hex_color",
     "headline_font",
     "normalize_accent_green",
     "validate_footer_padding",

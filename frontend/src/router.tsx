@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { hadSession, useAuth } from "@/hooks/use-auth"
 import {
   historyChunk,
+  designsChunk,
   newRunChunk,
   newsroomChunk,
   profileChunk,
@@ -183,6 +184,12 @@ export const router = createBrowserRouter([
           {
             path: "/profile",
             lazy: async () => ({ Component: (await profileChunk()).ProfileRoute }),
+          },
+          {
+            path: "/designs",
+            lazy: async () => ({
+              Component: (await designsChunk()).DesignsRoute,
+            }),
           },
           // Legacy paths. These screens were called "runs" before, and links to
           // them exist in browser history and in anything already shared. Keeping

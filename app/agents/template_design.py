@@ -31,6 +31,7 @@ from PIL import Image
 from app.config import agent_instructions, load_skill, settings
 from app.llm import resolve_model
 from app.schemas import (
+    CarouselDesign,
     CarouselPlan,
     CopySet,
     CoverSpec,
@@ -45,6 +46,7 @@ from app.state import (
     K_BODY_SLIDES,
     K_COVER,
     K_COPY,
+    K_DESIGN,
     K_NEWS_ITEM,
     K_PLAN,
     K_RESEARCH,
@@ -356,6 +358,7 @@ async def render_body_slides(
     news = get_model(state, K_NEWS_ITEM, NewsItem)
     research = get_model(state, K_RESEARCH, ResearchBrief)
     cover = get_model(state, K_COVER, CoverSpec)
+    design = get_model(state, K_DESIGN, CarouselDesign) or CarouselDesign()
 
     all_slides = sorted(copy_set.slides, key=lambda s: s.index)
     # Planner/copy indexes remain carousel-wide (cover=1, body starts at 2),
@@ -428,6 +431,7 @@ async def render_body_slides(
                 layout_hint,
                 _visual_context(news, research, plan_slide),
                 subject_reference if _needs_subject_reference(plan_slide) else "",
+                design,
             )
             png_bytes = Path(written).read_bytes()
             await tool_context.save_artifact(

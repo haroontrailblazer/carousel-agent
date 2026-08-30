@@ -23,6 +23,7 @@ const CHUNKS = {
   "/newsroom": () => import("@/routes/newsroom"),
   "/tasks": () => import("@/routes/history"),
   "/profile": () => import("@/routes/profile"),
+  "/designs": () => import("@/routes/designs"),
   "/reset-password": () => import("@/routes/reset-password"),
 } as const
 
@@ -32,6 +33,7 @@ export const newRunChunk = CHUNKS["/new"]
 export const newsroomChunk = CHUNKS["/newsroom"]
 export const historyChunk = CHUNKS["/tasks"]
 export const profileChunk = CHUNKS["/profile"]
+export const designsChunk = CHUNKS["/designs"]
 export const resetPasswordChunk = CHUNKS["/reset-password"]
 export const runDetailChunk = () => import("@/routes/run-detail")
 
@@ -57,7 +59,7 @@ export function prefetchRouteChunk(path: string): void {
  * it was for. These three are the sidebar's nav, so they are one tap from
  * anywhere.
  */
-const LIKELY_NEXT: PrefetchablePath[] = ["/tasks", "/newsroom", "/new"]
+const LIKELY_NEXT: PrefetchablePath[] = ["/tasks", "/newsroom", "/designs", "/new"]
 
 /**
  * True when the browser or the user has asked us not to spend their data.

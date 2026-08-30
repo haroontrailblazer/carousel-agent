@@ -19,6 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = React.useState(false)
   const location = useLocation()
   const isAgentWorkspace = location.pathname === "/new"
+  const isDesignEditor = location.pathname === "/designs"
 
   // Both task views are viewport workbenches now: Review divides the width
   // between filmstrip, preview and inspector; Trace divides it between agent
@@ -94,8 +95,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           // never lands in the Tab order itself.
           tabIndex={-1}
           className={
-            (isAgentWorkspace
-              ? "agent-main"
+            (isAgentWorkspace || isDesignEditor
+              ? isDesignEditor ? "design-editor-main h-dvh min-h-0 overflow-hidden" : "agent-main"
               : isFittedTask
                 ? "fitted-main flex w-full max-w-none flex-col px-4 pb-8 pt-14 md:px-5 md:py-4"
                 : "mx-auto max-w-5xl px-4 pb-8 pt-14 md:px-8 md:py-8") +

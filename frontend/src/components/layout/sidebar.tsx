@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { NavLink, useLocation } from "react-router"
 import {
   Layers,
+  LayoutTemplate,
   Newspaper,
   PanelLeftClose,
   Sparkles,
@@ -22,6 +23,7 @@ const NAV = [
   { to: "/new", label: "New carousel", icon: Sparkles, end: true },
   { to: "/newsroom", label: "Newsroom", icon: Newspaper, end: true },
   { to: "/tasks", label: "Tasks", icon: Layers, end: false },
+  { to: "/designs", label: "Designs", icon: LayoutTemplate, end: true },
 ] as const
 
 

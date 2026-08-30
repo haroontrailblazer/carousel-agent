@@ -55,6 +55,7 @@ K_PHASE = "phase"
 #: the slide artwork as it is generated - not just used at publish time. See
 #: app/tools/brand_identity.py.
 K_ACCOUNT_ID = "account_id"          # str - instagram_accounts.id
+K_DESIGN = "carousel_design"         # CarouselDesign dict selected before generation
 K_NEWS_ITEM = "news_item"            # NewsItem dict
 K_RESEARCH = "research_brief"        # ResearchBrief dict
 K_PLAN = "carousel_plan"             # CarouselPlan dict

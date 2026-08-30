@@ -36,6 +36,7 @@ from app.runs.stream import consume_invocation, record_event
 from app.services import avatar_store, db, instagram_accounts
 from app.state import (
     K_ACCOUNT_ID,
+    K_DESIGN,
     K_NEWS_ITEM,
     K_RUN_ID,
     PHASE_DONE,
@@ -283,6 +284,7 @@ async def start_run(
     news: Optional[dict] = None,
     requested_by: str = "",
     account_id: str = "",
+    design: Optional[dict] = None,
 ) -> StartedRun:
     """Create a run, seed its session, and start driving it in the background.
 
@@ -362,7 +364,14 @@ async def start_run(
             (news or {}).get("title") or (topic or "").strip()[:150] or "Untitled"
         )
 
-        state: dict[str, Any] = {K_RUN_ID: run_id, K_ACCOUNT_ID: account.id}
+        from app.schemas import CarouselDesign
+
+        chosen_design = CarouselDesign.model_validate(design or {})
+        state: dict[str, Any] = {
+            K_RUN_ID: run_id,
+            K_ACCOUNT_ID: account.id,
+            K_DESIGN: chosen_design.model_dump(mode="json"),
+        }
         if news is not None:
             state[K_NEWS_ITEM] = news
 
