@@ -2,7 +2,6 @@ import * as React from "react"
 import { ArrowUp, Plus, Square } from "lucide-react"
 
 import {
-  DesignCommandChip,
   DesignCommandMenu,
   TargetChip,
   TargetMenu,
@@ -52,7 +51,6 @@ export function AgentComposer({
   target = null,
   onTargetChange,
   designs = [],
-  designId = null,
   onDesignChange,
 }: {
   value: string
@@ -67,7 +65,6 @@ export function AgentComposer({
   onTargetChange?: (target: string | null) => void
   /** Saved formats available to `/design <name>` when starting a new run. */
   designs?: readonly { id: string; name: string }[]
-  designId?: string | null
   onDesignChange?: (designId: string | null) => void
 }) {
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
@@ -110,7 +107,6 @@ export function AgentComposer({
     // `/design` remains the Template Design rework target at review.
     enabled: canType && state !== "review" && designs.length > 0 && !!onDesignChange,
   })
-  const selectedDesign = designs.find((design) => design.id === designId)
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -194,9 +190,6 @@ export function AgentComposer({
           <>
             {target && (
               <TargetChip name={target} onClear={() => onTargetChange?.(null)} />
-            )}
-            {state !== "review" && selectedDesign && (
-              <DesignCommandChip name={selectedDesign.name} onClear={() => onDesignChange?.(null)} />
             )}
             <input
               value={value}

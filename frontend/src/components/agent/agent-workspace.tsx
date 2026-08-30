@@ -423,8 +423,11 @@ export function AgentWorkspace({
       target={target}
       onTargetChange={setTarget}
       designs={designs}
-      designId={designId}
-      onDesignChange={(nextDesignId) => setDesignId(nextDesignId ?? "")}
+      onDesignChange={(nextDesignId) => {
+        setDesignId(nextDesignId ?? "")
+        const selected = designs.find((design) => design.id === nextDesignId)
+        if (selected) toast.success("Design selected", { description: selected.name })
+      }}
       // Stop stays available for the whole time the agents are up, including
       // the seconds before the first snapshot arrives - a run you cannot
       // cancel because the page has not finished loading is the worst moment

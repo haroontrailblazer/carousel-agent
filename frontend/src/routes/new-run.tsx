@@ -102,46 +102,6 @@ function AccountPicker({
   )
 }
 
-function DesignPicker({
-  designs,
-  value,
-  onChange,
-  disabled,
-}: {
-  designs: ReturnType<typeof useCarouselDesigns>[0]
-  value: string
-  onChange: (designId: string) => void
-  disabled: boolean
-}) {
-  if (designs.length === 0) return null
-  return (
-    <fieldset className="mx-auto mt-4 w-full max-w-xl rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 text-left" aria-label="Design format">
-      <legend className="px-1 text-xs font-semibold text-[var(--foreground)]">Choose a design format <span className="text-[var(--destructive)]">Required</span></legend>
-      <p className="mb-2 text-[11px] leading-4 text-[var(--muted-foreground)]">The agents copy its cover, generated-image zone, typography, colors, safe area and brand layers into this run.</p>
-      <div className="flex flex-wrap gap-2">
-        {designs.map((design) => (
-          <button
-            key={design.id}
-            type="button"
-            disabled={disabled}
-            aria-pressed={design.id === value}
-            onClick={() => onChange(design.id)}
-            className={
-              "rounded-[10px] border px-2.5 py-1.5 text-xs transition-colors disabled:cursor-default disabled:opacity-50 " +
-              (design.id === value
-                ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--foreground)]"
-                : "border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]")
-            }
-          >
-            {design.name}
-          </button>
-        ))}
-      </div>
-      <p className="mt-2 text-[10px] font-medium text-[var(--muted-foreground)]">{value ? "Design selected — agents receive a frozen snapshot when you start" : "Select one before starting the agents"}</p>
-    </fieldset>
-  )
-}
-
 /**
  * The New carousel screen.
  *
@@ -328,8 +288,11 @@ export function NewRunRoute() {
             onSubmit={submit}
             state={composerState}
             designs={designs}
-            designId={designId}
-            onDesignChange={(nextDesignId) => setDesignId(nextDesignId ?? "")}
+            onDesignChange={(nextDesignId) => {
+              setDesignId(nextDesignId ?? "")
+              const selected = designs.find((design) => design.id === nextDesignId)
+              if (selected) toast.success("Design selected", { description: selected.name })
+            }}
           />
 
           <div className="mt-4 flex flex-wrap justify-center gap-2" aria-label="Suggested prompts">
@@ -350,13 +313,6 @@ export function NewRunRoute() {
             accounts={accounts}
             value={accountId || (accounts.find((a) => a.is_default)?.id ?? "")}
             onChange={setAccountId}
-            disabled={start.isPending}
-          />
-
-          <DesignPicker
-            designs={designs}
-            value={designId}
-            onChange={setDesignId}
             disabled={start.isPending}
           />
 

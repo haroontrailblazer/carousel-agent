@@ -350,20 +350,3 @@ export function DesignCommandMenu({
     </div>
   )
 }
-
-/** The chosen design uses the same compact chip treatment as agent targeting. */
-export function DesignCommandChip({ name, onClear }: { name: string; onClear: () => void }) {
-  return (
-    <span className="ml-1 flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--brand-soft)] py-1 pl-2.5 pr-1.5 text-[12px] font-medium">
-      {name}
-      <button
-        type="button"
-        onClick={onClear}
-        aria-label={`Clear design ${name}`}
-        className="grid size-4 place-items-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-      >
-        <span aria-hidden className="text-[13px] leading-none">×</span>
-      </button>
-    </span>
-  )
-}
