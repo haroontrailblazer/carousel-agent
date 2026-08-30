@@ -2,8 +2,11 @@ import * as React from "react"
 import { ArrowUp, Plus, Square } from "lucide-react"
 
 import {
+  DesignCommandChip,
+  DesignCommandMenu,
   TargetChip,
   TargetMenu,
+  useDesignCommand,
   useTargetPicker,
 } from "@/components/agent/agent-target-picker"
 import { cn } from "@/lib/utils"
@@ -48,6 +51,9 @@ export function AgentComposer({
   stopping = false,
   target = null,
   onTargetChange,
+  designs = [],
+  designId = null,
+  onDesignChange,
 }: {
   value: string
   onChange: (value: string) => void
@@ -59,6 +65,10 @@ export function AgentComposer({
   /** The agent this message is addressed to, when one was picked. */
   target?: string | null
   onTargetChange?: (target: string | null) => void
+  /** Saved formats available to `/design <name>` when starting a new run. */
+  designs?: readonly { id: string; name: string }[]
+  designId?: string | null
+  onDesignChange?: (designId: string | null) => void
 }) {
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
 
@@ -92,6 +102,15 @@ export function AgentComposer({
     onPick: (agent) => onTargetChange?.(agent),
     enabled: state === "review" && !!onTargetChange,
   })
+  const designCommand = useDesignCommand({
+    value,
+    onChange,
+    onPick: (nextDesignId) => onDesignChange?.(nextDesignId),
+    designs,
+    // `/design` remains the Template Design rework target at review.
+    enabled: canType && state !== "review" && designs.length > 0 && !!onDesignChange,
+  })
+  const selectedDesign = designs.find((design) => design.id === designId)
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
@@ -116,6 +135,15 @@ export function AgentComposer({
           onChoose={picker.choose}
         />
       )}
+      {designCommand.open && (
+        <DesignCommandMenu
+          choosingCommand={designCommand.choosingCommand}
+          matches={designCommand.matches}
+          active={designCommand.active}
+          onChooseCommand={designCommand.chooseCommand}
+          onChooseDesign={designCommand.chooseDesign}
+        />
+      )}
 
       {/* The collapsing half. It keeps rendering while closed rather than
           unmounting, because a grid row cannot animate to the height of
@@ -131,6 +159,7 @@ export function AgentComposer({
             aria-hidden={!composing}
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={(event) => {
+              if (designCommand.onKeyDown(event)) return
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault()
                 submit(event)
@@ -166,12 +195,18 @@ export function AgentComposer({
             {target && (
               <TargetChip name={target} onClear={() => onTargetChange?.(null)} />
             )}
+            {state !== "review" && selectedDesign && (
+              <DesignCommandChip name={selectedDesign.name} onClear={() => onDesignChange?.(null)} />
+            )}
             <input
               value={value}
               onChange={(event) => onChange(event.target.value)}
               // The menu gets first refusal on arrows and Enter while it is
               // open, so choosing an agent cannot also submit the message.
-              onKeyDown={(event) => picker.onKeyDown(event)}
+              onKeyDown={(event) => {
+                if (picker.onKeyDown(event)) return
+                designCommand.onKeyDown(event)
+              }}
               placeholder={
                 target
                   ? "What should it change?"

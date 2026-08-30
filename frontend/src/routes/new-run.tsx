@@ -327,6 +327,9 @@ export function NewRunRoute() {
             onChange={setValue}
             onSubmit={submit}
             state={composerState}
+            designs={designs}
+            designId={designId}
+            onDesignChange={(nextDesignId) => setDesignId(nextDesignId ?? "")}
           />
 
           <div className="mt-4 flex flex-wrap justify-center gap-2" aria-label="Suggested prompts">

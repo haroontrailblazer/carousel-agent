@@ -38,6 +38,7 @@ import { ChatScrollContext, useChatTail } from "@/hooks/use-chat-tail"
 import { useRailPanel } from "@/hooks/use-rail-panel"
 import { invalidateRun, type RunWorkspace } from "@/hooks/use-run-workspace"
 import { ApiError, post } from "@/lib/api"
+import { designPayload, type CarouselDesign, useCarouselDesigns } from "@/lib/designs"
 import { AGENT_LABELS, PHASE_LABELS } from "@/lib/pipeline"
 import type { RunDetail, RunEvent } from "@/lib/types"
 
@@ -289,6 +290,13 @@ export function AgentWorkspace({
   const [followUp, setFollowUp] = React.useState("")
   /** The agent this message is addressed to, when the reviewer picked one. */
   const [target, setTarget] = React.useState<string | null>(null)
+  const [designs] = useCarouselDesigns()
+  const [designId, setDesignId] = React.useState("")
+
+  React.useEffect(() => {
+    if (designId && designs.some((design) => design.id === designId)) return
+    setDesignId(designs.length === 1 ? designs[0].id : "")
+  }, [designId, designs])
 
   const rework = useMutation({
     mutationFn: ({ feedback, to }: { feedback: string; to: string | null }) =>
@@ -318,12 +326,12 @@ export function AgentWorkspace({
   })
 
   const startAnother = useMutation({
-    mutationFn: (text: string) =>
+    mutationFn: ({ text, design }: { text: string; design: CarouselDesign }) =>
       post<{ run_id: string; title: string }>(
         "/api/runs",
         /^https?:\/\/\S+$/i.test(text)
-          ? { source: "url", url: text }
-          : { source: "topic", topic: text },
+          ? { source: "url", url: text, design_id: design.id, design: designPayload(design) }
+          : { source: "topic", topic: text, design_id: design.id, design: designPayload(design) },
       ),
     onSuccess: (data) => {
       setFollowUp("")
@@ -344,9 +352,19 @@ export function AgentWorkspace({
   const sendFollowUp = React.useCallback(() => {
     const text = followUp.trim()
     if (text.length < 3 || rework.isPending || startAnother.isPending) return
-    if (state === "review") rework.mutate({ feedback: text, to: target })
-    else startAnother.mutate(text)
-  }, [followUp, target, state, rework, startAnother])
+    if (state === "review") {
+      rework.mutate({ feedback: text, to: target })
+      return
+    }
+    const design = designs.find((item) => item.id === designId)
+    if (!design) {
+      toast.error("Choose a design first", {
+        description: "Type /design followed by a saved design name.",
+      })
+      return
+    }
+    startAnother.mutate({ text, design })
+  }, [designId, designs, followUp, target, state, rework, startAnother])
 
 
   // Gated on `booting`, so the skeleton gets the whole width and the rail
@@ -404,6 +422,9 @@ export function AgentWorkspace({
       onSubmit={sendFollowUp}
       target={target}
       onTargetChange={setTarget}
+      designs={designs}
+      designId={designId}
+      onDesignChange={(nextDesignId) => setDesignId(nextDesignId ?? "")}
       // Stop stays available for the whole time the agents are up, including
       // the seconds before the first snapshot arrives - a run you cannot
       // cancel because the page has not finished loading is the worst moment

@@ -3,6 +3,11 @@ import * as React from "react"
 import { AGENT_LABELS, REWORKABLE_AGENTS } from "@/lib/pipeline"
 import { cn } from "@/lib/utils"
 
+export type DesignCommandChoice = {
+  id: string
+  name: string
+}
+
 /**
  * Everything the composer needs to know about "/" targeting, in one hook.
  *
@@ -191,6 +196,173 @@ export function TargetChip({
         <span aria-hidden className="text-[13px] leading-none">
           ×
         </span>
+      </button>
+    </span>
+  )
+}
+
+/**
+ * Saved-design selection through the same slash interaction as rework
+ * targeting. `/design` keeps its existing rework meaning while a run is at
+ * review; this hook is enabled only when a message will start a new run.
+ */
+export function useDesignCommand({
+  value,
+  onChange,
+  onPick,
+  designs,
+  enabled,
+}: {
+  value: string
+  onChange: (next: string) => void
+  onPick: (designId: string) => void
+  designs: readonly DesignCommandChoice[]
+  enabled: boolean
+}) {
+  const raw = enabled && value.startsWith("/") ? value.slice(1) : null
+  const lower = raw?.toLowerCase() ?? ""
+  const choosingCommand = raw !== null && !raw.includes(" ") && "design".startsWith(lower)
+  const choosingDesign = raw !== null && /^design\s+/i.test(raw)
+  const query = choosingDesign ? raw.replace(/^design\s+/i, "").trim().toLowerCase() : ""
+  const open = choosingCommand || choosingDesign
+
+  const matches = React.useMemo(() => {
+    if (!choosingDesign) return []
+    return designs.filter(
+      (design) =>
+        design.name.toLowerCase().includes(query) ||
+        design.id.toLowerCase().includes(query),
+    )
+  }, [choosingDesign, designs, query])
+
+  const [cursor, setCursor] = React.useState(0)
+  React.useEffect(() => setCursor(0), [query, choosingDesign])
+  const active = matches.length ? matches[Math.min(cursor, matches.length - 1)] : null
+
+  const chooseCommand = React.useCallback(() => onChange("/design "), [onChange])
+  const chooseDesign = React.useCallback(
+    (designId: string) => {
+      onPick(designId)
+      onChange("")
+    },
+    [onPick, onChange],
+  )
+
+  const onKeyDown = React.useCallback(
+    (event: React.KeyboardEvent): boolean => {
+      if (!open) return false
+      if (event.key === "Escape") {
+        event.preventDefault()
+        onChange("")
+        return true
+      }
+      if (choosingCommand && (event.key === "Enter" || event.key === "Tab")) {
+        event.preventDefault()
+        chooseCommand()
+        return true
+      }
+      if (!choosingDesign || !matches.length) return false
+      if (event.key === "ArrowDown") {
+        event.preventDefault()
+        setCursor((current) => (current + 1) % matches.length)
+        return true
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault()
+        setCursor((current) => (current - 1 + matches.length) % matches.length)
+        return true
+      }
+      if ((event.key === "Enter" || event.key === "Tab") && active) {
+        event.preventDefault()
+        chooseDesign(active.id)
+        return true
+      }
+      return false
+    }, [active, chooseCommand, chooseDesign, choosingCommand, choosingDesign, matches, onChange, open],
+  )
+
+  return {
+    open,
+    choosingCommand,
+    matches,
+    active,
+    chooseCommand,
+    chooseDesign,
+    onKeyDown,
+  }
+}
+
+/** Design choices reuse the existing slash-command surface and interaction. */
+export function DesignCommandMenu({
+  choosingCommand,
+  matches,
+  active,
+  onChooseCommand,
+  onChooseDesign,
+}: {
+  choosingCommand: boolean
+  matches: readonly DesignCommandChoice[]
+  active: DesignCommandChoice | null
+  onChooseCommand: () => void
+  onChooseDesign: (designId: string) => void
+}) {
+  if (choosingCommand) {
+    return (
+      <div role="listbox" aria-label="Choose a chat command" className={cn(MENU_BOX, "p-1")}>
+        <button
+          type="button"
+          role="option"
+          aria-selected="true"
+          onMouseDown={(event) => { event.preventDefault(); onChooseCommand() }}
+          className="flex w-full items-baseline gap-2.5 rounded-[10px] bg-[var(--muted)] px-2.5 py-2 text-left"
+        >
+          <span className="font-mono text-[12px] text-[var(--muted-foreground)]">/design</span>
+          <span className="shrink-0 text-[13px] font-medium">Design format</span>
+          <span className="ml-auto hidden truncate text-[11px] text-[var(--muted-foreground)] sm:block">Choose a saved design</span>
+        </button>
+      </div>
+    )
+  }
+
+  if (!matches.length) {
+    return <div className={cn(MENU_BOX, "p-3 text-[13px] text-[var(--muted-foreground)]")}>No saved design by that name.</div>
+  }
+
+  return (
+    <div role="listbox" aria-label="Choose a saved design" className={cn(MENU_BOX, "p-1")}>
+      {matches.map((design) => (
+        <button
+          key={design.id}
+          type="button"
+          role="option"
+          aria-selected={active?.id === design.id}
+          onMouseDown={(event) => { event.preventDefault(); onChooseDesign(design.id) }}
+          className={cn(
+            "flex w-full items-baseline gap-2.5 rounded-[10px] px-2.5 py-2 text-left",
+            active?.id === design.id && "bg-[var(--muted)]",
+          )}
+        >
+          <span className="font-mono text-[12px] text-[var(--muted-foreground)]">/design</span>
+          <span className="shrink-0 text-[13px] font-medium">{design.name}</span>
+          <span className="ml-auto hidden truncate text-[11px] text-[var(--muted-foreground)] sm:block">Saved format</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** The chosen design uses the same compact chip treatment as agent targeting. */
+export function DesignCommandChip({ name, onClear }: { name: string; onClear: () => void }) {
+  return (
+    <span className="ml-1 flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--brand-soft)] py-1 pl-2.5 pr-1.5 text-[12px] font-medium">
+      {name}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Clear design ${name}`}
+        className="grid size-4 place-items-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+      >
+        <span aria-hidden className="text-[13px] leading-none">×</span>
       </button>
     </span>
   )
