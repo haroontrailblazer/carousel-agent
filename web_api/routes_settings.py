@@ -19,7 +19,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from PIL import Image
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from starlette.responses import RedirectResponse
 
 from app.config import settings
@@ -240,6 +240,38 @@ class AccountRef(BaseModel):
     account_id: str = Field(min_length=1, max_length=64)
 
 
+#: What Meta gives a long-lived Instagram token, and the only figure available
+#: when a pasted one cannot be refreshed. A token carries no issue date and
+#: Meta publishes no introspection endpoint, so this is an ASSUMPTION - see
+#: ``_extend_pasted_token`` for what is done to avoid relying on it.
+ASSUMED_LIFETIME_DAYS = 60
+
+
+class InstagramTokenRequest(BaseModel):
+    """A token pasted into the console, and optionally the account it is for."""
+
+    token: str = Field(min_length=1, max_length=2000)
+    #: Optional. Required only for a token minted through Facebook Login,
+    #: which cannot say who it belongs to; for an Instagram Login token it is
+    #: a guard against connecting the wrong account.
+    ig_user_id: str = Field(default="", max_length=32)
+
+    @field_validator("token", "ig_user_id")
+    @classmethod
+    def _trim(cls, value: str) -> str:
+        """Tokens arrive by copy-paste, newline and stray spaces included."""
+        return value.strip()
+
+    @field_validator("ig_user_id")
+    @classmethod
+    def _numeric(cls, value: str) -> str:
+        if value and not value.isdigit():
+            raise ValueError(
+                "An Instagram user id is all digits - it is not the @handle."
+            )
+        return value
+
+
 def _redirect_uri() -> str:
     """The callback Meta must have allowlisted, absolute."""
     return f"{settings.public_base_url.rstrip('/')}/api/settings/instagram/callback"
@@ -436,6 +468,142 @@ async def instagram_callback(
         "Instagram account @%s connected by %s.", account.username, connected_by
     )
     return _back_to_profile(instagram="connected", account=account.username)
+
+
+def _extend_pasted_token(token: str, auth_kind: str) -> tuple[str, int, str]:
+    """Turn a pasted token into one whose expiry is known rather than assumed.
+
+    A token typed into a form carries no issue date, and Meta publishes no
+    introspection endpoint - so on its own, all that can be recorded is the 60
+    days a long-lived token is granted. That guess is dangerous rather than
+    merely imprecise: a token pasted on day 50 of its life would be filed as
+    having 60 days left, and the nightly refresh job only looks at tokens
+    expiring within a fortnight, so it would sit untouched until long after it
+    had died.
+
+    ``ig_refresh_token`` answers that question authoritatively AND resets the
+    clock, so it is tried first. It refuses for a token less than 24 hours old,
+    and does not exist at all for the Facebook Login path - neither is a reason
+    to reject the connection, because the identity lookup has already proved
+    the token works.
+
+    Returns:
+        ``(token, expires_in_seconds, "confirmed" | "assumed")``.
+    """
+    assumed = (token, ASSUMED_LIFETIME_DAYS * 86400, "assumed")
+    if auth_kind != instagram_oauth.AUTH_KIND_INSTAGRAM:
+        return assumed
+    try:
+        fresh, expires_in = instagram_oauth.refresh_long_lived(token)
+    except instagram_oauth.OAuthError as exc:
+        logger.info(
+            "Pasted token was not refreshable (%s); assuming %d days.",
+            exc.message,
+            ASSUMED_LIFETIME_DAYS,
+        )
+        return assumed
+    if not fresh or expires_in <= 0:
+        # A refresh that reports no time left would file the account as dead on
+        # arrival. Distrust it and keep the token that demonstrably works.
+        logger.warning("Refresh returned expires_in=%s; keeping the pasted token.", expires_in)
+        return assumed
+    return fresh, expires_in, "confirmed"
+
+
+@router.post("/settings/instagram/token")
+async def instagram_connect_token(
+    payload: InstagramTokenRequest,
+    identity: Identity = Depends(current_identity),
+) -> dict:
+    """Connect an account from an access token somebody pasted.
+
+    The Connect button above is the better door and stays the default - it
+    handles no credential, and Instagram hands back the real expiry. But it
+    cannot always be opened: it needs a Meta app, a public HTTPS address Meta
+    has allowlisted, and for any account that is not a listed tester, App
+    Review with Advanced Access behind it. This route needs none of those, so
+    an account can be connected from a token generated in the Meta dashboard on
+    a laptop with no public URL at all.
+
+    Nothing about STORAGE is relaxed: the token is Fernet-encrypted or refused,
+    keyed on the Instagram user id so pasting a new token for an account
+    already here replaces it, and never echoed back to the browser.
+    """
+    token = payload.token.strip()
+    if not token:
+        raise HTTPException(
+            400, {"code": "bad_token", "message": "Paste an access token first."}
+        )
+
+    if not secret_box.configured():
+        # Refuse before asking Meta anything: there is no point identifying a
+        # token that could not be stored, and storing it in the clear is not on
+        # offer.
+        raise HTTPException(
+            503,
+            {
+                "code": "secrets_unconfigured",
+                "message": (
+                    "SECRETS_KEY is not set, so this token cannot be stored "
+                    "encrypted - and it will not be stored any other way."
+                ),
+            },
+        )
+
+    # Blocking httpx inside a request; keep the loop free.
+    try:
+        who, auth_kind = await asyncio.to_thread(
+            instagram_oauth.identify,
+            token,
+            payload.ig_user_id,
+            api_version=settings.ig_api_version,
+        )
+    except instagram_oauth.OAuthError as exc:
+        logger.info("Pasted Instagram token refused: %s", exc.message)
+        raise HTTPException(
+            400, {"code": exc.code, "message": exc.message}
+        ) from exc
+
+    token, expires_in, expiry = await asyncio.to_thread(
+        _extend_pasted_token, token, auth_kind
+    )
+
+    avatar_key = ""
+    picture_url = who.get("profile_picture_url") or ""
+    if picture_url:
+        picture = await asyncio.to_thread(instagram_oauth.fetch_avatar, picture_url)
+        if picture:
+            avatar_key = await _store_avatar(who["ig_user_id"], picture)
+
+    try:
+        account = await instagram_accounts.save(
+            ig_user_id=who["ig_user_id"],
+            username=who["username"],
+            name=who["name"],
+            token=token,
+            expires_in=expires_in,
+            connected_by=identity.email,
+            avatar_key=avatar_key,
+            auth_kind=auth_kind,
+        )
+    except secret_box.SecretsNotConfigured as exc:
+        raise HTTPException(
+            503, {"code": "secrets_unconfigured", "message": str(exc)}
+        ) from exc
+
+    logger.info(
+        "Instagram account @%s connected from a pasted %s token by %s (expiry %s).",
+        account.username,
+        auth_kind,
+        identity.email,
+        expiry,
+    )
+    return {
+        "result": "connected",
+        "account": account.public(),
+        "expiry": expiry,
+        **_instagram_status(),
+    }
 
 
 @router.get("/settings/instagram/{account_id}/avatar")

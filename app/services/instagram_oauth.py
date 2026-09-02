@@ -50,6 +50,22 @@ TOKEN_URL = "https://api.instagram.com/oauth/access_token"
 #: Everything after the code exchange lives here.
 GRAPH_HOST = "https://graph.instagram.com"
 
+#: Where an Instagram Business account minted through the older Facebook Login
+#: path has to be addressed. Such a token does NOT answer ``/me`` above.
+FACEBOOK_GRAPH_HOST = "https://graph.facebook.com"
+
+#: Which host a token speaks. These strings are stored on the account row and
+#: looked up in ``instagram_accounts.GRAPH_HOSTS`` at publish time, so they are
+#: not free-form labels - a value that is not a key there routes the publish to
+#: the wrong host and fails with an opaque permissions error.
+AUTH_KIND_INSTAGRAM = "instagram_login"
+AUTH_KIND_FACEBOOK = "facebook_login"
+
+#: Only the Facebook host needs a version in the path; graph.instagram.com
+#: accepts unversioned calls for the endpoints used here. Callers pass
+#: ``settings.ig_api_version`` so one setting governs identify and publish.
+DEFAULT_API_VERSION = "v23.0"
+
 #: What we ask for. ``basic`` identifies the account; ``content_publish`` is
 #: what actually posts a carousel. Nothing else is requested - the token is a
 #: credential, and asking for reach we do not use only widens what a leak
@@ -291,6 +307,104 @@ def fetch_identity(token: str) -> dict:
     }
 
 
+def fetch_identity_by_id(
+    ig_user_id: str, token: str, *, api_version: str = DEFAULT_API_VERSION
+) -> dict:
+    """Who an Instagram Business account is, asked of the Facebook host.
+
+    The counterpart to ``fetch_identity`` for tokens minted through Facebook
+    Login. Those cannot answer "who am I" - the token belongs to a Facebook
+    user who may administer several Instagram accounts - so the account has to
+    be named, which is why the id is pasted alongside the token.
+    """
+    payload = _get_json(
+        f"{FACEBOOK_GRAPH_HOST}/{api_version}/{ig_user_id}",
+        {"fields": "username,name,profile_picture_url", "access_token": token},
+        _TIMEOUT,
+    )
+    _raise_for_error(payload)
+    username = str(payload.get("username") or "")
+    if not username:
+        # A Facebook Page id answers this call with no username at all, and a
+        # personal Instagram account is not addressable here either.
+        raise OAuthError(
+            "no_identity",
+            f"{ig_user_id} is not an Instagram Business account this token can "
+            f"see. Check the id, and that the account is Professional "
+            f"(Business or Creator).",
+        )
+    return {
+        "ig_user_id": str(payload.get("id") or ig_user_id),
+        "username": username,
+        "name": str(payload.get("name") or ""),
+        "profile_picture_url": str(payload.get("profile_picture_url") or ""),
+    }
+
+
+def identify(
+    token: str, ig_user_id: str = "", *, api_version: str = DEFAULT_API_VERSION
+) -> tuple[dict, str]:
+    """Work out which account a pasted token is for, and which host it speaks.
+
+    The OAuth flow never needs this: it already knows both. A token typed into
+    the console arrives with neither, and the host cannot be guessed after the
+    fact - sending an Instagram Login token to ``graph.facebook.com`` fails
+    much later, at publish time, with an error naming nothing useful.
+
+    So it is asked rather than inferred. ``graph.instagram.com/me`` answers for
+    an Instagram Login token; when it refuses AND an id was pasted, the same
+    account is looked up by id on the Facebook host.
+
+    Args:
+        ig_user_id: optional. When given alongside a token that DOES answer
+            ``/me``, it is a guard rather than a lookup: a console with several
+            Instagram accounts open hands out whichever token the dashboard was
+            last showing, and someone who typed an id has said which account
+            they meant.
+
+    Returns:
+        ``(identity, auth_kind)`` - the identity in the same shape
+        ``fetch_identity`` returns, and one of the ``AUTH_KIND_*`` constants.
+
+    Raises:
+        OAuthError: ``id_mismatch`` when the token belongs to a different
+            account than the one named; otherwise whatever Meta refused with.
+    """
+    try:
+        identity = fetch_identity(token)
+    except OAuthError as instagram_refusal:
+        if not ig_user_id:
+            raise
+        try:
+            return (
+                fetch_identity_by_id(ig_user_id, token, api_version=api_version),
+                AUTH_KIND_FACEBOOK,
+            )
+        except OAuthError as facebook_refusal:
+            # Both doors are shut. Report the SECOND attempt: the first
+            # refusal is expected for this kind of token, and leading with it
+            # would send someone looking in the wrong place. The id has to
+            # appear either way, so that whoever pasted it can see it was
+            # actually tried rather than ignored.
+            logger.info(
+                "Pasted token identified on neither host: %s / %s",
+                instagram_refusal.message,
+                facebook_refusal.message,
+            )
+            detail = facebook_refusal.message
+            if ig_user_id not in detail:
+                detail = f"{detail} (Asked about {ig_user_id} on the Facebook host too.)"
+            raise OAuthError(facebook_refusal.code, detail) from facebook_refusal
+
+    if ig_user_id and ig_user_id != identity["ig_user_id"]:
+        raise OAuthError(
+            "id_mismatch",
+            f"That token belongs to {identity['ig_user_id']} "
+            f"(@{identity['username']}), not {ig_user_id}. Nothing was saved.",
+        )
+    return identity, AUTH_KIND_INSTAGRAM
+
+
 def fetch_avatar(url: str) -> Optional[bytes]:
     """Download a profile picture, or ``None`` if it cannot be had.
 
@@ -316,7 +430,11 @@ def fetch_avatar(url: str) -> Optional[bytes]:
 
 __all__ = [
     "AUTHORIZE_URL",
+    "AUTH_KIND_FACEBOOK",
+    "AUTH_KIND_INSTAGRAM",
     "CLOCK_SKEW_LEEWAY_S",
+    "DEFAULT_API_VERSION",
+    "FACEBOOK_GRAPH_HOST",
     "GRAPH_HOST",
     "SCOPES",
     "STATE_TTL_S",
@@ -327,6 +445,8 @@ __all__ = [
     "exchange_long_lived",
     "fetch_avatar",
     "fetch_identity",
+    "fetch_identity_by_id",
+    "identify",
     "issue_state",
     "read_state",
     "refresh_long_lived",

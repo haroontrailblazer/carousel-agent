@@ -2,8 +2,11 @@ import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Check,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
   Instagram,
+  KeyRound,
   Moon,
   Send,
   Sun,
@@ -47,6 +50,17 @@ type InstagramStatus = {
   secrets_ready: boolean
   redirect_uri: string
   accounts: InstagramAccount[]
+}
+
+/** What POST /settings/instagram/token answers with. Never carries a token. */
+type InstagramConnectResponse = InstagramStatus & {
+  result: string
+  account: InstagramAccount
+  /**
+   * "confirmed" when Meta refreshed the pasted token and stated the real
+   * expiry; "assumed" when it would not, and 60 days had to be taken on faith.
+   */
+  expiry: "confirmed" | "assumed"
 }
 
 type TelegramStatus = {
@@ -510,6 +524,9 @@ const INSTAGRAM_ERRORS: Record<string, string> = {
   not_configured:
     "This console has no Meta app credentials (IG_APP_ID / IG_APP_SECRET).",
   no_public_url: "PUBLIC_BASE_URL is not set on the server.",
+  bad_token: "Paste an access token first.",
+  id_mismatch:
+    "That token belongs to a different account than the id you typed. Nothing was saved.",
 }
 
 /**
@@ -605,11 +622,49 @@ function InstagramSection() {
       toast.error(error instanceof Error ? error.message : "Could not disconnect."),
   })
 
+  const [pastedToken, setPastedToken] = React.useState("")
+  const [pastedId, setPastedId] = React.useState("")
+
+  const paste = useMutation({
+    mutationFn: () =>
+      post<InstagramConnectResponse>("/api/settings/instagram/token", {
+        token: pastedToken,
+        ig_user_id: pastedId,
+      }),
+    onSuccess: (result) => {
+      setPastedToken("")
+      setPastedId("")
+      const days = result.account.expires_in_days
+      toast.success(`Connected ${result.account.handle}`, {
+        description:
+          result.expiry === "confirmed"
+            ? `Instagram refreshed the token; it is good for ${days} days.`
+            : `Instagram would not refresh this token, so its expiry is assumed to be ${days} days. Reconnect if publishing starts failing.`,
+      })
+      refresh()
+    },
+    onError: (error) => {
+      const code = error instanceof ApiError ? error.code : undefined
+      toast.error("Could not connect that token", {
+        description:
+          (code && INSTAGRAM_ERRORS[code]) ||
+          (error instanceof Error ? error.message : "Something went wrong."),
+      })
+    },
+  })
+
   const data = status.data
   const unknown = status.isLoading && !data
   const accounts = data?.accounts ?? []
   const canConnect = !!data?.app_configured && !!data?.public_base_url_set
   const secretsMissing = data ? !data.secrets_ready : false
+
+  // Open by default when the OAuth button cannot be used, or when there is
+  // nothing connected yet - those are the two cases pasting exists for. `null`
+  // means nobody has touched the toggle, so the default still applies; the
+  // moment it is clicked, the choice sticks.
+  const [pasteOpen, setPasteOpen] = React.useState<boolean | null>(null)
+  const showPaste = pasteOpen ?? (!canConnect || accounts.length === 0)
 
   return (
     <Section
@@ -647,8 +702,8 @@ function InstagramSection() {
           }}
         >
           {!data?.app_configured
-            ? "This console has no Meta app credentials. Set IG_APP_ID and IG_APP_SECRET on the server, then restart."
-            : "PUBLIC_BASE_URL is not set, so there is no redirect URI to hand Instagram. Set it to this service's public URL and allowlist the callback in the Meta app."}
+            ? "This console has no Meta app credentials, so the Connect button cannot open Instagram's login page. Set IG_APP_ID and IG_APP_SECRET on the server and restart - or paste an access token below, which needs neither."
+            : "PUBLIC_BASE_URL is not set, so there is no redirect URI to hand Instagram. Set it to this service's public URL and allowlist the callback in the Meta app - or paste an access token below, which needs neither."}
         </p>
       )}
 
@@ -717,7 +772,7 @@ function InstagramSection() {
       )}
 
       {!unknown && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {accounts.length === 0 && (
             <ol className="space-y-1.5 text-sm text-[var(--muted-foreground)]">
               <li>
@@ -731,17 +786,94 @@ function InstagramSection() {
               <li>3. Approve the permissions Instagram asks about.</li>
             </ol>
           )}
-          <Button
-            variant="brand"
-            disabled={!canConnect || secretsMissing}
-            onClick={() => {
-              // A full navigation, not fetch: this is an OAuth redirect.
-              window.location.href = "/api/settings/instagram/authorize"
-            }}
-          >
-            <Instagram />{" "}
-            {accounts.length === 0 ? "Connect Instagram" : "Connect another"}
-          </Button>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="brand"
+              disabled={!canConnect || secretsMissing}
+              onClick={() => {
+                // A full navigation, not fetch: this is an OAuth redirect.
+                window.location.href = "/api/settings/instagram/authorize"
+              }}
+            >
+              <Instagram />{" "}
+              {accounts.length === 0 ? "Connect Instagram" : "Connect another"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPasteOpen(!showPaste)}
+            >
+              {showPaste ? <ChevronDown /> : <ChevronRight />}
+              Paste an access token
+            </Button>
+          </div>
+
+          {/*
+            The second door, and the only one open on a console with no Meta
+            app or no public URL: pasting a token generated in the Meta
+            dashboard. The account is still identified by asking Instagram, so
+            a wrong token is refused here rather than at publish time.
+          */}
+          {showPaste && (
+            <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border)] p-3">
+              <p className="text-sm text-[var(--muted-foreground)]">
+                In the{" "}
+                <a
+                  className="text-[var(--link)] hover:underline"
+                  href="https://developers.facebook.com/apps/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Meta app dashboard <ExternalLink className="inline size-3" />
+                </a>
+                , open Instagram → API setup with Instagram login, and press
+                Generate token on the account you want. Paste it here. The
+                handle, name and picture are read from the token, so there is
+                nothing else to fill in.
+              </p>
+
+              <Input
+                value={pastedToken}
+                onChange={(event) => setPastedToken(event.target.value)}
+                placeholder="IGAAWwgws..."
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full font-mono"
+                aria-label="Instagram access token"
+              />
+
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  value={pastedId}
+                  onChange={(event) => setPastedId(event.target.value)}
+                  placeholder="Instagram user id (optional)"
+                  autoComplete="off"
+                  spellCheck={false}
+                  inputMode="numeric"
+                  className="min-w-0 flex-1 font-mono"
+                  aria-label="Instagram user id"
+                />
+                <Button
+                  variant="brand"
+                  disabled={
+                    !pastedToken.trim() || paste.isPending || secretsMissing
+                  }
+                  onClick={() => paste.mutate()}
+                >
+                  <KeyRound />{" "}
+                  {paste.isPending ? "Connecting..." : "Connect account"}
+                </Button>
+              </div>
+
+              <p className="text-xs text-[var(--muted-foreground)]">
+                The id is only needed for a token generated through Facebook
+                login, which cannot say which account it is for. With an
+                Instagram login token it acts as a check: if the token turns
+                out to belong to a different account, nothing is saved.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </Section>
