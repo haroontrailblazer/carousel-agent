@@ -4,11 +4,16 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleUserRound,
   ExternalLink,
   Instagram,
   KeyRound,
   Moon,
+  Palette,
+  Radio,
   Send,
+  Settings2,
+  ShieldCheck,
   Sun,
   Trash2,
   Unplug,
@@ -76,21 +81,37 @@ type TelegramStatus = {
 }
 
 function Section({
+  id,
+  icon: Icon,
+  eyebrow,
   title,
   description,
   children,
 }: {
+  id: string
+  icon: React.ComponentType<{ className?: string }>
+  eyebrow: string
   title: string
   description: string
   children: React.ReactNode
 }) {
   return (
-    <Card className="p-5">
-      <div className="mb-4">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="mt-1 text-sm text-[var(--muted-foreground)]">{description}</p>
+    <Card id={id} className="scroll-mt-6 overflow-hidden">
+      <div className="flex gap-3 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_46%,transparent)] px-5 py-4 sm:px-6">
+        <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] shadow-sm">
+          <Icon className="size-[18px]" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+            {eyebrow}
+          </p>
+          <h2 className="mt-0.5 text-base font-semibold tracking-tight">{title}</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-5 text-[var(--muted-foreground)]">
+            {description}
+          </p>
+        </div>
       </div>
-      {children}
+      <div className="p-5 sm:p-6">{children}</div>
     </Card>
   )
 }
@@ -198,23 +219,32 @@ function IdentitySection() {
 
   return (
     <Section
-      title="You"
-      description="How you appear in the console, and against the verdicts you record."
+      id="account"
+      icon={CircleUserRound}
+      eyebrow="Account"
+      title="Profile details"
+      description="Your name and picture identify you across the workspace and on review decisions."
     >
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="space-y-2">
+      <div className="grid gap-6 sm:grid-cols-[9.5rem_minmax(0,1fr)]">
+        <div className="flex flex-col items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)] px-4 py-5 text-center">
           <UserAvatar
             key={shown ?? "none"}
             src={shown}
             name={name || profile.displayName}
             seed={profile.email}
-            className="size-16 text-xl"
+            className="size-20 text-2xl shadow-sm ring-4 ring-[var(--card)]"
           />
+          <p className="mt-3 max-w-full truncate text-sm font-semibold">
+            {name || profile.displayName}
+          </p>
+          <p className="mt-0.5 max-w-full truncate text-[11px] text-[var(--muted-foreground)]">
+            {profile.email}
+          </p>
         </div>
 
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="space-y-1.5">
-            <label htmlFor="display-name" className="block text-xs font-medium">
+        <div className="min-w-0 space-y-5">
+          <div className="space-y-2">
+            <label htmlFor="display-name" className="block text-sm font-medium">
               Display name
             </label>
             <Input
@@ -226,10 +256,13 @@ function IdentitySection() {
                 setName(event.target.value)
               }}
             />
+            <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+              Shown in the console and beside verdicts you record.
+            </p>
           </div>
 
-          <div className="space-y-1.5">
-            <span className="block text-xs font-medium">Picture</span>
+          <div className="space-y-2 border-t border-[var(--border)] pt-4">
+            <span className="block text-sm font-medium">Profile picture</span>
             <div className="flex flex-wrap gap-2">
               <input
                 ref={fileInput}
@@ -240,7 +273,7 @@ function IdentitySection() {
               />
               <Button
                 size="sm"
-                variant="ghost"
+                variant="default"
                 disabled={uploading}
                 onClick={() => fileInput.current?.click()}
               >
@@ -257,25 +290,22 @@ function IdentitySection() {
                 </Button>
               )}
             </div>
-            <p className="text-[11px] leading-4 text-[var(--muted-foreground)]">
-              Resized and compressed in your browser before it is sent, so a
-              camera photo does not become a multi-megabyte upload. With no
-              picture set, one is generated from your email.
+            <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+              Images are resized in your browser before upload. If you remove
+              yours, we’ll generate an avatar from your email.
             </p>
           </div>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className="mt-6 flex items-center justify-end border-t border-[var(--border)] pt-5">
         <Button
           variant="brand"
-          size="sm"
           onClick={() => void onSaveName()}
-          disabled={busy}
+          disabled={busy || !dirty}
         >
-          {busy ? "Saving..." : "Save"}
+          <Check /> {busy ? "Saving..." : "Save changes"}
         </Button>
-        <span className="text-xs text-[var(--muted-foreground)]">{profile.email}</span>
       </div>
     </Section>
   )
@@ -290,10 +320,13 @@ function AppearanceSection() {
   ]
   return (
     <Section
+      id="appearance"
+      icon={Palette}
+      eyebrow="Preferences"
       title="Appearance"
-      description="Applies to this browser and is remembered on this device."
+      description="Choose how the console looks on this device. Your selection is remembered in this browser."
     >
-      <div className="flex gap-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         {options.map(({ value, label, icon: Icon }) => {
           const active = dark === value
           return (
@@ -303,15 +336,41 @@ function AppearanceSection() {
               onClick={() => setDark(value)}
               aria-pressed={active}
               className={
-                "flex flex-1 items-center gap-2.5 rounded-[var(--radius-md)] border-2 px-3 py-2.5 text-sm transition-colors " +
+                "group overflow-hidden rounded-[var(--radius)] border-2 text-left transition-[border-color,background-color] " +
                 (active
                   ? "border-[var(--brand)] bg-[var(--brand-soft)]"
-                  : "border-[var(--border)] hover:bg-[var(--muted)]")
+                  : "border-[var(--border)] hover:border-[color-mix(in_oklch,var(--foreground)_25%,var(--border))]")
               }
             >
-              <Icon className="size-4 shrink-0" />
-              <span className="font-medium">{label}</span>
-              {active && <Check className="ml-auto size-4" />}
+              <span
+                className={
+                  "block h-24 border-b p-3 " +
+                  (value
+                    ? "border-[#33382f] bg-[#151813]"
+                    : "border-[#deddd5] bg-[#f7f7f5]")
+                }
+                aria-hidden="true"
+              >
+                <span className={"block h-full rounded-lg border p-2 " + (value ? "border-[#343a30] bg-[#1f241b]" : "border-[#deddd5] bg-white")}>
+                  <span className={"mb-2 block h-2 w-10 rounded-full " + (value ? "bg-[#4b5345]" : "bg-[#deddd5]")} />
+                  <span className="grid grid-cols-[1.4rem_1fr] gap-2">
+                    <span className={"block h-10 rounded " + (value ? "bg-[#2a3025]" : "bg-[#f2f1ec]")} />
+                    <span className="space-y-1.5 pt-1">
+                      <span className={"block h-1.5 w-3/4 rounded-full " + (value ? "bg-[#79816f]" : "bg-[#b7b7af]")} />
+                      <span className="block h-1.5 w-1/2 rounded-full bg-[var(--brand)]" />
+                    </span>
+                  </span>
+                </span>
+              </span>
+              <span className="flex items-center gap-2.5 px-3 py-3 text-sm">
+                <Icon className="size-4 shrink-0" />
+                <span className="font-medium">{label}</span>
+                {active && (
+                  <span className="ml-auto grid size-5 place-items-center rounded-full bg-[var(--brand)] text-[var(--brand-foreground)]">
+                    <Check className="size-3.5" />
+                  </span>
+                )}
+              </span>
             </button>
           )
         })}
@@ -395,8 +454,11 @@ function TelegramSection() {
 
   return (
     <Section
+      id="notifications"
+      icon={Radio}
+      eyebrow="Delivery"
       title="Telegram"
-      description="Where carousel reviews are announced. The message carries the slides and a button that opens the review screen."
+      description="Send review-ready carousels to your Telegram chat with a direct link back to the decision screen."
     >
       {unknown && (
         <div className="space-y-3">
@@ -668,8 +730,11 @@ function InstagramSection() {
 
   return (
     <Section
+      id="publishing"
+      icon={Instagram}
+      eyebrow="Publishing"
       title="Instagram"
-      description="Where carousels are published. The account's handle and profile picture are part of the artwork, so each run is generated for one of them."
+      description="Connect the accounts you publish to. Each carousel is generated with the selected account’s handle and picture."
     >
       {unknown && (
         <div className="space-y-3">
@@ -881,13 +946,106 @@ function InstagramSection() {
 }
 
 export function ProfileRoute() {
+  const { profile } = useProfile()
+
+  const sections = [
+    { href: "#account", label: "Account", detail: "Name and picture", icon: CircleUserRound },
+    { href: "#appearance", label: "Appearance", detail: "Light or dark", icon: Palette },
+    { href: "#publishing", label: "Publishing", detail: "Instagram accounts", icon: Instagram },
+    { href: "#notifications", label: "Delivery", detail: "Telegram reviews", icon: Radio },
+  ]
+
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      <h1 className="text-xl font-semibold tracking-tight">Profile</h1>
-      <IdentitySection />
-      <AppearanceSection />
-      <InstagramSection />
-      <TelegramSection />
+    <div className="mx-auto max-w-5xl">
+      <header className="relative overflow-hidden rounded-[calc(var(--radius)+0.25rem)] border border-[var(--border)] bg-[var(--card)] px-5 py-6 shadow-[var(--shadow-card)] sm:px-7 sm:py-7">
+        <div
+          className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full opacity-60 blur-3xl"
+          style={{ background: "var(--brand-soft)" }}
+          aria-hidden="true"
+        />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+              <Settings2 className="size-3.5" /> Workspace preferences
+            </div>
+            <h1 className="text-2xl font-semibold tracking-[-0.025em] sm:text-[1.75rem]">
+              Account &amp; settings
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)] sm:text-[15px]">
+              Manage how you appear, where your carousels are published, and
+              where review requests reach you.
+            </p>
+          </div>
+
+          <div className="flex min-w-0 items-center gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_86%,transparent)] p-3 backdrop-blur-sm sm:max-w-[17rem]">
+            <UserAvatar
+              key={profile.avatarUrl ?? "none"}
+              src={profile.avatarUrl}
+              name={profile.displayName}
+              seed={profile.email}
+              className="size-11 shrink-0 text-sm"
+            />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">
+                {profile.displayName}
+              </span>
+              <span className="block truncate text-xs text-[var(--muted-foreground)]">
+                {profile.email}
+              </span>
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-8">
+          <nav
+            aria-label="Settings sections"
+            className="grid grid-cols-2 gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-2 shadow-[var(--shadow-card)] sm:grid-cols-4 lg:grid-cols-1"
+          >
+            {sections.map(({ href, label, detail, icon: Icon }) => (
+              <a
+                key={href}
+                href={href}
+                onClick={(event) => {
+                  event.preventDefault()
+                  document
+                    .getElementById(href.slice(1))
+                    ?.scrollIntoView({ block: "start" })
+                  window.history.replaceState(
+                    {},
+                    "",
+                    window.location.pathname + href,
+                  )
+                }}
+                className="group flex min-w-0 items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2.5 transition-colors hover:bg-[var(--muted)]"
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--border)] bg-[var(--background)] transition-colors group-hover:bg-[var(--card)]">
+                  <Icon className="size-3.5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{label}</span>
+                  <span className="hidden truncate text-[11px] text-[var(--muted-foreground)] sm:block">
+                    {detail}
+                  </span>
+                </span>
+              </a>
+            ))}
+          </nav>
+
+          <div className="mt-3 hidden items-start gap-2.5 px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)] lg:flex">
+            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--phase-qa)]" />
+            Credentials are encrypted before they’re stored.
+          </div>
+        </aside>
+
+        <div className="min-w-0 space-y-6">
+          <IdentitySection />
+          <AppearanceSection />
+          <InstagramSection />
+          <TelegramSection />
+        </div>
+      </div>
     </div>
   )
 }
