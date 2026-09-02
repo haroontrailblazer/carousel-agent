@@ -1,6 +1,7 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  Cable,
   Check,
   ChevronDown,
   ChevronRight,
@@ -12,8 +13,6 @@ import {
   Palette,
   Radio,
   Send,
-  Settings2,
-  ShieldCheck,
   Sun,
   Trash2,
   Unplug,
@@ -23,10 +22,17 @@ import { toast } from "sonner"
 
 import { UserAvatar } from "@/components/layout/user-avatar"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Chip, MutedChip } from "@/components/ui/chip"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { TabPanel, Tabs } from "@/components/ui/tabs"
 import { useProfile } from "@/hooks/use-profile"
 import { useTheme } from "@/hooks/use-theme"
 import { ApiError, del, get, post, postBytes } from "@/lib/api"
@@ -81,37 +87,32 @@ type TelegramStatus = {
 }
 
 function Section({
-  id,
   icon: Icon,
-  eyebrow,
   title,
   description,
   children,
 }: {
-  id: string
   icon: React.ComponentType<{ className?: string }>
-  eyebrow: string
   title: string
   description: string
   children: React.ReactNode
 }) {
   return (
-    <Card id={id} className="scroll-mt-6 overflow-hidden">
-      <div className="flex gap-3 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_46%,transparent)] px-5 py-4 sm:px-6">
-        <span className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] shadow-sm">
-          <Icon className="size-[18px]" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-            {eyebrow}
-          </p>
-          <h2 className="mt-0.5 text-base font-semibold tracking-tight">{title}</h2>
-          <p className="mt-1 max-w-2xl text-sm leading-5 text-[var(--muted-foreground)]">
-            {description}
-          </p>
+    <Card>
+      <CardHeader className="border-b border-[var(--border)]">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)] bg-[var(--muted)]">
+            <Icon className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <CardTitle>{title}</CardTitle>
+            <CardDescription className="mt-1 leading-5">
+              {description}
+            </CardDescription>
+          </div>
         </div>
-      </div>
-      <div className="p-5 sm:p-6">{children}</div>
+      </CardHeader>
+      <CardContent className="pt-5">{children}</CardContent>
     </Card>
   )
 }
@@ -219,30 +220,57 @@ function IdentitySection() {
 
   return (
     <Section
-      id="account"
       icon={CircleUserRound}
-      eyebrow="Account"
-      title="Profile details"
-      description="Your name and picture identify you across the workspace and on review decisions."
+      title="Profile"
+      description="Manage the details people see across the workspace."
     >
-      <div className="grid gap-6 sm:grid-cols-[9.5rem_minmax(0,1fr)]">
-        <div className="flex flex-col items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)] px-4 py-5 text-center">
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center gap-4">
           <UserAvatar
             key={shown ?? "none"}
             src={shown}
             name={name || profile.displayName}
             seed={profile.email}
-            className="size-20 text-2xl shadow-sm ring-4 ring-[var(--card)]"
+            className="size-16 shrink-0 text-xl"
           />
-          <p className="mt-3 max-w-full truncate text-sm font-semibold">
-            {name || profile.displayName}
-          </p>
-          <p className="mt-0.5 max-w-full truncate text-[11px] text-[var(--muted-foreground)]">
-            {profile.email}
-          </p>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">Profile picture</p>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+              JPG, PNG, or WebP. Images are resized before upload.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => void onPick(event)}
+              />
+              <Button
+                className="mt-2"
+                size="sm"
+                variant="default"
+                disabled={uploading}
+                onClick={() => fileInput.current?.click()}
+              >
+                <Upload /> {uploading ? "Working..." : "Upload"}
+              </Button>
+              {shown && (
+                <Button
+                  className="mt-2"
+                  size="sm"
+                  variant="ghost"
+                  disabled={uploading}
+                  onClick={() => void onRemove()}
+                >
+                  <Trash2 /> Remove
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="min-w-0 space-y-5">
+        <div className="grid gap-4 border-t border-[var(--border)] pt-5 sm:grid-cols-2">
           <div className="space-y-2">
             <label htmlFor="display-name" className="block text-sm font-medium">
               Display name
@@ -256,56 +284,31 @@ function IdentitySection() {
                 setName(event.target.value)
               }}
             />
-            <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-              Shown in the console and beside verdicts you record.
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Shown beside your review decisions.
             </p>
           </div>
 
-          <div className="space-y-2 border-t border-[var(--border)] pt-4">
-            <span className="block text-sm font-medium">Profile picture</span>
-            <div className="flex flex-wrap gap-2">
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => void onPick(event)}
-              />
-              <Button
-                size="sm"
-                variant="default"
-                disabled={uploading}
-                onClick={() => fileInput.current?.click()}
-              >
-                <Upload /> {uploading ? "Working..." : "Upload"}
-              </Button>
-              {shown && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={uploading}
-                  onClick={() => void onRemove()}
-                >
-                  <Trash2 /> Remove
-                </Button>
-              )}
-            </div>
-            <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-              Images are resized in your browser before upload. If you remove
-              yours, we’ll generate an avatar from your email.
+          <div className="space-y-2">
+            <label htmlFor="account-email" className="block text-sm font-medium">
+              Email address
+            </label>
+            <Input id="account-email" value={profile.email} disabled readOnly />
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Managed by your sign-in provider.
             </p>
           </div>
         </div>
-      </div>
 
-      <div className="mt-6 flex items-center justify-end border-t border-[var(--border)] pt-5">
-        <Button
-          variant="brand"
-          onClick={() => void onSaveName()}
-          disabled={busy || !dirty}
-        >
-          <Check /> {busy ? "Saving..." : "Save changes"}
-        </Button>
+        <div className="flex justify-end border-t border-[var(--border)] pt-5">
+          <Button
+            variant="brand"
+            onClick={() => void onSaveName()}
+            disabled={busy || !dirty}
+          >
+            {busy ? "Saving..." : "Save changes"}
+          </Button>
+        </div>
       </div>
     </Section>
   )
@@ -320,11 +323,9 @@ function AppearanceSection() {
   ]
   return (
     <Section
-      id="appearance"
       icon={Palette}
-      eyebrow="Preferences"
       title="Appearance"
-      description="Choose how the console looks on this device. Your selection is remembered in this browser."
+      description="Choose the theme used on this device."
     >
       <div className="grid gap-3 sm:grid-cols-2">
         {options.map(({ value, label, icon: Icon }) => {
@@ -336,40 +337,30 @@ function AppearanceSection() {
               onClick={() => setDark(value)}
               aria-pressed={active}
               className={
-                "group overflow-hidden rounded-[var(--radius)] border-2 text-left transition-[border-color,background-color] " +
+                "flex items-center gap-3 rounded-[var(--radius-md)] border p-4 text-left transition-colors " +
                 (active
-                  ? "border-[var(--brand)] bg-[var(--brand-soft)]"
-                  : "border-[var(--border)] hover:border-[color-mix(in_oklch,var(--foreground)_25%,var(--border))]")
+                  ? "border-[var(--foreground)] bg-[var(--muted)]"
+                  : "border-[var(--border)] hover:bg-[var(--muted)]")
               }
             >
-              <span
-                className={
-                  "block h-24 border-b p-3 " +
-                  (value
-                    ? "border-[#33382f] bg-[#151813]"
-                    : "border-[#deddd5] bg-[#f7f7f5]")
-                }
-                aria-hidden="true"
-              >
-                <span className={"block h-full rounded-lg border p-2 " + (value ? "border-[#343a30] bg-[#1f241b]" : "border-[#deddd5] bg-white")}>
-                  <span className={"mb-2 block h-2 w-10 rounded-full " + (value ? "bg-[#4b5345]" : "bg-[#deddd5]")} />
-                  <span className="grid grid-cols-[1.4rem_1fr] gap-2">
-                    <span className={"block h-10 rounded " + (value ? "bg-[#2a3025]" : "bg-[#f2f1ec]")} />
-                    <span className="space-y-1.5 pt-1">
-                      <span className={"block h-1.5 w-3/4 rounded-full " + (value ? "bg-[#79816f]" : "bg-[#b7b7af]")} />
-                      <span className="block h-1.5 w-1/2 rounded-full bg-[var(--brand)]" />
-                    </span>
-                  </span>
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--background)]">
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">{label}</span>
+                <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
+                  {value ? "Low-light interface" : "Bright, paper-like interface"}
                 </span>
               </span>
-              <span className="flex items-center gap-2.5 px-3 py-3 text-sm">
-                <Icon className="size-4 shrink-0" />
-                <span className="font-medium">{label}</span>
-                {active && (
-                  <span className="ml-auto grid size-5 place-items-center rounded-full bg-[var(--brand)] text-[var(--brand-foreground)]">
-                    <Check className="size-3.5" />
-                  </span>
-                )}
+              <span
+                className={
+                  "grid size-4 shrink-0 place-items-center rounded-full border " +
+                  (active
+                    ? "border-[var(--foreground)]"
+                    : "border-[var(--muted-foreground)]")
+                }
+              >
+                {active && <span className="size-2 rounded-full bg-[var(--foreground)]" />}
               </span>
             </button>
           )
@@ -454,11 +445,9 @@ function TelegramSection() {
 
   return (
     <Section
-      id="notifications"
       icon={Radio}
-      eyebrow="Delivery"
       title="Telegram"
-      description="Send review-ready carousels to your Telegram chat with a direct link back to the decision screen."
+      description="Send review-ready carousels to your Telegram chat."
     >
       {unknown && (
         <div className="space-y-3">
@@ -730,11 +719,9 @@ function InstagramSection() {
 
   return (
     <Section
-      id="publishing"
       icon={Instagram}
-      eyebrow="Publishing"
       title="Instagram"
-      description="Connect the accounts you publish to. Each carousel is generated with the selected account’s handle and picture."
+      description="Connect the accounts you use to publish carousels."
     >
       {unknown && (
         <div className="space-y-3">
@@ -946,106 +933,67 @@ function InstagramSection() {
 }
 
 export function ProfileRoute() {
-  const { profile } = useProfile()
+  type SettingsView = "account" | "appearance" | "connections"
+  const [view, setView] = React.useState<SettingsView>(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.has("instagram") || params.has("instagram_error")
+      ? "connections"
+      : "account"
+  })
 
-  const sections = [
-    { href: "#account", label: "Account", detail: "Name and picture", icon: CircleUserRound },
-    { href: "#appearance", label: "Appearance", detail: "Light or dark", icon: Palette },
-    { href: "#publishing", label: "Publishing", detail: "Instagram accounts", icon: Instagram },
-    { href: "#notifications", label: "Delivery", detail: "Telegram reviews", icon: Radio },
+  const views = [
+    {
+      value: "account" as const,
+      label: "Account",
+      icon: <CircleUserRound />,
+    },
+    {
+      value: "appearance" as const,
+      label: "Appearance",
+      icon: <Palette />,
+    },
+    {
+      value: "connections" as const,
+      label: "Connections",
+      icon: <Cable />,
+    },
   ]
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <header className="relative overflow-hidden rounded-[calc(var(--radius)+0.25rem)] border border-[var(--border)] bg-[var(--card)] px-5 py-6 shadow-[var(--shadow-card)] sm:px-7 sm:py-7">
-        <div
-          className="pointer-events-none absolute -right-20 -top-28 size-72 rounded-full opacity-60 blur-3xl"
-          style={{ background: "var(--brand-soft)" }}
-          aria-hidden="true"
-        />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="max-w-2xl">
-            <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-              <Settings2 className="size-3.5" /> Workspace preferences
-            </div>
-            <h1 className="text-2xl font-semibold tracking-[-0.025em] sm:text-[1.75rem]">
-              Account &amp; settings
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)] sm:text-[15px]">
-              Manage how you appear, where your carousels are published, and
-              where review requests reach you.
-            </p>
-          </div>
-
-          <div className="flex min-w-0 items-center gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_86%,transparent)] p-3 backdrop-blur-sm sm:max-w-[17rem]">
-            <UserAvatar
-              key={profile.avatarUrl ?? "none"}
-              src={profile.avatarUrl}
-              name={profile.displayName}
-              seed={profile.email}
-              className="size-11 shrink-0 text-sm"
-            />
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold">
-                {profile.displayName}
-              </span>
-              <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                {profile.email}
-              </span>
-            </span>
-          </div>
-        </div>
+    <div className="mx-auto max-w-3xl">
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Account &amp; settings
+        </h1>
+        <p className="mt-1.5 text-sm text-[var(--muted-foreground)]">
+          Manage your profile, preferences, and connected accounts.
+        </p>
       </header>
 
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[13.5rem_minmax(0,1fr)]">
-        <aside className="lg:sticky lg:top-8">
-          <nav
-            aria-label="Settings sections"
-            className="grid grid-cols-2 gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-2 shadow-[var(--shadow-card)] sm:grid-cols-4 lg:grid-cols-1"
-          >
-            {sections.map(({ href, label, detail, icon: Icon }) => (
-              <a
-                key={href}
-                href={href}
-                onClick={(event) => {
-                  event.preventDefault()
-                  document
-                    .getElementById(href.slice(1))
-                    ?.scrollIntoView({ block: "start" })
-                  window.history.replaceState(
-                    {},
-                    "",
-                    window.location.pathname + href,
-                  )
-                }}
-                className="group flex min-w-0 items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2.5 transition-colors hover:bg-[var(--muted)]"
-              >
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-[var(--border)] bg-[var(--background)] transition-colors group-hover:bg-[var(--card)]">
-                  <Icon className="size-3.5" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{label}</span>
-                  <span className="hidden truncate text-[11px] text-[var(--muted-foreground)] sm:block">
-                    {detail}
-                  </span>
-                </span>
-              </a>
-            ))}
-          </nav>
+      <Tabs
+        items={views}
+        value={view}
+        onChange={setView}
+        label="Settings views"
+        className="mb-6 w-full justify-between [&_[role=tab]]:px-3 [&_[role=tab]]:text-xs sm:w-auto sm:[&_[role=tab]]:px-4 sm:[&_[role=tab]]:text-sm"
+      />
 
-          <div className="mt-3 hidden items-start gap-2.5 px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)] lg:flex">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--phase-qa)]" />
-            Credentials are encrypted before they’re stored.
-          </div>
-        </aside>
+      <TabPanel value="account" selected={view === "account"}>
+        <IdentitySection />
+      </TabPanel>
 
-        <div className="min-w-0 space-y-6">
-          <IdentitySection />
-          <AppearanceSection />
+      <TabPanel value="appearance" selected={view === "appearance"}>
+        <AppearanceSection />
+      </TabPanel>
+
+      <TabPanel
+        value="connections"
+        selected={view === "connections"}
+        className="space-y-5"
+      >
           <InstagramSection />
           <TelegramSection />
-        </div>
-      </div>
+      </TabPanel>
     </div>
   )
 }
