@@ -1,14 +1,16 @@
 # Carousel Factory — Studio identity
 
-The mark combines two offset slide frames into a C, with a forward swipe at its centre. It represents carousel creation and the handoff between agents. The application name remains Carousel Factory.
+The application mark is the New Carousel hero sculpture: layered porcelain, glass, and metal cards with an orange orbit. The same artwork identifies the app in navigation, authentication screens, loading states, and browser tabs. The application name remains Carousel Factory.
 
 ## Assets
 
-- `../public/logo.svg`: primary vector mark, used in the app and as its favicon. Scales without raster blur; 64 × 64 viewBox.
-- `mark-monochrome.svg`: single-colour version for print or restrained applications. Set `color` when embedding inline; black by default.
-- The former WebP artwork is retained as an archive, but is no longer used by the UI.
+- Original brand source: 3d/carousel-sculpture.png.
+- Shared in-app mark: ../public/illustrations/carousel-sculpture-160.webp. The design editor uses it for sample branding; the hero retains its responsive 320px and 640px exports.
+- Browser icons: ../public/favicon-16.png and ../public/favicon-32.png, transparent exports of the same artwork.
+- Mobile bookmark icon: ../public/apple-touch-icon.png (180px).
+- The previous logo.svg, mark-monochrome.svg, and former WebP artwork are legacy assets, no longer used by the UI.
 
-Use the mark at 24px or larger in the interface. The favicon may use 16px. Leave at least a quarter of the mark's width clear on each side. Keep the original aspect ratio and colours.
+Use the mark at 32px or larger in the interface. The favicon may use 16px. Keep the complete sculpture, transparent background, original aspect ratio, and colours.
 
 ## Palette
 
@@ -24,7 +26,7 @@ Use the mark at 24px or larger in the interface. The favicon may use 16px. Leave
 | Selected surface | 9% logo orange on ivory | 10% logo orange on black |
 | Divider | `#DEDAD2` | `#292929` |
 
-The logo tile, primary button fills, accent text, links, and focus rings use exactly #C74726 in both themes. The --logo-orange token is the shared UI source. Button hover and press feedback use depth instead of a different orange or a white sheen. Soft backgrounds and shadows derive from this same orange. Untouched starter designs and palette actions match the logo; saved custom design colors remain editable. Status colours are separate: blue for generation, green for checks and completion, amber for review, and red for failures. Always pair semantic text with its matching soft-surface token.
+Primary button fills, accent text, links, and focus rings use the sculpture palette's signature orange #C74726 in both themes. The --logo-orange token is the shared UI source. Button hover and press feedback use depth instead of a different orange or a white sheen. Soft backgrounds and shadows derive from this same orange. Untouched starter designs and palette actions match the logo; saved custom design colors remain editable. Status colours are separate: blue for generation, green for checks and completion, amber for review, and red for failures. Always pair semantic text with its matching soft-surface token.
 
 ## Typography and interface
 

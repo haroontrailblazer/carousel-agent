@@ -164,7 +164,7 @@ export function NewsroomRoute() {
   const items = queue.data?.items ?? []
 
   return (
-    <div className="newsroom space-y-5">
+    <div className="newsroom">
       <div className="studio-page-heading flex flex-wrap items-center justify-between gap-3">
         <StudioEmblem name="research-lens" />
         <div className="min-w-0 flex-1">
@@ -192,7 +192,7 @@ export function NewsroomRoute() {
       </div>
 
       {queue.isLoading && <div className="news-story-grid" role="status" aria-label="Loading stories">
-        {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-96" />)}
+        {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="news-story-skeleton" />)}
       </div>}
       {queue.isError && <Card className="p-5" role="alert">
         <p className="font-medium">Couldn't refresh your stories</p>
@@ -237,11 +237,11 @@ export function NewsroomRoute() {
                 <div className="news-story-actions">
                   <Button variant="brand" size="sm" onClick={() => start.mutate(item.id)} disabled={start.isPending || remove.isPending}>
                     {busy ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                    {busy ? "Creating…" : "Create carousel"}
+                    {busy ? "Creatingâ€¦" : "Create carousel"}
                   </Button>
                   <Button variant="ghost" size="sm" className="news-story-delete" onClick={() => remove.mutate(item.id)} disabled={start.isPending || remove.isPending}>
                     {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                    {deleting ? "Deleting…" : "Delete"}
+                    {deleting ? "Deletingâ€¦" : "Delete"}
                   </Button>
                 </div>
               </div>

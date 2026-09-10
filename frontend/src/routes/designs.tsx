@@ -261,7 +261,7 @@ function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = f
         <div>{title[0]}<br /><span style={{ color: slide.highlightTextColor }}>{title[1]}</span></div>
         {surface === "inside" && <p style={{ fontSize: "3.33cqw" }}>{copy?.body ?? "One clear idea. A little curiosity. Something worth sharing."}</p>}
       </div>, slide.titleSize, [44, 160])}
-      {design.logoVisible && slide.logoVisible && object("logo", <img className="simple-slide-logo" src={design.logoDataUrl || "/logo.svg"} alt={design.logoDataUrl ? "Your design logo" : "Sample brand logo"} draggable={false} />, design.logoSize, [24, 120])}
+      {design.logoVisible && slide.logoVisible && object("logo", <img className="simple-slide-logo" src={design.logoDataUrl || "/illustrations/carousel-sculpture-160.webp"} alt={design.logoDataUrl ? "Your design logo" : "Sample brand logo"} draggable={false} />, design.logoSize, [24, 120])}
       {design.handleVisible && slide.handleVisible && object("handle", <span className="design-canvas-handle" style={{ fontSize: (design.handleSize / 10.8) + "cqw" }}>{design.handleText || "@yourhandle"}</span>, design.handleSize, [16, 64])}
     </div>
   </div>

@@ -16,11 +16,10 @@
          a light phone would get a white bar above a dark page. One tag, set
          from the theme actually in use, cannot disagree with the screen. -->
     <meta name="theme-color" content="#F6F4F0" />
-    <!-- The brand mark is one file, used for the tab icon and for every
-         in-app logo (see components/layout/brand-logo.tsx). Same URL both
-         places means the browser fetches it once and serves the sidebar mark
-         from cache. -->
-    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <!-- Size-specific exports of the New Carousel hero sculpture. -->
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <script>
       // Apply the theme before first paint. Without this the page renders in
       // light mode and then snaps to dark, which reads as a broken app. Kept
