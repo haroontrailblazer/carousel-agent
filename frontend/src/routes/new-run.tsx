@@ -118,7 +118,9 @@ export function NewRunRoute() {
   // Omitted chooses the server default; no connected account still allows generation.
   const [accountId, setAccountId] = React.useState<string | undefined>(undefined)
   const [designs] = useCarouselDesigns()
-  const [designId, setDesignId] = React.useState(() => designs.length === 1 ? designs[0].id : "")
+  const [designId, setDesignId] = React.useState(() =>
+    designs.find(design => design.id === params.get("design"))?.id ?? (designs.length === 1 ? designs[0].id : ""),
+  )
 
   React.useEffect(() => {
     if (designId && designs.some((design) => design.id === designId)) return

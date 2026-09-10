@@ -1,45 +1,11 @@
 import * as React from "react"
-import { StudioEmblem } from "@/components/layout/studio-emblem"
-import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
-  Bot,
-  Check,
-  ChevronRight,
-  Cloud,
-  CloudOff,
-  Copy,
-  Eye,
-  EyeOff,
-  Image as ImageIcon,
-  ImageOff,
-  Layers3,
-  LoaderCircle,
-  Lock,
-  MousePointer2,
-  Move,
-  Plus,
-  RotateCcw,
-  Save,
-  Sparkles,
-  Trash2,
-  Unlock,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react"
+import { Link } from "react-router"
+import { AlignCenter, AlignLeft, AlignRight, ArrowRight, Check, Copy, Eye, Image as ImageIcon, Lock, MousePointer2, Plus, RotateCcw, Trash2, Type, Undo2, Unlock } from "lucide-react"
 import { toast } from "sonner"
-
 import { Button } from "@/components/ui/button"
-import {
-  type CarouselDesign,
-  type DesignImageType,
-  type DesignPosition,
-  type ElementTransform,
-  duplicateDesign,
-  newDesign,
-  useCarouselDesigns,
-} from "@/lib/designs"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
+import { type CarouselDesign, type DesignImageType, type DesignPosition, type ElementTransform, duplicateDesign, newDesign, PREBUILT_DESIGNS, useCarouselDesigns } from "@/lib/designs"
+import "./design-editor.css"
 
 type Surface = "cover" | "inside"
 type ElementKind = "title" | "image" | "shadow" | "logo" | "handle"
@@ -47,121 +13,33 @@ type MoveableElementKind = Exclude<ElementKind, "shadow">
 type ResizeHandle = "nw" | "ne" | "sw" | "se"
 
 const IMAGE_TYPES: { value: DesignImageType; label: string }[] = [
-  { value: "editorial", label: "Editorial photo" },
-  { value: "product", label: "Product render" },
-  { value: "illustration", label: "Illustration" },
-  { value: "diagram", label: "Diagram" },
+  { value: "editorial", label: "Photo" }, { value: "product", label: "3D product" },
+  { value: "illustration", label: "Illustration" }, { value: "diagram", label: "Diagram" },
   { value: "none", label: "No image" },
 ]
-
-const ELEMENT_LABELS: Record<ElementKind, string> = {
-  title: "Title",
-  image: "Image",
-  shadow: "Shadow",
-  logo: "Logo",
-  handle: "Instagram handle",
+const ELEMENT_LABELS: Record<ElementKind, string> = { title: "Text", image: "Image", shadow: "Shadow", logo: "Logo", handle: "Handle" }
+const TRANSFORM_KEYS: Record<MoveableElementKind, "titleTransform" | "imageTransform" | "logoTransform" | "handleTransform"> = {
+  title: "titleTransform", image: "imageTransform", logo: "logoTransform", handle: "handleTransform",
 }
-
-const TRANSFORM_KEYS: Record<MoveableElementKind, keyof CarouselDesign["cover"]> = {
-  title: "titleTransform",
-  image: "imageTransform",
-  logo: "logoTransform",
-  handle: "handleTransform",
-}
-
-const TEMPLATE_DESCRIPTIONS: Record<string, string> = {
-  "editorial-signal": "Full-bleed editorial",
-  "minimal-mono": "Clean monochrome",
-  "product-focus": "Product-led",
-  "newsroom-grid": "Modern newsroom",
-  "bold-type": "High-impact type",
-}
-
-function templateBackground(design: CarouselDesign) {
-  if (design.cover.imageType === "none") return design.cover.background
-  if (design.cover.imageType === "product") {
-    return `radial-gradient(circle at 66% 34%, ${design.cover.accentColor}55, transparent 28%), linear-gradient(145deg, ${design.cover.background}, #050605)`
-  }
-  return `linear-gradient(145deg, ${design.cover.background} 8%, #575b52 48%, #12140f 100%)`
-}
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value))
-
+const PALETTES = [
+  { name: "Studio light", background: "#F6F4F0", textColor: "#252420", highlightTextColor: "#C74726", accentColor: "#C74726" },
+  { name: "Studio black", background: "#000000", textColor: "#F6F4F0", highlightTextColor: "#F79270", accentColor: "#F79270" },
+]
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 const round = (value: number) => Math.round(value * 10) / 10
-
 function nearestPosition(transform: ElementTransform): DesignPosition {
-  const centerX = transform.x + transform.width / 2
-  const centerY = transform.y + transform.height / 2
-  const horizontal = centerX < 34 ? "left" : centerX > 66 ? "right" : "center"
-  const vertical = centerY < 34 ? "top" : centerY > 66 ? "bottom" : "middle"
-  return `${vertical}-${horizontal}` as DesignPosition
+  const x = transform.x + transform.width / 2, y = transform.y + transform.height / 2
+  return ((y < 34 ? "top" : y > 66 ? "bottom" : "middle") + "-" + (x < 34 ? "left" : x > 66 ? "right" : "center")) as DesignPosition
 }
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="design-field">
-      <span>{label}</span>
-      {children}
-    </label>
-  )
+  return <label className="design-field"><span>{label}</span>{children}</label>
 }
-
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  suffix = "px",
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  suffix?: string
-  onChange: (value: number) => void
+function RangeField({ label, value, min, max, suffix = "", onChange }: {
+  label: string; value: number; min: number; max: number; suffix?: string; onChange: (value: number) => void
 }) {
-  return (
-    <Field label={label}>
-      <div className="design-number-input">
-        <input
-          type="number"
-          value={round(value)}
-          min={min}
-          max={max}
-          step={suffix === "%" ? 0.5 : 1}
-          onChange={(event) => onChange(clamp(Number(event.target.value), min, max))}
-        />
-        <span>{suffix}</span>
-      </div>
-    </Field>
-  )
+  return <label className="design-range-field"><span><strong>{label}</strong><output>{value}{suffix}</output></span>
+    <input aria-label={label} type="range" value={value} min={min} max={max} onChange={(e) => onChange(Number(e.target.value))} /></label>
 }
-
-function RangeField({
-  label,
-  value,
-  min,
-  max,
-  suffix = "%",
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  suffix?: string
-  onChange: (value: number) => void
-}) {
-  return (
-    <label className="design-range-field">
-      <span><strong>{label}</strong><output>{value}{suffix}</output></span>
-      <input aria-label={label} type="range" value={value} min={min} max={max} onChange={(event) => onChange(Number(event.target.value))} />
-    </label>
-  )
-}
-
 type Interaction = {
   mode: "move" | "resize"
   handle?: ResizeHandle
@@ -202,6 +80,7 @@ function CanvasElement({
     mode: Interaction["mode"],
     handle?: ResizeHandle,
   ) {
+    if (event.button != 0) return
     event.stopPropagation()
     onSelect()
     if (transform.locked) return
@@ -272,6 +151,8 @@ function CanvasElement({
   }
 
   function nudge(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) return
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(); return }
     if (transform.locked) return
     const amount = event.shiftKey ? 2 : 0.5
     const delta = {
@@ -309,6 +190,7 @@ function CanvasElement({
       onPointerUp={finish}
       onPointerCancel={finish}
       onKeyDown={nudge}
+      onFocus={(event) => { if (event.target === event.currentTarget) onSelect() }}
     >
       {children}
       {selected && !transform.locked
@@ -316,6 +198,7 @@ function CanvasElement({
             <button
               key={handle}
               type="button"
+              tabIndex={-1}
               aria-label={`Resize ${ELEMENT_LABELS[kind]} from ${handle}`}
               className={`design-resize-handle design-resize-handle--${handle}`}
               onPointerDown={(event) => begin(event, "resize", handle)}
@@ -332,222 +215,81 @@ function CanvasElement({
   )
 }
 
-function DesignCanvas({
-  design,
-  surface,
-  selectedElement,
-  zoom,
-  onSelectElement,
-  onElementTransform,
-}: {
-  design: CarouselDesign
-  surface: Surface
-  selectedElement: ElementKind | null
-  zoom: number
+
+function DesignCanvas({ design, surface, selectedElement, preview, onSelectElement, onElementTransform }: {
+  design: CarouselDesign; surface: Surface; selectedElement: ElementKind | null; preview: boolean
   onSelectElement: (kind: ElementKind | null) => void
   onElementTransform: (kind: MoveableElementKind, transform: ElementTransform, scalar?: number) => void
 }) {
   const canvasRef = React.useRef<HTMLDivElement>(null)
   const slide = design[surface]
-  const titleFont =
-    slide.fontFamily === "serif"
-      ? "Georgia, serif"
-      : slide.fontFamily === "condensed"
-        ? "Arial Narrow, Arial, sans-serif"
-        : "Arial, sans-serif"
-
-  return (
-    <div
-      ref={canvasRef}
-      className="design-canvas"
-      data-surface={surface}
-      style={{
-        background: slide.background,
-        color: slide.textColor,
-        width: `${31 * (zoom / 100)}rem`,
-      }}
-      onPointerDown={() => onSelectElement(null)}
-    >
-      <div className="design-canvas-safe" style={{ inset: `${(slide.safeMargin / 1080) * 100}%` }}>
-        <span>Safe area · {slide.safeMargin}px</span>
-      </div>
-
-      {slide.imageType !== "none" ? (
-        <CanvasElement
-          kind="image"
-          transform={surface === "cover" ? { ...slide.imageTransform, locked: true } : slide.imageTransform}
-          selected={selectedElement === "image"}
-          canvasRef={canvasRef}
-          scalar={slide.imageScale}
-          scalarRange={[30, 100]}
-          onSelect={() => onSelectElement("image")}
-          onTransform={(transform, scalar) => onElementTransform("image", transform, scalar)}
-          className={`design-image-${slide.imageType} ${surface === "cover" ? "design-canvas-image--cover" : ""}`}
-        >
-          <div className="design-canvas-image-content">
-            {surface === "cover" ? (
-              <>
-                <img
-                  className="design-canvas-cover-preview"
-                  src="/design-cover-preview.svg"
-                  alt="Sample fetched source media, cropped edge to edge across the complete cover"
-                  draggable={false}
-                />
-                <span className="design-canvas-image-kicker"><Lock /> Cover media · locked full-bleed</span>
-                <span className="design-canvas-cover-source"><Sparkles /> Agent clip or poster · fills entire 4:5 cover</span>
-              </>
-            ) : (
-              <>
-                <span className="design-canvas-image-kicker"><Sparkles /> Agent-generated visual</span>
-                <ImageIcon className="design-canvas-image-icon" />
-                <strong>{IMAGE_TYPES.find((item) => item.value === slide.imageType)?.label} goes here</strong>
-                <small>The agent creates and crops the image to this exact movable box.</small>
-              </>
-            )}
-          </div>
-        </CanvasElement>
-      ) : (
-        <button type="button" className="design-canvas-no-image" onClick={() => onSelectElement("image")}>
-          <ImageOff />
-          <span><strong>Text-only slide</strong><small>No generated image will be added.</small></span>
-        </button>
-      )}
-
-      {surface === "cover" && slide.shadowVisible ? (
-        <button
-          type="button"
-          aria-label="Shadow layer"
-          aria-pressed={selectedElement === "shadow"}
-          className="design-canvas-shadow"
-          data-selected={selectedElement === "shadow"}
-          style={{
-            height: `${slide.shadowHeight}%`,
-            opacity: slide.shadowOpacity / 100,
-            background: `linear-gradient(to top, ${slide.shadowColor} 0%, ${slide.shadowColor} ${Math.round(clamp(72 - slide.shadowSoftness * 0.45, 18, 62))}%, transparent 100%)`,
-          }}
-          onPointerDown={(event) => { event.stopPropagation(); onSelectElement("shadow") }}
-        >
-          <span>Bottom shadow · separate layer</span>
-        </button>
-      ) : null}
-
-      <CanvasElement
-        kind="title"
-        transform={slide.titleTransform}
-        selected={selectedElement === "title"}
-        canvasRef={canvasRef}
-        scalar={slide.titleSize}
-        scalarRange={[44, 160]}
-        onSelect={() => onSelectElement("title")}
-        onTransform={(transform, scalar) => onElementTransform("title", transform, scalar)}
-      >
-        <div
-          className="design-canvas-title-content"
-          style={{
-            color: slide.textColor,
-            fontFamily: titleFont,
-            fontSize: `${Math.max(18, slide.titleSize / 4)}px`,
-            textAlign: slide.titleAlign,
-            alignItems: slide.titleAlign === "left" ? "flex-start" : slide.titleAlign === "right" ? "flex-end" : "center",
-          }}
-        >
-          <span className="design-canvas-slot-label">Title · agent copy</span>
-          <span className="design-canvas-title-text">
-            {surface === "cover" ? "BUILD BETTER " : "Ideas become "}
-            <span style={{ color: slide.highlightTextColor }}>SYSTEMS</span>
-          </span>
-          <span className="design-canvas-title-accent" style={{ background: slide.accentColor }} />
-        </div>
-      </CanvasElement>
-
-      {surface === "inside" ? (
-        <p className="design-canvas-copy"><span>Body copy · agent copy</span>A clear supporting thought sits beneath the headline.</p>
-      ) : null}
-
-      {design.logoVisible && slide.logoVisible ? (
-        <CanvasElement
-          kind="logo"
-          transform={slide.logoTransform}
-          selected={selectedElement === "logo"}
-          canvasRef={canvasRef}
-          scalar={design.logoSize}
-          scalarRange={[24, 120]}
-          onSelect={() => onSelectElement("logo")}
-          onTransform={(transform, scalar) => onElementTransform("logo", transform, scalar)}
-        >
-          <span className="design-canvas-logo">C</span>
-        </CanvasElement>
-      ) : null}
-
-      {design.handleVisible && slide.handleVisible ? (
-        <CanvasElement
-          kind="handle"
-          transform={slide.handleTransform}
-          selected={selectedElement === "handle"}
-          canvasRef={canvasRef}
-          scalar={design.handleSize}
-          scalarRange={[16, 64]}
-          onSelect={() => onSelectElement("handle")}
-          onTransform={(transform, scalar) => onElementTransform("handle", transform, scalar)}
-        >
-          <span className="design-canvas-handle" style={{ fontSize: `${Math.max(10, design.handleSize * 0.42)}px` }}>
-            @yourhandle
-          </span>
-        </CanvasElement>
-      ) : null}
+  const font = slide.fontFamily === "serif" ? "Georgia, serif" : slide.fontFamily === "condensed" ? "'Arial Narrow', Arial, sans-serif" : "Arial, sans-serif"
+  function object(kind: MoveableElementKind, children: React.ReactNode, scalar?: number, scalarRange?: [number, number]) {
+    const transform = slide[TRANSFORM_KEYS[kind]]
+    return <CanvasElement kind={kind} transform={surface === "cover" && kind === "image" ? { ...transform, locked: true } : transform}
+      selected={!preview && selectedElement === kind} canvasRef={canvasRef} scalar={scalar} scalarRange={scalarRange}
+      onSelect={() => onSelectElement(kind)} onTransform={(next, size) => onElementTransform(kind, next, size)}>{children}</CanvasElement>
+  }
+  return <div className="design-canvas" ref={canvasRef} data-surface={surface} data-preview={preview}
+    style={{ background: slide.background, color: slide.textColor }} onPointerDown={() => onSelectElement(null)}>
+    <div className="simple-slide-content" inert={preview}>
+      {slide.imageType !== "none" && object("image",
+        <div className="simple-slide-visual" data-cover={surface === "cover"} data-type={slide.imageType}
+          style={{ background: slide.background, color: slide.accentColor }}>
+          {slide.imageType === "editorial"
+            ? <img src="/design-cover-preview.svg" alt="Sample landscape visual" draggable={false} />
+            : slide.imageType === "diagram"
+              ? <svg viewBox="0 0 500 300" role="img" aria-label="Sample idea-to-carousel diagram"><path d="M100 150H400" stroke="currentColor" strokeWidth="3" strokeDasharray="6 8" />
+                  {[75, 215, 355].map((x, i) => <g key={x}><rect x={x} y="94" width="80" height="112" rx="12" fill={slide.background} stroke="currentColor" strokeWidth="2"/><rect x={x + 14} y="114" width="52" height="42" rx="5" fill="currentColor" opacity={0.2 + i * 0.25}/><path d={"M" + (x + 14) + " 174h38m-38 12h24"} stroke={slide.textColor} strokeWidth="3"/></g>)}</svg>
+              : <img src={slide.imageType === "product" ? "/illustrations/carousel-sculpture-640.webp" : "/illustrations/design-stylus-320.webp"} alt="Sample dimensional carousel artwork" draggable={false} />}
+        </div>, slide.imageScale, [30, 100])}
+      {surface === "cover" && slide.shadowVisible && <div className="simple-slide-shadow" style={{
+        height: slide.shadowHeight + "%", opacity: slide.shadowOpacity / 100,
+        background: "linear-gradient(to top, " + slide.shadowColor + " 0%, " + slide.shadowColor + " " + Math.round(clamp(72 - slide.shadowSoftness * 0.45, 18, 62)) + "%, transparent 100%)",
+      }} />}
+      {object("title", <div className="simple-slide-text" style={{ fontFamily: font, fontSize: (slide.titleSize / 10.8) + "cqw", textAlign: slide.titleAlign }}>
+        <div>{surface === "cover" ? "Good ideas." : "Make every"}<br /><span style={{ color: slide.highlightTextColor }}>{surface === "cover" ? "Great stories." : "swipe count."}</span></div>
+        {surface === "inside" && <p style={{ fontSize: "3.33cqw" }}>One clear idea. A little curiosity.<br />Something worth sharing.</p>}
+      </div>, slide.titleSize, [44, 160])}
+      {design.logoVisible && slide.logoVisible && object("logo", <img className="simple-slide-logo" src="/logo.svg" alt="Sample brand logo" draggable={false} />, design.logoSize, [24, 120])}
+      {design.handleVisible && slide.handleVisible && object("handle", <span className="design-canvas-handle" style={{ fontSize: (design.handleSize / 10.8) + "cqw" }}>@yourhandle</span>, design.handleSize, [16, 64])}
     </div>
-  )
-}
-
-function LayerRow({
-  kind,
-  label,
-  visible,
-  locked,
-  selected,
-  onSelect,
-  onVisibility,
-}: {
-  kind: ElementKind
-  label?: string
-  visible: boolean
-  locked: boolean
-  selected: boolean
-  onSelect: () => void
-  onVisibility?: () => void
-}) {
-  return (
-    <div className="design-layer-row" data-selected={selected}>
-      <button type="button" className="design-layer-select" onClick={onSelect} disabled={!visible}>
-        <Move />
-        <span>{label ?? ELEMENT_LABELS[kind]}</span>
-        {locked ? <Lock /> : null}
-      </button>
-      {onVisibility ? (
-        <button type="button" aria-label={`${visible ? "Hide" : "Show"} ${label ?? ELEMENT_LABELS[kind]}`} onClick={onVisibility}>
-          {visible ? <Eye /> : <EyeOff />}
-        </button>
-      ) : null}
-    </div>
-  )
+  </div>
 }
 
 export function DesignsRoute() {
   const [designs, setDesigns, syncStatus] = useCarouselDesigns()
-  const [selectedId, setSelectedId] = React.useState(() => designs[0]?.id ?? "")
+  const [selectedId, setSelectedId] = React.useState(() => designs.find(d => d.id === "studio-light")?.id ?? designs[0]?.id ?? "")
   const [surface, setSurface] = React.useState<Surface>("cover")
-  const [selectedElement, setSelectedElement] = React.useState<ElementKind | null>("title")
-  const [zoom, setZoom] = React.useState(100)
-  const selected = designs.find((design) => design.id === selectedId) ?? designs[0]
+  const [selectedElement, setSelectedElement] = React.useState<ElementKind | null>(null)
+  const [preview, setPreview] = React.useState(false)
+  const [history, setHistory] = React.useState<CarouselDesign[]>([])
+  const gesture = React.useRef({ active: false, recorded: false })
+  const selected = designs.find(d => d.id === selectedId) ?? designs[0]
   const slide = selected?.[surface]
-
+  React.useEffect(() => {
+    const finish = () => { gesture.current.active = false }
+    window.addEventListener("pointerup", finish)
+    window.addEventListener("pointercancel", finish)
+    return () => { window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", finish) }
+  }, [])
+  function selectDesign(id: string) {
+    setSelectedId(id); setSelectedElement(null); setHistory([])
+  }
   function updateDesign(change: (design: CarouselDesign) => CarouselDesign) {
     if (!selected) return
-    setDesigns((current) =>
-      current.map((design) => (design.id === selected.id ? change(design) : design)),
-    )
+    if (!gesture.current.active || !gesture.current.recorded) {
+      setHistory(current => [...current.slice(-29), selected])
+      gesture.current.recorded = true
+    }
+    setDesigns(current => current.map(d => d.id === selected.id ? change(d) : d))
   }
-
+  function undo() {
+    const previous = history.at(-1)
+    if (!previous) return
+    setDesigns(current => current.map(d => d.id === previous.id ? previous : d))
+    setHistory(current => current.slice(0, -1))
+  }
   function updateSlide(change: Partial<CarouselDesign["cover"]>) {
     updateDesign((design) => ({
       ...design,
@@ -610,10 +352,10 @@ export function DesignsRoute() {
   function resetSelected() {
     if (!selectedElement || selectedElement === "shadow") return
     const defaults: Record<MoveableElementKind, ElementTransform> = {
-      title: { x: 8, y: surface === "cover" ? 62 : 8, width: 76, height: 22, locked: false },
-      image: { x: 8, y: 56, width: 84, height: 32, locked: false },
-      logo: { x: 8, y: 87, width: 6, height: 5, locked: false },
-      handle: { x: 16, y: 87, width: 28, height: 5, locked: false },
+      title: { x: 8, y: 12, width: 84, height: 32, locked: false },
+      image: { x: 8, y: 47, width: 84, height: 36, locked: false },
+      logo: { x: 8, y: 88, width: 6, height: 5, locked: false },
+      handle: { x: 17, y: 88, width: 32, height: 5, locked: false },
     }
     updateElementTransform(selectedElement, defaults[selectedElement])
   }
@@ -635,343 +377,112 @@ export function DesignsRoute() {
     }
     if (kind === "shadow") updateSlide({ shadowVisible: visible })
     if (kind === "image") updateSlide({ imageType: visible ? "editorial" : "none" })
-    if (!visible && selectedElement === kind) setSelectedElement(null)
   }
+
 
   if (!selected || !slide) return null
   const fixedCoverVisual = surface === "cover" && selectedElement === "image"
-  const activeTransform = selectedElement && selectedElement !== "shadow"
-    ? (slide[TRANSFORM_KEYS[selectedElement]] as ElementTransform)
-    : null
+  const activeTransform = selectedElement && selectedElement !== "shadow" ? slide[TRANSFORM_KEYS[selectedElement]] : null
+  const visible = (kind: ElementKind) => kind === "title" || (kind === "image" ? slide.imageType !== "none" : kind === "shadow" ? slide.shadowVisible : kind === "logo" ? selected.logoVisible && slide.logoVisible : selected.handleVisible && slide.handleVisible)
 
-  return (
-    <main className="designs-page">
-      <section className="designs-library">
-        <div className="designs-library-heading">
-          <div>
-            <div className="flex items-center gap-2"><StudioEmblem name="design-stylus" small /><h1>Designs</h1></div>
-            <p>Named formats your agents can reuse.</p>
-          </div>
-          <Button
-            variant="secondary"
-            size="icon"
-            title="Create a design"
-            onClick={() => {
-              const created = newDesign()
-              setDesigns((current) => [...current, created])
-              setSelectedId(created.id)
-            }}
-          >
-            <Plus className="size-4" />
-          </Button>
+  return <div className="simple-design-editor" onPointerDownCapture={() => { gesture.current = { active: true, recorded: false } }}
+    onKeyDownCapture={() => { gesture.current.active = false }}>
+    <header className="simple-editor-header">
+      <div className="simple-editor-heading"><StudioEmblem name="design-stylus" small /><div><h1>Design studio</h1><p>Your carousel, your way.</p></div></div>
+      <div className="simple-header-actions">
+        <span className="simple-save-state" role="status">{syncStatus === "synced" ? <><Check /> Saved</> : syncStatus === "offline" ? "Saved on this device · offline" : "Saving…"}</span>
+        {syncStatus === "synced" ? <Button variant="brand" size="sm" asChild><Link to={"/new?design=" + encodeURIComponent(selected.id)}>Use design <ArrowRight className="size-3.5" /></Link></Button> : <Button variant="brand" size="sm" disabled>Use design</Button>}
+      </div>
+    </header>
+    <div className="simple-editor-library">
+      <label className="simple-library-select"><span className="sr-only">Saved design</span><select value={selected.id} onChange={e => selectDesign(e.target.value)}>{designs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
+      <Button variant="ghost" size="sm" onClick={() => { const created = newDesign(); setDesigns(current => [...current, created]); selectDesign(created.id) }}><Plus className="size-3.5" /> New</Button>
+      <Button variant="ghost" size="icon" aria-label="Duplicate design" title="Duplicate design" onClick={() => { const copy = duplicateDesign(selected); setDesigns(current => [...current, copy]); selectDesign(copy.id) }}><Copy className="size-3.5" /></Button>
+      <div className="simple-library-spacer" />
+      <Button variant="ghost" size="icon" aria-label="Undo last edit" title="Undo last edit" disabled={!history.length} onClick={undo}><Undo2 className="size-4" /></Button>
+      <Button variant={preview ? "secondary" : "ghost"} size="sm" aria-pressed={preview} onClick={() => setPreview(!preview)}><Eye className="size-3.5" />{preview ? "Edit" : "Preview"}</Button>
+    </div>
+    <section className="simple-editor-workspace" aria-label="Carousel preview">
+      <div className="simple-stage-hint"><MousePointer2 /><span>{preview ? "A clean look at your layout" : "Select an object. Drag to move. Pull a corner to resize."}</span></div>
+      <div className="simple-canvas-fit"><DesignCanvas design={selected} surface={surface} selectedElement={selectedElement} preview={preview}
+        onSelectElement={setSelectedElement} onElementTransform={updateElementTransform} /></div>
+      <div className="simple-slide-switcher" role="group" aria-label="Slide type">{(["cover", "inside"] as const).map((item, index) =>
+        <button key={item} type="button" aria-pressed={surface === item} onClick={() => { setSurface(item); setSelectedElement(null) }}>
+          <span className="simple-mini-slide" style={{ background: selected[item].background, color: selected[item].highlightTextColor }}><i /><i /><i /></span>
+          <span><strong>{item === "cover" ? "Cover" : "Inside slide"}</strong><small>{String(index + 1).padStart(2, "0")}</small></span>
+        </button>)}</div>
+      <p className="simple-preview-note">Sample words, artwork and branding. Your topic and account supply the final content.</p>
+    </section>
+    <aside className="simple-editor-controls" aria-label="Design controls">
+      <section className="simple-control-section">
+        <h2>Make it yours</h2>
+        <Field label="Design name"><input key={selected.id + ":" + selected.name} defaultValue={selected.name} maxLength={120} onBlur={e => {
+          const name = e.target.value.trim() || "Untitled design"; e.target.value = name
+          if (name !== selected.name) updateDesign(d => ({ ...d, name }))
+        }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur() }} /></Field>
+        <div className="simple-palette-list" role="group" aria-label="Apply palette to both slides">
+          {PALETTES.map(({ name, ...colors }) => <button key={name} type="button" aria-pressed={["cover", "inside"].every(s => selected[s as Surface].background.toLowerCase() === colors.background.toLowerCase() && selected[s as Surface].textColor.toLowerCase() === colors.textColor.toLowerCase())}
+            onClick={() => updateDesign(d => ({ ...d, cover: { ...d.cover, ...colors }, inside: { ...d.inside, ...colors } }))}>
+            <span aria-hidden="true" style={{ background: colors.background, color: colors.highlightTextColor, borderColor: colors.textColor + "33" }}>Aa</span>{name}
+          </button>)}
         </div>
-
-        <div className="design-template-list">
-          {designs.map((design) => (
-            <button
-              key={design.id}
-              type="button"
-              className="design-template-row"
-              data-selected={design.id === selected.id}
-              onClick={() => setSelectedId(design.id)}
-            >
-              <span
-                className="design-template-thumb"
-                style={{ background: templateBackground(design), color: design.cover.textColor, borderColor: design.cover.accentColor }}
-              >
-                {design.cover.shadowVisible ? <i style={{ opacity: design.cover.shadowOpacity / 100, background: `linear-gradient(transparent, ${design.cover.shadowColor})` }} /> : null}
-                <b>{design.name.split(" ")[0]}</b>
-                <em style={{ background: design.cover.accentColor }} />
-              </span>
-              <span>
-                <strong>{design.name}</strong>
-                <small>{TEMPLATE_DESCRIPTIONS[design.id] ?? design.inside.imageType.replace("none", "text only")}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <div className="design-editor-tip">
-          <MousePointer2 />
-          <p><strong>Edit on canvas</strong><span>Click, drag, or resize any layer.</span></p>
-        </div>
-        <div className="design-storage-note">
-          {syncStatus === "offline" ? <CloudOff /> : syncStatus === "saving" || syncStatus === "loading" ? <LoaderCircle className="design-sync-spin" /> : <Cloud />}
-          <p>
-            <strong>{syncStatus === "offline" ? "Using local backup" : "Saved to Supabase"}</strong>
-            <span>{syncStatus === "offline" ? "Changes stay cached here and retry when the account connection returns." : syncStatus === "saving" || syncStatus === "loading" ? "Syncing this account’s design library…" : "Open this account on another system to use the same designs."}</span>
-          </p>
-          {syncStatus === "synced" ? <Check /> : null}
+        <div className="simple-color-row">
+          {([{ key: "background", label: "Background" }, { key: "textColor", label: "Text color" }, { key: "highlightTextColor", label: "Accent" }] as const).map(({ key, label }) =>
+            <label key={key}><input type="color" aria-label={label} value={slide[key]} onChange={e => updateSlide(key === "highlightTextColor" ? { highlightTextColor: e.target.value, accentColor: e.target.value } : { [key]: e.target.value })} /><span>{label}</span></label>)}
         </div>
       </section>
-
-      <section className="designs-stage">
-        <header className="designs-toolbar">
-          <div className="designs-surface-tabs" role="tablist" aria-label="Slide type">
-            {(["cover", "inside"] as const).map((item) => (
-              <button
-                key={item}
-                role="tab"
-                aria-selected={surface === item}
-                onClick={() => { setSurface(item); setSelectedElement("title") }}
-              >
-                {item === "inside" ? "Inside slide" : "Cover"}
-              </button>
-            ))}
-          </div>
-          <div className="design-toolbar-actions">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                const copy = duplicateDesign(selected)
-                setDesigns((current) => [...current, copy])
-                setSelectedId(copy.id)
-              }}
-            >
-              <Copy className="size-4" /> Duplicate
-            </Button>
-            <Button
-              variant="brand"
-              onClick={() => toast.success(`${selected.name} saved to your account`, {
-                description: "Choose this design in New carousel and its exact Supabase contract will be copied into the agent run.",
-              })}
-            >
-              <Save className="size-4" /> Save design
-            </Button>
-          </div>
-        </header>
-
-        <div className="designs-canvas-stage">
-          <div className="design-canvas-help"><MousePointer2 /> Drag to move · use corner handles to resize</div>
-          <DesignCanvas
-            design={selected}
-            surface={surface}
-            selectedElement={selectedElement}
-            zoom={zoom}
-            onSelectElement={setSelectedElement}
-            onElementTransform={updateElementTransform}
-          />
-          <div className="design-zoom-control" aria-label="Canvas zoom">
-            <button type="button" aria-label="Zoom out" onClick={() => setZoom((value) => clamp(value - 10, 60, 130))}><ZoomOut /></button>
-            <span>{zoom}%</span>
-            <button type="button" aria-label="Zoom in" onClick={() => setZoom((value) => clamp(value + 10, 60, 130))}><ZoomIn /></button>
-          </div>
+      <section className="simple-control-section">
+        <h2>Objects <span>{surface === "cover" ? "Cover" : "Inside slide"}</span></h2>
+        <div className="simple-object-list" role="group" aria-label="Select an object">
+          {(["title", "image", "logo", "handle"] as const).map(kind =>
+            <button key={kind} type="button" aria-pressed={selectedElement === kind} onClick={() => { setPreview(false); setSelectedElement(kind) }}>
+              {kind === "title" ? <Type /> : kind === "image" ? <ImageIcon /> : <span className="simple-object-glyph" aria-hidden="true">{kind === "logo" ? "C" : "@"}</span>}
+              {ELEMENT_LABELS[kind]}{!visible(kind) && <small>Hidden</small>}
+            </button>)}
         </div>
-        <div className="designs-stage-note">
-          <div className="designs-stage-legend" aria-label="Slide skeleton legend">
-            <span><i className="design-legend-dot design-legend-dot--visual" />Generated visual</span>
-            <span><i className="design-legend-dot design-legend-dot--copy" />Agent-written copy</span>
-            <span><i className="design-legend-dot design-legend-dot--brand" />Your brand layer</span>
-          </div>
-          <p>Live 4:5 skeleton · 1080 × 1350 output · Arrow keys nudge selected layers</p>
-        </div>
+        {!selectedElement && <p className="simple-control-help">Click the slide or choose an object to edit it.</p>}
       </section>
-
-      <aside className="designs-inspector">
-        <div className="design-inspector-section design-inspector-design">
-          <div className="design-inspector-heading">
-            <div><span className="design-field-label">{syncStatus === "synced" ? "Auto-saved to Supabase" : syncStatus === "offline" ? "Local backup pending sync" : "Syncing account design"}</span><h2>Design contract</h2></div>
-            <Check />
-          </div>
-          <Field label="Name">
-            <input value={selected.name} onChange={(event) => updateDesign((design) => ({ ...design, name: event.target.value }))} />
-          </Field>
-        </div>
-
-        <div className="design-inspector-section design-agent-handoff">
-          <div className="design-inspector-heading"><h2>How agents copy this design</h2><Bot /></div>
-          <ol>
-            <li><span>1</span><p><strong>Save this named format</strong><small>Stored in Supabase for this account, with a local browser cache for resilience.</small></p></li>
-            <li><span>2</span><p><strong>Choose it in New carousel</strong><small>You must select a design before the agents can start.</small></p></li>
-            <li><span>3</span><p><strong>A frozen snapshot joins the run</strong><small>Image box, typography, colors, safe area and brand settings are copied exactly. Later edits do not change a running carousel.</small></p></li>
-          </ol>
-          <div className="design-agent-contract-summary">
-            <Sparkles />
-            <span><strong>{surface === "cover" ? "Cover contract" : "Inside-slide contract"}</strong><small>{slide.imageType === "none" ? "Text only" : surface === "cover" ? "Locked full-bleed crop" : IMAGE_TYPES.find((item) => item.value === slide.imageType)?.label}{surface === "cover" && slide.shadowVisible ? ` · ${slide.shadowOpacity}% shadow` : ""} · {slide.titleSize}px title · {slide.safeMargin}px safe area</small></span>
-            <ChevronRight />
-          </div>
-        </div>
-
-        <div className="design-inspector-section">
-          <div className="design-inspector-heading">
-            <div>
-              <span className="design-field-label">Selected layer</span>
-              <h2>{selectedElement ? ELEMENT_LABELS[selectedElement] : "Canvas"}</h2>
-            </div>
-            {activeTransform && !fixedCoverVisual ? (
-              <div className="design-icon-actions">
-                <button type="button" title={activeTransform.locked ? "Unlock layer" : "Lock layer"} onClick={() => patchSelectedTransform({ locked: !activeTransform.locked })}>
-                  {activeTransform.locked ? <Lock /> : <Unlock />}
-                </button>
-                <button type="button" title="Reset position and size" onClick={resetSelected}><RotateCcw /></button>
-              </div>
-            ) : null}
-          </div>
-
-          {activeTransform && !fixedCoverVisual ? (
-            <>
-              <div className="design-transform-grid">
-                <NumberField label="X" value={activeTransform.x} min={0} max={100 - activeTransform.width} suffix="%" onChange={(x) => patchSelectedTransform({ x })} />
-                <NumberField label="Y" value={activeTransform.y} min={0} max={100 - activeTransform.height} suffix="%" onChange={(y) => patchSelectedTransform({ y })} />
-                <NumberField label="W" value={activeTransform.width} min={3} max={100 - activeTransform.x} suffix="%" onChange={(width) => patchSelectedTransform({ width })} />
-                <NumberField label="H" value={activeTransform.height} min={3} max={100 - activeTransform.y} suffix="%" onChange={(height) => patchSelectedTransform({ height })} />
-              </div>
-              <div className="design-arrange-row" aria-label="Align selected layer">
-                <button type="button" title="Align left" onClick={() => alignSelected("left")}><AlignLeft /></button>
-                <button type="button" title="Center horizontally" onClick={() => alignSelected("center")}><AlignCenter /></button>
-                <button type="button" title="Align right" onClick={() => alignSelected("right")}><AlignRight /></button>
-                <span />
-                <button type="button" title="Align top" onClick={() => alignSelected("top")}>T</button>
-                <button type="button" title="Center vertically" onClick={() => alignSelected("middle")}>M</button>
-                <button type="button" title="Align bottom" onClick={() => alignSelected("bottom")}>B</button>
-              </div>
-            </>
-          ) : fixedCoverVisual ? (
-            <p className="design-inspector-empty">The agent places its fetched clip or poster edge to edge across the entire 1080 × 1350 cover. It is locked because there is no smaller image box to move or resize. The shadow remains a separate editable layer above it.</p>
-          ) : selectedElement === "shadow" ? (
-            <p className="design-inspector-empty">The bottom shadow stays anchored to the cover edge. Adjust its height, opacity, softness, and color below.</p>
-          ) : (
-            <p className="design-inspector-empty">Select a layer on the canvas or from the Layers panel.</p>
-          )}
-        </div>
-
-        {selectedElement === "title" ? (
-          <div className="design-inspector-section">
-            <h2>Typography</h2>
-            <div className="design-inspector-grid design-inspector-grid--equal">
-              <NumberField label="Font size" value={slide.titleSize} min={44} max={160} onChange={(titleSize) => updateSlide({ titleSize })} />
-              <Field label="Font">
-                <select value={slide.fontFamily} onChange={(event) => updateSlide({ fontFamily: event.target.value as typeof slide.fontFamily })}>
-                  <option value="condensed">Condensed</option>
-                  <option value="sans">Sans</option>
-                  <option value="serif">Serif</option>
-                </select>
-              </Field>
-            </div>
-            <div className="design-segmented-control" aria-label="Text alignment">
-              {(["left", "center", "right"] as const).map((align) => (
-                <button key={align} type="button" aria-pressed={slide.titleAlign === align} onClick={() => updateSlide({ titleAlign: align })}>
-                  {align === "left" ? <AlignLeft /> : align === "right" ? <AlignRight /> : <AlignCenter />}
-                  <span>{align}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {selectedElement === "image" ? (
-          <div className="design-inspector-section">
-            <h2>{surface === "cover" ? "Locked cover image" : "Image settings"}</h2>
-            {surface === "cover" ? (
-              <div className="design-cover-lock-contract">
-                <Lock />
-                <div>
-                  <strong>Required full-cover layer</strong>
-                  <span>The agent uses a subject-aware edge-to-edge crop to fill all 1080 × 1350 pixels. This required background layer cannot be moved, resized, hidden, or deleted.</span>
-                </div>
-              </div>
-            ) : (
-              <>
-                <Field label="Visual direction">
-                  <select value={slide.imageType} onChange={(event) => updateSlide({ imageType: event.target.value as DesignImageType })}>
-                    {IMAGE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-                  </select>
-                </Field>
-                <NumberField label="Generation scale" value={slide.imageScale} min={30} max={100} suffix="%" onChange={(imageScale) => updateSlide({ imageScale })} />
-                <Button variant="ghost" className="design-remove-layer" onClick={() => setLayerVisibility("image", false)}>
-                  <Trash2 className="size-4" /> Remove from inside slides
-                </Button>
-              </>
-            )}
-          </div>
-        ) : null}
-
-        {selectedElement === "shadow" && surface === "cover" ? (
-          <div className="design-inspector-section">
-            <h2>Bottom shadow</h2>
-            <p className="design-inspector-empty">A separate readability gradient between the locked cover image and the title.</p>
-            <div className="design-shadow-controls">
-              <RangeField label="Opacity" value={slide.shadowOpacity} min={0} max={100} onChange={(shadowOpacity) => updateSlide({ shadowOpacity })} />
-              <RangeField label="Height" value={slide.shadowHeight} min={18} max={72} onChange={(shadowHeight) => updateSlide({ shadowHeight })} />
-              <RangeField label="Fade softness" value={slide.shadowSoftness} min={0} max={100} onChange={(shadowSoftness) => updateSlide({ shadowSoftness })} />
-              <Field label="Shadow color"><input type="color" value={slide.shadowColor} onChange={(event) => updateSlide({ shadowColor: event.target.value })} /></Field>
-            </div>
-            <Button variant="ghost" className="design-remove-layer" onClick={() => setLayerVisibility("shadow", false)}>
-              <Trash2 className="size-4" /> Remove shadow from cover
-            </Button>
-          </div>
-        ) : null}
-
-        {selectedElement === "logo" ? (
-          <div className="design-inspector-section">
-            <h2>Logo settings</h2>
-            <div className="design-toggle-row"><span>Show on {surface === "cover" ? "cover" : "inside slides"}</span><input type="checkbox" checked={selected.logoVisible && slide.logoVisible} onChange={(event) => setLayerVisibility("logo", event.target.checked)} /></div>
-            <NumberField label="Output size" value={selected.logoSize} min={24} max={120} onChange={(logoSize) => updateDesign((design) => ({ ...design, logoSize }))} />
-            <Button variant="ghost" className="design-remove-layer" onClick={() => setLayerVisibility("logo", false)}>
-              <Trash2 className="size-4" /> Remove from {surface === "cover" ? "cover" : "inside slides"}
-            </Button>
-          </div>
-        ) : null}
-
-        {selectedElement === "handle" ? (
-          <div className="design-inspector-section">
-            <h2>Instagram handle</h2>
-            <div className="design-toggle-row"><span>Show on {surface === "cover" ? "cover" : "inside slides"}</span><input type="checkbox" checked={selected.handleVisible && slide.handleVisible} onChange={(event) => setLayerVisibility("handle", event.target.checked)} /></div>
-            <NumberField label="Font size" value={selected.handleSize} min={16} max={64} onChange={(handleSize) => updateDesign((design) => ({ ...design, handleSize }))} />
-            <Button variant="ghost" className="design-remove-layer" onClick={() => setLayerVisibility("handle", false)}>
-              <Trash2 className="size-4" /> Remove from {surface === "cover" ? "cover" : "inside slides"}
-            </Button>
-          </div>
-        ) : null}
-
-        <div className="design-inspector-section">
-          <h2>Canvas</h2>
-          <div className="design-color-grid">
-            {(["background", "textColor", "highlightTextColor", "accentColor"] as const).map((key) => (
-              <Field key={key} label={key === "textColor" ? "Text" : key === "highlightTextColor" ? "Highlight text" : key === "accentColor" ? "Accent elements" : "Background"}>
-                <input type="color" value={slide[key]} onChange={(event) => updateSlide({ [key]: event.target.value })} />
-              </Field>
-            ))}
-          </div>
-          <NumberField label="Safe margin" value={slide.safeMargin} min={48} max={160} onChange={(safeMargin) => updateSlide({ safeMargin })} />
-        </div>
-
-        <div className="design-inspector-section">
-          <div className="design-inspector-heading"><h2>Layers</h2><Layers3 /></div>
-          <div className="design-layer-list">
-            {surface === "cover" ? (
-              <>
-                <LayerRow kind="title" visible locked={slide.titleTransform.locked} selected={selectedElement === "title"} onSelect={() => setSelectedElement("title")} />
-                <LayerRow kind="shadow" label="Bottom shadow" visible={slide.shadowVisible} locked selected={selectedElement === "shadow"} onSelect={() => setSelectedElement("shadow")} onVisibility={() => setLayerVisibility("shadow", !slide.shadowVisible)} />
-                <LayerRow kind="image" label="Cover media · full 4:5 crop" visible={slide.imageType !== "none"} locked selected={selectedElement === "image"} onSelect={() => setSelectedElement("image")} onVisibility={slide.imageType === "none" ? () => setLayerVisibility("image", true) : undefined} />
-                <LayerRow kind="logo" visible={selected.logoVisible && slide.logoVisible} locked={slide.logoTransform.locked} selected={selectedElement === "logo"} onSelect={() => setSelectedElement("logo")} onVisibility={() => setLayerVisibility("logo", !(selected.logoVisible && slide.logoVisible))} />
-                <LayerRow kind="handle" visible={selected.handleVisible && slide.handleVisible} locked={slide.handleTransform.locked} selected={selectedElement === "handle"} onSelect={() => setSelectedElement("handle")} onVisibility={() => setLayerVisibility("handle", !(selected.handleVisible && slide.handleVisible))} />
-              </>
-            ) : (
-              <>
-                <LayerRow kind="handle" visible={selected.handleVisible && slide.handleVisible} locked={slide.handleTransform.locked} selected={selectedElement === "handle"} onSelect={() => setSelectedElement("handle")} onVisibility={() => setLayerVisibility("handle", !(selected.handleVisible && slide.handleVisible))} />
-                <LayerRow kind="logo" visible={selected.logoVisible && slide.logoVisible} locked={slide.logoTransform.locked} selected={selectedElement === "logo"} onSelect={() => setSelectedElement("logo")} onVisibility={() => setLayerVisibility("logo", !(selected.logoVisible && slide.logoVisible))} />
-                <LayerRow kind="title" visible locked={slide.titleTransform.locked} selected={selectedElement === "title"} onSelect={() => setSelectedElement("title")} />
-                <LayerRow kind="image" visible={slide.imageType !== "none"} locked={slide.imageTransform.locked} selected={selectedElement === "image"} onSelect={() => setSelectedElement("image")} onVisibility={() => setLayerVisibility("image", slide.imageType === "none")} />
-              </>
-            )}
-          </div>
-        </div>
-
-        {designs.length > 1 ? (
-          <Button
-            variant="ghost"
-            className="w-full text-[var(--destructive)]"
-            onClick={() => {
-              const remaining = designs.filter((design) => design.id !== selected.id)
-              setDesigns(remaining)
-              setSelectedId(remaining[0].id)
-            }}
-          >
-            <Trash2 className="size-4" /> Delete design
-          </Button>
-        ) : null}
-      </aside>
-    </main>
-  )
+      {selectedElement && <section className="simple-control-section simple-context-controls">
+        <h2>{ELEMENT_LABELS[selectedElement]}
+          {activeTransform && !fixedCoverVisual && <button type="button" className="simple-lock-button" aria-label={activeTransform.locked ? "Unlock object" : "Lock object"}
+            onClick={() => patchSelectedTransform({ locked: !activeTransform.locked })}>{activeTransform.locked ? <Lock /> : <Unlock />}</button>}
+        </h2>
+        {selectedElement === "title" && <>
+          <Field label="Font"><select value={slide.fontFamily} onChange={e => updateSlide({ fontFamily: e.target.value as typeof slide.fontFamily })}><option value="sans">Modern sans</option><option value="serif">Editorial serif</option><option value="condensed">Bold condensed</option></select></Field>
+          <RangeField label="Text size" value={slide.titleSize} min={44} max={160} onChange={titleSize => updateSlide({ titleSize })} />
+          <div className="simple-alignment" role="group" aria-label="Text alignment">{([["left", AlignLeft], ["center", AlignCenter], ["right", AlignRight]] as const).map(([align, Icon]) =>
+            <button key={align} type="button" aria-label={"Align text " + align} aria-pressed={slide.titleAlign === align} onClick={() => updateSlide({ titleAlign: align })}><Icon /></button>)}</div>
+        </>}
+        {selectedElement === "image" && <>
+          <Field label="Image style"><select value={slide.imageType} onChange={e => updateSlide({ imageType: e.target.value as DesignImageType })}>{IMAGE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
+          <p className="simple-control-help">{surface === "cover" ? "Cover media fills the background. Move the text and branding over it." : "Drag the image and resize its corners to set where your visual goes."}</p>
+          {surface === "cover" && slide.imageType !== "none" && <label className="simple-toggle"><input type="checkbox" checked={slide.shadowVisible} onChange={e => updateSlide({ shadowVisible: e.target.checked })} />Add a shadow behind text</label>}
+          {surface === "cover" && slide.imageType !== "none" && slide.shadowVisible && <RangeField label="Shadow strength" min={0} max={100} value={slide.shadowOpacity} suffix="%" onChange={shadowOpacity => updateSlide({ shadowOpacity })} />}
+        </>}
+        {(selectedElement === "logo" || selectedElement === "handle") && <>
+          <label className="simple-toggle"><input type="checkbox" checked={visible(selectedElement)} onChange={e => setLayerVisibility(selectedElement, e.target.checked)} />Show {ELEMENT_LABELS[selectedElement].toLowerCase()}</label>
+          <p className="simple-control-help">Your account supplies the final {selectedElement === "logo" ? "logo" : "handle"}. Drag this sample to place it.</p>
+        </>}
+        {activeTransform && !fixedCoverVisual && visible(selectedElement) && <details className="simple-placement">
+          <summary>Position & size</summary>
+          <p className="simple-control-help">Arrow keys move a selected object. Hold Shift for bigger steps.</p>
+          <div className="simple-geometry">{(["x", "y", "width", "height"] as const).map(key => <Field key={key} label={key === "x" ? "Left %" : key === "y" ? "Top %" : key === "width" ? "Width %" : "Height %"}>
+            <input type="number" step="0.5" min={key === "x" || key === "y" ? 0 : 3} max={100} value={activeTransform[key]} disabled={activeTransform.locked} onChange={e => {
+              if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber)) patchSelectedTransform({ [key]: e.target.valueAsNumber })
+            }} /></Field>)}</div>
+          <div className="simple-placement-actions"><Button variant="secondary" size="sm" disabled={activeTransform.locked} onClick={() => alignSelected("center")}>Center</Button>
+            <Button variant="ghost" size="sm" disabled={activeTransform.locked} onClick={resetSelected}><RotateCcw className="size-3" />Reset</Button></div>
+        </details>}
+      </section>}
+      <details className="simple-design-options"><summary>Design options</summary>
+        {PREBUILT_DESIGNS.some(d => d.id === selected.id) ? <p className="simple-control-help">This is a starter design. Duplicate it to keep a separate version.</p> :
+        <Button variant="ghost" size="sm" disabled={designs.length < 2} onClick={() => {
+          const removed = selected
+          const remaining = designs.filter(d => d.id !== selected.id)
+          setDesigns(remaining); selectDesign(remaining[0].id)
+          toast("Design deleted", { action: { label: "Undo", onClick: () => { setDesigns(current => current.some(d => d.id === removed.id) ? current : [...current, removed]); selectDesign(removed.id) } } })
+        }}><Trash2 className="size-3.5" />Delete this design</Button>}
+      </details>
+    </aside>
+  </div>
 }

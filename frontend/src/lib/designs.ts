@@ -116,7 +116,32 @@ const baseSlide: SlideDesign = {
   handleTransform: transformForPosition("bottom-left", 28, 5),
 }
 
+function studioDesign(dark: boolean): CarouselDesign {
+  const colors = dark
+    ? { background: "#000000", textColor: "#F6F4F0", highlightTextColor: "#F79270", accentColor: "#F79270" }
+    : { background: "#F6F4F0", textColor: "#252420", highlightTextColor: "#C74726", accentColor: "#C74726" }
+  const shared: SlideDesign = {
+    ...baseSlide, ...colors, fontFamily: "sans", titleAlign: "left",
+    titlePosition: "top-left", titleSize: 104,
+    logoTransform: { x: 8, y: 88, width: 6, height: 5, locked: false },
+    handleTransform: { x: 17, y: 88, width: 32, height: 5, locked: false },
+    titleTransform: { x: 8, y: 12, width: 84, height: 32, locked: false },
+  }
+  return {
+    id: dark ? "studio-black" : "studio-light",
+    name: dark ? "Studio Black" : "Studio Light",
+    logoVisible: true, logoPosition: "bottom-left", logoSize: 64,
+    handleVisible: true, handlePosition: "bottom-left", handleSize: 30,
+    cover: { ...shared, titleSize: 112, imageType: "product",
+      imagePosition: "middle-center", imageScale: 100, imageTransform: { ...FULL_BLEED_COVER_TRANSFORM } },
+    inside: { ...shared, titleSize: 88, imageType: "product",
+      imageTransform: { x: 8, y: 47, width: 84, height: 36, locked: false } },
+  }
+}
+
 export const PREBUILT_DESIGNS: CarouselDesign[] = [
+  studioDesign(false),
+  studioDesign(true),
   {
     id: "editorial-signal",
     name: "Editorial Signal",
@@ -550,6 +575,7 @@ export function useCarouselDesigns() {
 
   const setDesigns = React.useCallback<React.Dispatch<React.SetStateAction<CarouselDesign[]>>>((change) => {
     if (!hydrated.current) changedBeforeHydration.current = true
+    setSyncStatus("saving")
     setLocalDesigns(change)
   }, [])
 
@@ -576,10 +602,13 @@ export function useCarouselDesigns() {
         }
         const current = latestDesigns.current
         setSyncStatus("saving")
-        await put<DesignLibraryResponse>("/api/designs", {
-          items: current.map(designPayload),
-        })
-        if (!cancelled) setSyncStatus("synced")
+        saveChain.current = saveChain.current
+          .catch(() => undefined)
+          .then(() => put<DesignLibraryResponse>("/api/designs", {
+            items: current.map(designPayload),
+          }))
+        await saveChain.current
+        if (!cancelled && latestDesigns.current === current) setSyncStatus("synced")
       } catch {
         hydrated.current = true
         if (!cancelled) setSyncStatus("offline")
@@ -602,10 +631,10 @@ export function useCarouselDesigns() {
         .catch(() => undefined)
         .then(() => put<DesignLibraryResponse>("/api/designs", { items: snapshot }))
         .then(() => {
-          if (mounted.current) setSyncStatus("synced")
+          if (mounted.current && latestDesigns.current === designs) setSyncStatus("synced")
         })
         .catch(() => {
-          if (mounted.current) setSyncStatus("offline")
+          if (mounted.current && latestDesigns.current === designs) setSyncStatus("offline")
         })
     }, 600)
     return () => window.clearTimeout(timer)

@@ -41,3 +41,14 @@ The theme lives in `src/index.css`, with studio layouts in `src/studio.css`. Bro
 Artwork enters once, then responds gently to pointer hover. Reduced-motion preferences disable both effects. Reading surfaces and carousel previews stay level; the design editor's canvas coordinates are unaffected. Primary controls, focus rings, task filters, and Instagram review prerequisites retain their existing behavior.
 
 Starting a carousel uses a shared-element transition from the composer to the submitted prompt, followed by the chat workspace. `LaunchHandoff` keeps the submitted text and selected design visible while creation and the first snapshot are pending. It adds no artificial network delay; errors restore the original composer and keyboard focus. Reduced-motion and browsers without View Transitions retain the same status feedback without the moving transition.
+
+
+## Visual design editor
+
+The Designs page uses a large 4:5 sample carousel with a single contextual control panel. Studio Light and Studio Black are new starter designs that share the app's ivory, ink, orange, and pitch-black palette. Existing saved designs retain their settings. Palettes update both slide types; individual color controls affect the current slide.
+
+Text, the inside-slide image, logo, and handle can be dragged and resized. Arrow keys nudge an object; precise position controls are collapsed by default. One Undo restores a whole drag. Preview removes editing handles and makes the canvas inert. Cover media remains a full-canvas background, matching the existing render contract.
+
+Preview wording, artwork, and branding are samples, not a generated export. Inside headline and body move together because the renderer uses one text region. Typography scales with the 1080px slide width; final font fitting and generated content remain the renderer's responsibility. The editor reuses the existing optimized artwork and adds no remote asset dependencies.
+
+Changes save automatically through the existing design library API. The save indicator includes the debounce period, and older saves cannot mark newer edits as saved. Use design becomes available after sync and opens New carousel with that design selected.
