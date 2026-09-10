@@ -81,6 +81,29 @@ const FULL_BLEED_COVER_TRANSFORM: ElementTransform = {
   locked: true,
 }
 
+function readableCoverColor(color: string): string {
+  const rgb = [1, 3, 5].map(start => parseInt(color.slice(start, start + 2), 16) / 255)
+    .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2] < 0.175 ? "#F6F4F0" : color
+}
+
+// Covers always use source media and a black fade; inside slides remain freeform.
+export function coverLayout(slide: SlideDesign): SlideDesign {
+  const title = slide.titleTransform
+  const height = Math.min(title?.height ?? 24, 24)
+  return {
+    ...slide,
+    textColor: title?.y < 62 ? readableCoverColor(slide.textColor) : slide.textColor,
+    highlightTextColor: title?.y < 62 ? readableCoverColor(slide.highlightTextColor) : slide.highlightTextColor,
+    imageType: "editorial", imagePosition: "middle-center", imageScale: 100,
+    imageTransform: { ...FULL_BLEED_COVER_TRANSFORM },
+    shadowVisible: true, shadowColor: "#000000", shadowOpacity: 100,
+    shadowHeight: 52, shadowSoftness: 65,
+    titlePosition: ("bottom-" + slide.titleAlign) as DesignPosition,
+    titleTransform: { ...title, height, y: Math.max(62, Math.min(title?.y ?? 62, 86 - height)) },
+  }
+}
+
 function transformForPosition(
   position: DesignPosition,
   width: number,
@@ -340,7 +363,7 @@ const ORIGINAL_DESIGNS: CarouselDesign[] = [
 
 // Keep the original definitions for an exact migration of untouched starter
 // designs. A customized saved design is never replaced by a refreshed preset.
-export const PREBUILT_DESIGNS: CarouselDesign[] = ORIGINAL_DESIGNS.map(original => {
+const PREVIOUS_PREBUILT_DESIGNS: CarouselDesign[] = ORIGINAL_DESIGNS.map(original => {
   const design = cloneDesign(original)
   if (design.id.startsWith("studio-")) return design
   const photo = design.id === "editorial-signal" || design.id === "newsroom-grid"
@@ -377,9 +400,21 @@ export const PREBUILT_DESIGNS: CarouselDesign[] = ORIGINAL_DESIGNS.map(original 
   return design
 })
 
+export const PREBUILT_DESIGNS: CarouselDesign[] = PREVIOUS_PREBUILT_DESIGNS.map(design => ({
+  ...design,
+  cover: coverLayout({
+    ...design.cover, textColor: "#F6F4F0",
+    highlightTextColor: design.id === "minimal-mono" ? "#F6F4F0" : "#F79270",
+    titleSize: 100, titleTransform: { x: 8, y: 62, width: 84, height: 24, locked: false },
+    logoVisible: true, handleVisible: true,
+    logoTransform: { x: 8, y: 90, width: 6, height: 5, locked: false },
+    handleTransform: { x: 17, y: 90, width: 68, height: 5, locked: false },
+  }),
+}))
+
 function refreshUntouchedPreset(design: CarouselDesign): CarouselDesign {
-  const original = ORIGINAL_DESIGNS.find(item => item.id === design.id)
-  if (!original || JSON.stringify(designPayload(design)) !== JSON.stringify(designPayload(normalizeDesign(original)))) return design
+  const previous = [...ORIGINAL_DESIGNS, ...PREVIOUS_PREBUILT_DESIGNS].filter(item => item.id === design.id)
+  if (!previous.some(item => JSON.stringify(designPayload(design)) === JSON.stringify(designPayload(normalizeDesign(item))))) return design
   return cloneDesign(PREBUILT_DESIGNS.find(item => item.id === design.id)!)
 }
 
@@ -491,7 +526,7 @@ function normalizeDesign(value: DesignInput): CarouselDesign {
     name: value.name || "Untitled design",
     logoPosition,
     handlePosition,
-    cover: normalizeSlide(value.cover, logoPosition, handlePosition, "cover"),
+    cover: coverLayout(normalizeSlide(value.cover, logoPosition, handlePosition, "cover")),
     inside: normalizeSlide(value.inside, logoPosition, handlePosition, "inside"),
   }
 }
@@ -627,7 +662,7 @@ export function useCarouselDesigns() {
   const setDesigns = React.useCallback<React.Dispatch<React.SetStateAction<CarouselDesign[]>>>((change) => {
     if (!hydrated.current) changedBeforeHydration.current = true
     setSyncStatus("saving")
-    setLocalDesigns(change)
+    setLocalDesigns(current => (typeof change === "function" ? change(current) : change).map(design => ({ ...design, cover: coverLayout(design.cover) })))
   }, [])
 
   React.useEffect(() => {
@@ -711,6 +746,7 @@ export function newDesign(): CarouselDesign {
 }
 
 export function designPayload(design: CarouselDesign) {
+  design = { ...design, cover: coverLayout(design.cover) }
   return {
     id: design.id,
     name: design.name,

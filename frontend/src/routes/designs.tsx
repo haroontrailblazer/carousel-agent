@@ -256,10 +256,7 @@ function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = f
                   {[75, 215, 355].map((x, i) => <g key={x}><rect x={x} y="94" width="80" height="112" rx="12" fill={slide.background} stroke="currentColor" strokeWidth="2"/><rect x={x + 14} y="114" width="52" height="42" rx="5" fill="currentColor" opacity={0.2 + i * 0.25}/><path d={"M" + (x + 14) + " 174h38m-38 12h24"} stroke={slide.textColor} strokeWidth="3"/></g>)}</svg>
               : <img src={"/illustrations/" + visual + (thumbnail ? "-160.webp" : visual === "carousel-sculpture" ? "-640.webp" : "-320.webp")} alt="Sample dimensional carousel artwork" draggable={false} />}
         </div>, slide.imageScale, [30, 100])}
-      {surface === "cover" && slide.shadowVisible && <div className="simple-slide-shadow" style={{
-        height: slide.shadowHeight + "%", opacity: slide.shadowOpacity / 100,
-        background: "linear-gradient(to top, " + slide.shadowColor + " 0%, " + slide.shadowColor + " " + Math.round(clamp(72 - slide.shadowSoftness * 0.45, 18, 62)) + "%, transparent 100%)",
-      }} />}
+      {surface === "cover" && <div className="simple-slide-shadow" />}
       {object("title", <div className="simple-slide-text" style={{ fontFamily: font, fontSize: (slide.titleSize / 10.8) + "cqw", textAlign: slide.titleAlign }}>
         <div>{title[0]}<br /><span style={{ color: slide.highlightTextColor }}>{title[1]}</span></div>
         {surface === "inside" && <p style={{ fontSize: "3.33cqw" }}>{copy?.body ?? "One clear idea. A little curiosity. Something worth sharing."}</p>}
@@ -381,7 +378,7 @@ export function DesignsRoute() {
   function resetSelected() {
     if (!selectedElement || selectedElement === "shadow") return
     const defaults: Record<MoveableElementKind, ElementTransform> = {
-      title: { x: 8, y: 12, width: 84, height: 32, locked: false },
+      title: { x: 8, y: surface === "cover" ? 62 : 12, width: 84, height: surface === "cover" ? 24 : 32, locked: false },
       image: { x: 8, y: 47, width: 84, height: 36, locked: false },
       logo: { x: 8, y: 88, width: 6, height: 5, locked: false },
       handle: { x: 17, y: 88, width: 32, height: 5, locked: false },
@@ -450,7 +447,7 @@ export function DesignsRoute() {
           <span className="simple-mini-slide simple-real-mini" aria-hidden="true"><DesignCanvas design={selected} surface={item} selectedElement={null} preview thumbnail onSelectElement={() => undefined} onElementTransform={() => undefined} /></span>
           <span><strong>{item === "cover" ? "Cover" : "Inside slide"}</strong><small>{String(index + 1).padStart(2, "0")}</small></span>
         </button>)}</div>
-      <p className="simple-preview-note">Words and artwork are samples. Your saved branding is used when this carousel is generated.</p>
+      <p className="simple-preview-note">Sample media and title. Video and image covers share this layout, with your saved logo and handle.</p>
     </section>
     <aside className="simple-editor-controls" aria-label="Design controls">
       <section className="simple-control-section">
@@ -460,13 +457,13 @@ export function DesignsRoute() {
           if (name !== selected.name) updateDesign(d => ({ ...d, name }))
         }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur() }} /></Field>
         <div className="simple-palette-list" role="group" aria-label="Apply palette to both slides">
-          {PALETTES.map(({ name, ...colors }) => <button key={name} type="button" aria-pressed={["cover", "inside"].every(s => selected[s as Surface].background.toLowerCase() === colors.background.toLowerCase() && selected[s as Surface].textColor.toLowerCase() === colors.textColor.toLowerCase())}
-            onClick={() => updateDesign(d => ({ ...d, cover: { ...d.cover, ...colors }, inside: { ...d.inside, ...colors } }))}>
+          {PALETTES.map(({ name, ...colors }) => <button key={name} type="button" aria-pressed={selected.inside.background.toLowerCase() === colors.background.toLowerCase() && selected.inside.textColor.toLowerCase() === colors.textColor.toLowerCase()}
+            onClick={() => updateDesign(d => ({ ...d, cover: { ...d.cover, ...colors, textColor: "#F6F4F0", highlightTextColor: colors.highlightTextColor === "#252420" ? "#F6F4F0" : "#F79270" }, inside: { ...d.inside, ...colors } }))}>
             <span aria-hidden="true" style={{ background: colors.background, color: colors.highlightTextColor, borderColor: colors.textColor + "33" }}>Aa</span>{name}
           </button>)}
         </div>
         <div className="simple-color-row">
-          {([{ key: "background", label: "Background" }, { key: "textColor", label: "Text color" }, { key: "highlightTextColor", label: "Accent" }] as const).map(({ key, label }) =>
+          {([{ key: "background", label: "Background" }, { key: "textColor", label: "Text color" }, { key: "highlightTextColor", label: "Accent" }] as const).filter(({ key }) => surface !== "cover" || key !== "background").map(({ key, label }) =>
             <label key={key}><input type="color" aria-label={label} value={slide[key]} onChange={e => updateSlide(key === "highlightTextColor" ? { highlightTextColor: e.target.value, accentColor: e.target.value } : { [key]: e.target.value })} /><span>{label}</span></label>)}
         </div>
       </section>
@@ -474,10 +471,10 @@ export function DesignsRoute() {
       <section className="simple-control-section">
         <h2>Objects <span>{surface === "cover" ? "Cover" : "Inside slide"}</span></h2>
         <div className="simple-object-list" role="group" aria-label="Select an object">
-          {(["title", "image", "logo", "handle"] as const).map(kind =>
+          {(surface === "cover" ? ["image", "shadow", "title", "logo", "handle"] as const : ["title", "image", "logo", "handle"] as const).map(kind =>
             <button key={kind} type="button" aria-pressed={selectedElement === kind} onClick={() => { setPreview(false); setSelectedElement(kind) }}>
-              {kind === "title" ? <Type /> : kind === "image" ? <ImageIcon /> : <span className="simple-object-glyph" aria-hidden="true">{kind === "logo" ? "C" : "@"}</span>}
-              {ELEMENT_LABELS[kind]}{!visible(kind) && <small>Hidden</small>}
+              {kind === "title" ? <Type /> : kind === "image" ? <ImageIcon /> : kind === "shadow" ? <Lock /> : <span className="simple-object-glyph" aria-hidden="true">{kind === "logo" ? "C" : "@"}</span>}
+              {surface === "cover" && kind === "image" ? "Cover media" : kind === "shadow" ? "Black shadow" : ELEMENT_LABELS[kind]}{kind === "shadow" && <small>Always on</small>}{!visible(kind) && <small>Hidden</small>}
             </button>)}
         </div>
         {!selectedElement && <p className="simple-control-help">Click the slide or choose an object to edit it.</p>}
@@ -493,12 +490,11 @@ export function DesignsRoute() {
           <div className="simple-alignment" role="group" aria-label="Text alignment">{([["left", AlignLeft], ["center", AlignCenter], ["right", AlignRight]] as const).map(([align, Icon]) =>
             <button key={align} type="button" aria-label={"Align text " + align} aria-pressed={slide.titleAlign === align} onClick={() => updateSlide({ titleAlign: align })}><Icon /></button>)}</div>
         </>}
-        {selectedElement === "image" && <>
-          <Field label="Image style"><select value={slide.imageType} onChange={e => updateSlide({ imageType: e.target.value as DesignImageType })}>{IMAGE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
-          <p className="simple-control-help">{surface === "cover" ? "Cover media fills the background. Move the text and branding over it." : "Drag the image and resize its corners to set where your visual goes."}</p>
-          {surface === "cover" && slide.imageType !== "none" && <label className="simple-toggle"><input type="checkbox" checked={slide.shadowVisible} onChange={e => updateSlide({ shadowVisible: e.target.checked })} />Add a shadow behind text</label>}
-          {surface === "cover" && slide.imageType !== "none" && slide.shadowVisible && <RangeField label="Shadow strength" min={0} max={100} value={slide.shadowOpacity} suffix="%" onChange={shadowOpacity => updateSlide({ shadowOpacity })} />}
-        </>}
+        {selectedElement === "image" && (surface === "cover"
+          ? <p className="simple-control-help">Your searched and trimmed video fills the whole cover. An image cover uses the same layout. Media is cropped to fit automatically.</p>
+          : <><Field label="Image style"><select value={slide.imageType} onChange={e => updateSlide({ imageType: e.target.value as DesignImageType })}>{IMAGE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
+            <p className="simple-control-help">Drag the image and resize its corners to set where your visual goes.</p></>)}
+        {selectedElement === "shadow" && <p className="simple-control-help">Always on. A soft fade leads into a pitch-black base behind the title and branding, on both video and image covers.</p>}
         {(selectedElement === "logo" || selectedElement === "handle") && <>
           <label className="simple-toggle"><input type="checkbox" checked={visible(selectedElement)} onChange={e => setLayerVisibility(selectedElement, e.target.checked)} />Show {ELEMENT_LABELS[selectedElement].toLowerCase()}</label>
           <p className="simple-control-help">Set your {selectedElement === "logo" ? "logo" : "handle"} in Your branding above. Drag it here to place it.</p>

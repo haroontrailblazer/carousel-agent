@@ -39,7 +39,7 @@
 .simple-slide-visual { width: 100%; height: 100%; overflow: hidden; }
 .simple-slide-visual img, .simple-slide-visual svg { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .simple-slide-visual[data-type="editorial"] img { object-fit: cover; }
-.simple-slide-visual[data-cover="true"]:is([data-type="product"], [data-type="illustration"]) img { padding: 42% 4% 7%; }
+.simple-slide-visual[data-cover="true"] img { object-fit: cover; }
 .simple-slide-shadow { position: absolute; bottom: 0; left: 0; right: 0; z-index: 2; pointer-events: none; }
 .simple-slide-logo { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .simple-slide-switcher { display: flex; justify-content: center; gap: 8px; }
@@ -95,3 +95,6 @@
   .simple-editor-workspace { height: min(660px, 83dvh); min-height: 420px; padding: 14px 16px; gap: 12px; }.simple-stage-hint { font-size: 10px; }.simple-preview-note { max-width: 300px; }.simple-editor-controls { overflow: visible; border-left: 0; border-top: 1px solid var(--border); padding-inline: 20px; }.simple-control-section { gap: 14px; }.simple-palette-list { max-width: 360px; }.simple-color-row { justify-content: flex-start; gap: 24px; }.simple-object-list { grid-template-columns: repeat(4, 1fr); }.simple-object-list button { flex-wrap: wrap; justify-content: center; min-height: 42px; gap: 5px; }.simple-object-list small { width: 100%; margin: 0; }.simple-design-editor .design-field input, .simple-design-editor .design-field select { height: 40px; font-size: 16px; }.simple-control-section h2 { font-size: 13px; }.simple-control-help, .simple-toggle { font-size: 12px; }.simple-alignment button, .simple-lock-button { min-height: 40px; }.simple-lock-button { width: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { .simple-design-editor *, .simple-design-editor *::before, .simple-design-editor *::after { animation: none !important; transition: none !important; } }
+
+/* Identical to the rendered cover: clear media, soft fade, solid black title base. */
+.simple-slide-shadow{height:52%;background:linear-gradient(to bottom,rgba(0,0,0,0) 0%,#000 34.6154%,#000 100%)}

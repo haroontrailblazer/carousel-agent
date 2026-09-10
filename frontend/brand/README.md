@@ -61,3 +61,9 @@ Each design stores its own optional handle and logo through the existing design 
 The handle is normalized to one leading @ and accepts up to 30 username characters. Setting branding makes that mark visible on both slide types; the existing object visibility controls can hide it again. Removing a logo returns to account branding and can be undone.
 
 Cover overlays, inside slides and CTA slides resolve design branding ahead of account branding. Blank fields preserve the connected account fallback. Explicit design branding also works for generation without Instagram. Publishing still uses the run's selected account, and review actions keep their Instagram connection requirement.
+
+### Cover structure
+
+Every template uses full-canvas source media: a searched, trimmed clip or the sourced image fallback. Both the rendered video and its image poster use the same overlay. The editor photographs are sample media, not the search result.
+
+The black fade is mandatory: clear media above 48%, fading to opaque black at 66%, then solid black through the bottom. Titles stay in the 62-86% region; starter logos and handles sit at 90%. The five cover layers are media, black shadow, title, logo and handle. Cover media and shadow cannot be removed or resized. Legacy cover geometry migrates to this structure, and dark cover text is lifted to ivory for contrast. Inside-slide composition and per-design branding remain independently editable.

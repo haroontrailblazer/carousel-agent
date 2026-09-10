@@ -140,6 +140,18 @@ class CarouselDesign(BaseModel):
             height=100,
             locked=True,
         )
+        self.cover.image_type = "editorial"
+        self.cover.shadow_visible = True
+        self.cover.shadow_color = "#000000"
+        self.cover.shadow_opacity = 100
+        self.cover.shadow_height = 52
+        self.cover.shadow_softness = 65
+        self.cover.title_position = "bottom-" + self.cover.title_align
+        title = self.cover.title_transform or ElementTransform(x=8, y=62, width=84, height=24)
+        title_height = min(title.height, 24)
+        self.cover.title_transform = title.model_copy(update={
+            "height": title_height, "y": max(62, min(title.y, 86 - title_height)),
+        })
         return self
 
 

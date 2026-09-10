@@ -305,7 +305,7 @@ class CoverTypographyTests(unittest.TestCase):
             )
             self.assertTrue(path.is_file())
 
-    def test_cover_shadow_is_a_separate_configurable_overlay_layer(self) -> None:
+    def test_cover_shadow_is_a_separate_mandatory_overlay_layer(self) -> None:
         design = CarouselDesign(logo_visible=False)
         transparent = Image.new("RGBA", (1080, 1350), (0, 0, 0, 0))
         with (

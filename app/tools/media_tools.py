@@ -1172,21 +1172,23 @@ def _render_title_block(
         else width - safe_margin * 2
     )
     title_size = slide.title_size if slide else _COVER_TITLE_FONT_SIZE
-    font = _load_title_font(title_size, slide.font_family if slide else "condensed")
-    lines = _wrap_title(text, font, max_w)
-    if len(lines) > _TITLE_MAX_LINES or any(
-        _line_width(font, line) > max_w for line in lines
-    ):
-        raise ValueError(
-            f"cover title does not fit at the selected {title_size}px size "
-            f"within {_TITLE_MAX_LINES} lines"
-        )
-
+    max_h = round(height * title_transform.height / 100) if title_transform else height
+    # Fit the real headline into its saved lower box, above the branding.
+    # A long headline must not spill down onto the logo or handle.
+    for fitted_size in range(title_size, 43, -1):
+        font = _load_title_font(fitted_size, slide.font_family if slide else "condensed")
+        lines = _wrap_title(text, font, max_w)
+        ascent, descent = font.getmetrics()
+        line_h = ascent + descent
+        gap = int(line_h * 0.10)
+        total_h = len(lines) * line_h + (len(lines) - 1) * gap
+        if len(lines) <= _TITLE_MAX_LINES and total_h <= max_h and all(
+            _line_width(font, line) <= max_w for line in lines
+        ):
+            break
+    else:
+        raise ValueError("cover title does not fit in the saved title area; shorten the headline")
     draw = ImageDraw.Draw(canvas)
-    ascent, descent = font.getmetrics()
-    line_h = ascent + descent
-    gap = int(line_h * 0.10)
-    total_h = len(lines) * line_h + (len(lines) - 1) * gap
     vertical = slide.title_position.split("-", 1)[0] if slide else "bottom"
     if title_transform is not None:
         top = round(height * title_transform.y / 100)
@@ -1338,47 +1340,21 @@ def _build_overlay_png(
     wd: Path,
     design: CarouselDesign | None = None,
 ) -> Path:
-    """Composite the overlay template + rendered title into one RGBA PNG.
+    """Draw the shared video/image cover: black fade, title, logo and handle.
 
-    The template (2160x2700 = 2x output) is scaled to 1080x1350. If the
-    template file is missing, a plain bottom-black gradient stands in so the
-    pipeline still produces a reviewable cover.
+    The upper media area stays clear. From 48% to 66% of the canvas the
+    shadow fades to opaque black, matching the design editor exactly.
     """
     width, height = settings.slide_width, settings.slide_height
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    template = _load_scrubbed_template()
-    if template is not None:
-        canvas.alpha_composite(
-            template.resize((width, height), Image.Resampling.LANCZOS)
-        )
-    elif design is None:
-        # Emergency stand-in: black rising from the bottom ~40%.
-        fallback_rgb = (0, 0, 0)
-        ramp_top = int(height * 0.55)
-        solid_top = int(height * 0.75)
-        px = canvas.load()
-        for y in range(ramp_top, height):
-            if y >= solid_top:
-                alpha = 255
-            else:
-                alpha = int(255 * (y - ramp_top) / max(solid_top - ramp_top, 1))
-            for x in range(width):
-                px[x, y] = (*fallback_rgb, alpha)
-    if design is not None and design.cover.shadow_visible:
-        shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        shadow_draw = ImageDraw.Draw(shadow)
-        shadow_rgb = hex_color(design.cover.shadow_color, (0, 0, 0))
-        shadow_top = height - round(height * design.cover.shadow_height / 100)
-        shadow_span = max(1, height - shadow_top - 1)
-        max_alpha = round(255 * design.cover.shadow_opacity / 100)
-        # High softness produces a long, gentle fade; low softness keeps the
-        # dark region close to the bottom edge.
-        exponent = 0.6 + (100 - design.cover.shadow_softness) / 100 * 2.4
-        for y in range(shadow_top, height):
-            progress = (y - shadow_top) / shadow_span
-            alpha = round(max_alpha * (progress**exponent))
-            shadow_draw.line((0, y, width, y), fill=(*shadow_rgb, alpha))
-        canvas.alpha_composite(shadow)
+    # Legacy template art may contain extra frames and baked-in branding.
+    # Covers now have exactly five layers, so always draw a clean shadow.
+    shadow_draw = ImageDraw.Draw(canvas)
+    ramp_top = round(height * 0.48)
+    solid_top = round(height * 0.66)
+    for y in range(ramp_top, height):
+        alpha = round(255 * min(1, (y - ramp_top) / max(1, solid_top - ramp_top)))
+        shadow_draw.line((0, y, width, y), fill=(0, 0, 0, alpha))
     canvas.alpha_composite(_render_title_block(title, highlight, design))
     if design is not None:
         draw = ImageDraw.Draw(canvas)
@@ -1633,7 +1609,7 @@ def compose_cover(
     """Compose the final 1080x1350 cover video + poster from sourced media.
 
     The source media is subject-aware cropped directly to the complete 4:5
-    canvas with no footer, letterbox, or padded area. The optional shadow and
+    canvas with no letterbox or padded area. The mandatory black fade and
     Pillow-rendered title are composited inside those same bounds. FFmpeg
     renders a silent H.264 mp4 (``+faststart``) with a first-frame poster PNG.
     Still images become a 6 s restrained slow-zoom video (static video fallback
