@@ -10,9 +10,9 @@ Exposes:
   their ``skills/agents/<name>.md`` instruction files, so a fresh tree picks
   up rules the Learner agent appended since the last build.
 * ``build_runner()`` - a :class:`google.adk.runners.Runner` wired to the
-  production services (``DatabaseSessionService`` on
-  ``settings.database_url``, ``SupabaseArtifactService`` on Supabase S3
-  storage, ``PostgresMemoryService``) with graceful in-memory fallbacks
+  production services (``SupabaseSessionService``, native
+  ``SupabaseArtifactService`` and ``PostgresMemoryService``), all using
+  ``SUPABASE_URL`` over HTTPS with graceful in-memory fallbacks
   (``InMemorySessionService`` / ``InMemoryArtifactService`` /
   ``InMemoryMemoryService`` - names verified against installed google-adk
   2.7.0) whenever the environment is not configured, so ``adk web`` works out

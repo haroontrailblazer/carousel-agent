@@ -7,8 +7,13 @@ import {
   ChevronRight,
   Clock,
   Coins,
+  Search,
+  X,
   Wrench,
 } from "lucide-react"
+
+import { TabPanel, Tabs } from "@/components/ui/tabs"
+import "./trace.css"
 
 import { Chip } from "@/components/ui/chip"
 import { groupByAuthor } from "@/hooks/use-run-stream"
@@ -183,7 +188,7 @@ const ToolCallRow = React.memo(function ToolCallRow({ tool }: { tool: ToolCall }
 
   return (
     <details className="studio-tool-detail group border-b border-[var(--border)] last:border-b-0">
-      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-3 transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] [&::-webkit-details-marker]:hidden">
         <span
           className="grid size-7 shrink-0 place-items-center rounded-[8px]"
           style={{
@@ -193,13 +198,13 @@ const ToolCallRow = React.memo(function ToolCallRow({ tool }: { tool: ToolCall }
         >
           <Wrench className="size-3.5" />
         </span>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs font-semibold">
+        <span className="min-w-0 flex-1 break-words font-mono text-xs font-medium sm:text-[13px]">
           {tool.name}
         </span>
         <Chip tone={tool.status === "error" ? "failed" : tool.status === "running" ? "generate" : "done"}>
           {tool.status}
         </Chip>
-        <span className="w-16 text-right font-mono text-[11px] tabular-nums text-[var(--muted-foreground)]">
+        <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-[var(--muted-foreground)]">
           {duration(tool.ms)}
         </span>
         <ChevronDown className="size-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
@@ -209,20 +214,20 @@ const ToolCallRow = React.memo(function ToolCallRow({ tool }: { tool: ToolCall }
         <div className="grid gap-3 bg-[var(--muted)] px-3 py-3 lg:grid-cols-2">
           {tool.args && (
             <div className="min-w-0">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+              <p className="mb-1.5 text-xs font-semibold text-[var(--muted-foreground)]">
                 Arguments
               </p>
-              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-[var(--border)] bg-[var(--background)] p-2.5 font-mono text-[11px] leading-relaxed">
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px] border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-xs leading-6">
                 {tool.args}
               </pre>
             </div>
           )}
           {tool.result && (
             <div className="min-w-0">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+              <p className="mb-1.5 text-xs font-semibold text-[var(--muted-foreground)]">
                 Result
               </p>
-              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-[var(--border)] bg-[var(--background)] p-2.5 font-mono text-[11px] leading-relaxed">
+              <pre className="max-h-80 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px] border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-xs leading-6">
                 {tool.result}
               </pre>
             </div>
@@ -293,12 +298,12 @@ export function TraceSummaryBar({
             index > 0 && "sm:border-l sm:border-[var(--border)]",
           )}
         >
-          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--muted-foreground)]">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--muted-foreground)]">
             <Icon className="size-3.5" />
             {label}
           </div>
           <div className="mt-1.5 flex items-baseline gap-1.5">
-            <span className="font-mono text-base font-semibold leading-none tabular-nums">
+            <span className="text-xl font-semibold leading-none tracking-tight tabular-nums">
               {value}
             </span>
             {live && key === "ms" && (
@@ -470,11 +475,11 @@ const AgentRunRow = React.memo(function AgentRunRow({
                 : "var(--brand)",
           }}
         />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{label}</span>
+        <span className="min-w-0 flex-1 break-words text-sm font-semibold leading-5">{label}</span>
         {failed && <AlertTriangle className="size-3.5 shrink-0 text-[var(--destructive)]" />}
         <ChevronRight className={cn("size-3.5 shrink-0 text-[var(--muted-foreground)]", selected && "text-[var(--foreground)]")} />
       </span>
-      <span className="mt-2 grid grid-cols-3 gap-2 pl-4 font-mono text-[10px] tabular-nums text-[var(--muted-foreground)]">
+      <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 pl-10 text-xs tabular-nums text-[var(--muted-foreground)]">
         <span>{active ? "running" : duration(block.stat.ms)}</span>
         <span>{block.stat.tokens.total ? `${compactNumber(block.stat.tokens.total)} tok` : "— tok"}</span>
         <span>
@@ -493,6 +498,7 @@ function TraceBlockDetails({
   active: boolean
 }) {
   const [view, setView] = React.useState<"activity" | "tools">("activity")
+  const [search, setSearch] = React.useState("")
   const failed = block.events.some((event) => event.kind === "error")
   const tools = React.useMemo(
     () => block.events.flatMap((event) => event.tools ?? []),
@@ -501,98 +507,97 @@ function TraceBlockDetails({
     [block.signature],
   )
   const label = agentLabel(block)
+  const query = search.trim().toLowerCase()
+  const visibleEvents = block.events.filter((event) =>
+    !query || `${event.kind} ${event.text} ${event.data?.error ?? ""}`.toLowerCase().includes(query),
+  )
+  const visibleTools = tools.filter((tool) =>
+    !query || `${tool.name} ${tool.status} ${tool.args ?? ""} ${tool.result ?? ""}`.toLowerCase().includes(query),
+  )
+  const matches = view === "activity" ? visibleEvents.length : visibleTools.length
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
+    <div className="trace-inspector flex min-h-0 min-w-0 flex-col">
+      <div className="shrink-0 border-b border-[var(--border)] p-4 sm:px-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="truncate text-[15px] font-semibold">{label}</h3>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="break-words text-base font-semibold sm:text-lg">{label}</h3>
               {active && <Chip tone="generate" dot pulse>running</Chip>}
               {failed && <Chip tone="failed" dot>error</Chip>}
             </div>
             {AGENT_BLURBS[block.author] && (
-              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--muted-foreground)]">
+              <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[var(--muted-foreground)]">
                 {AGENT_BLURBS[block.author]}
               </p>
             )}
           </div>
-          <div className="flex shrink-0 gap-4 font-mono text-[11px] tabular-nums text-[var(--muted-foreground)]">
-            <span>{active ? "running" : duration(block.stat.ms)}</span>
-            <span title={`${block.stat.tokens.prompt.toLocaleString()} in · ${block.stat.tokens.output.toLocaleString()} out`}>
-              {block.stat.tokens.total ? compactNumber(block.stat.tokens.total) : "—"} tokens
-            </span>
-            <span>{block.stat.toolCalls || 0} calls</span>
-          </div>
+          <span className="flex items-center gap-1.5 text-xs tabular-nums text-[var(--muted-foreground)]">
+            <Clock className="size-3.5" aria-hidden /> {duration(block.stat.ms)}
+          </span>
         </div>
-
-        <div className="mt-4 inline-flex rounded-[9px] bg-[var(--muted)] p-0.5" role="tablist" aria-label="Selected agent details">
-          {(["activity", "tools"] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              role="tab"
-              aria-selected={view === item}
-              onClick={() => setView(item)}
-              className={cn(
-                "rounded-[7px] px-3 py-1.5 text-xs font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-                view === item
-                  ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
-                  : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-              )}
-            >
-              {item === "tools" ? `Tool calls (${tools.length})` : `Activity (${block.events.length})`}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <Tabs
+            label="Selected agent details"
+            value={view}
+            onChange={setView}
+            items={[
+              { value: "activity", label: `Activity (${block.events.length})` },
+              { value: "tools", label: `Tool calls (${tools.length})` },
+            ]}
+          />
+          <span className="text-xs tabular-nums text-[var(--muted-foreground)]"
+            title={`${block.stat.tokens.prompt.toLocaleString()} in · ${block.stat.tokens.output.toLocaleString()} out`}>
+            {block.stat.tokens.total ? compactNumber(block.stat.tokens.total) : "—"} tokens
+          </span>
+        </div>
+        <div className="trace-search mt-3 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 focus-within:ring-2 focus-within:ring-[var(--ring)]">
+          <Search className="size-4 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+          <input
+            type="search"
+            aria-label="Search selected agent trace"
+            placeholder="Search this agent’s trace…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--muted-foreground)] [&::-webkit-search-cancel-button]:appearance-none"
+          />
+          {search && (
+            <button type="button" aria-label="Clear trace search" onClick={() => setSearch("")}
+              className="grid size-8 shrink-0 place-items-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
+              <X className="size-4" />
             </button>
-          ))}
+          )}
         </div>
+        {query && <p role="status" className="mt-2 text-xs text-[var(--muted-foreground)]">{matches} matching {view === "activity" ? "events" : "tool calls"}</p>}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        {view === "activity" ? (
-          <div role="tabpanel" aria-label="Activity">
-            <div className="sticky top-0 z-[1] hidden grid-cols-[3.25rem_6.5rem_6rem_minmax(0,1fr)] gap-3 border-b border-[var(--border)] bg-[var(--card)] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)] sm:grid">
-              <span>#</span>
-              <span>Time</span>
-              <span>Event</span>
-              <span>Details</span>
-            </div>
-            <div>
-              {block.events.map((event, index) => {
-                const text = event.text || (event.kind === "error" ? String(event.data?.error ?? "error") : "No text payload")
-                return (
-                  <div
-                    key={event.id ?? `${event.seq}-${index}`}
-                    className="grid gap-1 border-b border-[var(--border)] px-4 py-3 text-xs last:border-b-0 sm:grid-cols-[3.25rem_6.5rem_6rem_minmax(0,1fr)] sm:gap-3"
-                  >
-                    <span className="hidden font-mono tabular-nums text-[var(--muted-foreground)] sm:block">
-                      {String(event.seq).padStart(2, "0")}
-                    </span>
-                    <span className="font-mono text-[10px] tabular-nums text-[var(--muted-foreground)] sm:text-[11px]">
-                      {eventTime(event)}
-                    </span>
-                    <span className="w-fit rounded-full bg-[var(--muted)] px-2 py-0.5 text-[10px] font-medium capitalize text-[var(--muted-foreground)]">
-                      {event.kind}
-                    </span>
-                    <span className={cn("min-w-0 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed", event.kind === "error" && "text-[var(--destructive)]")}>
-                      {text}
-                    </span>
+      <div className="trace-scroll min-h-0 flex-1 overflow-auto overscroll-contain">
+        <TabPanel value="activity" selected={view === "activity"}>
+          <ol className="trace-event-list">
+            {visibleEvents.map((event, index) => {
+              const text = event.text || (event.kind === "error" ? String(event.data?.error ?? "Error") : "No text payload")
+              return (
+                <li key={event.id ?? `${event.seq}-${index}`} className={cn("trace-event", event.kind === "error" && "trace-event--error")}>
+                  <div className="trace-event-meta">
+                    <span className="trace-event-kind">{event.kind.replaceAll("_", " ")}</span>
+                    <span className="text-[var(--muted-foreground)]">#{event.seq}</span>
+                    <span className="ml-auto tabular-nums text-[var(--muted-foreground)]">{eventTime(event)}</span>
                   </div>
-                )
-              })}
-            </div>
-          </div>
-        ) : (
-          <div role="tabpanel" aria-label="Tool calls">
-            {tools.length ? (
-              tools.map((tool, index) => (
-                <ToolCallRow key={tool.key ?? `${tool.id || tool.name}-${index}`} tool={tool} />
-              ))
-            ) : (
-              <p className="p-8 text-center text-sm text-[var(--muted-foreground)]">
-                This agent pass did not use any tools.
-              </p>
-            )}
+                  <p className="trace-event-text">{text}</p>
+                </li>
+              )
+            })}
+          </ol>
+        </TabPanel>
+        <TabPanel value="tools" selected={view === "tools"}>
+          {visibleTools.map((tool, index) => (
+            <ToolCallRow key={tool.key ?? `${tool.id || tool.name}-${index}`} tool={tool} />
+          ))}
+        </TabPanel>
+        {matches === 0 && (
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm font-medium">{query ? "No matching entries" : "No tool calls in this pass"}</p>
+            <p className="mt-2 text-[13px] text-[var(--muted-foreground)]">{query ? "Try a different word or clear your search." : "This agent’s updates are available in Activity."}</p>
           </div>
         )}
       </div>
@@ -668,9 +673,13 @@ export function AgentTrace({
     // The newest pass is selected by default. Keep that row visible in the
     // compact mobile master list instead of showing the first rows while the
     // inspector describes a row below the fold.
-    if (!selectedKey && runListRef.current) {
-      runListRef.current.scrollTop = runListRef.current.scrollHeight
-    }
+    const list = runListRef.current
+    if (selectedKey || !list) return
+    const followLatest = () => { list.scrollTop = list.scrollHeight }
+    followLatest()
+    const observer = new ResizeObserver(followLatest)
+    observer.observe(list)
+    return () => observer.disconnect()
   }, [blocks.length, selectedKey])
 
   if (!synced && events.length === 0) {
@@ -699,11 +708,11 @@ export function AgentTrace({
     <div className="studio-trace-workbench flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)]">
       <TraceSummaryBar summary={summary} live={live} />
 
-      <div className="grid min-h-[30rem] md:min-h-0 md:flex-1 md:grid-cols-[17rem_minmax(0,1fr)]">
-        <aside className="border-b border-[var(--border)] md:min-h-0 md:border-b-0 md:border-r">
+      <div className="grid min-h-0 md:flex-1 md:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)]">
+        <aside className="flex min-h-0 flex-col border-b border-[var(--border)] md:border-b-0 md:border-r">
           <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2.5">
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
-              Agent runs
+            <h3 className="text-xs font-semibold text-[var(--muted-foreground)]">
+              Agent activity
             </h3>
             <span className="font-mono text-[10px] tabular-nums text-[var(--muted-foreground)]">
               {blocks.length}
@@ -711,7 +720,7 @@ export function AgentTrace({
           </div>
           <div
             ref={runListRef}
-            className="max-h-64 overflow-auto md:max-h-none md:h-[calc(100%-2.375rem)]"
+            className="max-h-44 overflow-auto overscroll-contain md:max-h-none md:flex-1"
           >
             {blocks.map((block, index) => {
               const key = blockKey(block)

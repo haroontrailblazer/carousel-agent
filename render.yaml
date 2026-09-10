@@ -87,23 +87,13 @@ services:
       - key: IMAGE_MODEL
         value: gpt-image-2
 
-      # --- database -------------------------------------------------------
-      # MUST be the Supabase SESSION pooler on port 5432. Not
-      # db.<ref>.supabase.co (IPv6-only, unreachable from Render) and not the
-      # transaction pooler on 6543 (no prepared statements, which asyncpg
-      # requires). Percent-encode any @ in the password as %40.
-      - key: DATABASE_URL
-        sync: false
-      - key: DB_POOL_RECYCLE_S
-        value: "280"
-
-      # --- supabase storage + auth ----------------------------------------
+      # --- Supabase HTTPS database, Storage and Auth -----------------------
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false          # public by design; ships in the browser bundle
       - key: SUPABASE_SECRET_KEY
-        sync: false          # server-only native Storage key; no S3 setup
+        sync: false          # server-only database and Storage key; no S3 setup
       - key: MEDIA_BUCKET
         value: corousel-media
 

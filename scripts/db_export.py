@@ -107,13 +107,13 @@ async def main() -> int:
     parser.add_argument(
         "--dsn",
         default="",
-        help="source database; defaults to DATABASE_URL from the environment",
+        help="temporary admin database connection; required for this maintenance utility",
     )
     args = parser.parse_args()
 
-    dsn = (args.dsn or settings.database_url or "").replace("+asyncpg", "", 1)
+    dsn = (args.dsn or "").replace("+asyncpg", "", 1)
     if not dsn:
-        print("No DATABASE_URL set and no --dsn given.", file=sys.stderr)
+        print("Supply --dsn for this maintenance operation.", file=sys.stderr)
         return 2
 
     out = Path(args.out)

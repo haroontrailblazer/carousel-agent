@@ -22,6 +22,7 @@ import logging
 from typing import Any, Optional
 
 from app.services import db, instagram_accounts, instagram_oauth
+from app.services.job_lease import job_lease
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +34,6 @@ DEFAULT_SCHEDULE: dict = {
     "enabled": True,
     "fetch_cron": "0 * * * *",
 }
-
-#: Advisory-lock id for the fetch job. Cheap insurance: even though this design
-#: assumes one instance, a second one starting by accident would otherwise
-#: double-fetch and race on the queue's unique url_hash.
-_FETCH_LOCK_ID = 0x0CA1_0F01
-
-#: Advisory-lock id for the Instagram token refresh. Its own id, not the fetch
-#: one: the two jobs are unrelated and must never block each other.
-_IG_REFRESH_LOCK_ID = 0x0CA1_0F02
 
 #: When to renew Instagram tokens. Daily, in the small hours - a token has a
 #: fortnight of slack before it matters, so this never needs to be prompt.
@@ -95,47 +87,35 @@ async def run_fetch_once() -> dict:
     watching, and a feed being down for an hour is not an incident.
     """
     global _fetch_in_flight
-    lock_held = False
     _fetch_in_flight += 1
     try:
-        pool = await db.get_pool()
-        lock_held = bool(
-            await pool.fetchval("SELECT pg_try_advisory_lock($1)", _FETCH_LOCK_ID)
-        )
-        if not lock_held:
-            logger.info("Another process is already fetching; skipping this tick.")
-            return {"skipped": "locked"}
+        async with job_lease("news-fetch") as acquired:
+            if not acquired:
+                return {"skipped": "locked"}
+            # Deferred import: the fetcher pulls in feedparser and the agent
+            # stack. The scheduler module itself must stay cheap to import.
+            #
+            # Two calls, not one: fetch_all() only POLLS the sources and returns
+            # payloads - enqueue_items() is what writes them to news_queue and
+            # dedupes. Calling fetch_all alone would poll every hour and quietly
+            # discard everything it found.
+            from fetcher.fetch_news import enqueue_items, fetch_all
 
-        # Deferred import: the fetcher pulls in feedparser and the agent
-        # stack. The scheduler module itself must stay cheap to import.
-        #
-        # Two calls, not one: fetch_all() only POLLS the sources and returns
-        # payloads - enqueue_items() is what writes them to news_queue and
-        # dedupes. Calling fetch_all alone would poll every hour and quietly
-        # discard everything it found.
-        from fetcher.fetch_news import enqueue_items, fetch_all
-
-        payloads = await asyncio.to_thread(fetch_all)
-        enqueued, skipped = await enqueue_items(payloads)
-        summary = {"fetched": len(payloads), "enqueued": enqueued, "duplicates": skipped}
-        logger.info(
-            "Scheduled fetch: %d fetched, %d new, %d duplicate(s).",
-            len(payloads),
-            enqueued,
-            skipped,
-        )
-        return summary
+            payloads = await asyncio.to_thread(fetch_all)
+            enqueued, skipped = await enqueue_items(payloads)
+            summary = {"fetched": len(payloads), "enqueued": enqueued, "duplicates": skipped}
+            logger.info(
+                "Scheduled fetch: %d fetched, %d new, %d duplicate(s).",
+                len(payloads),
+                enqueued,
+                skipped,
+            )
+            return summary
     except Exception as exc:
         logger.exception("Scheduled fetch failed: %s", exc)
         return {"error": str(exc)}
     finally:
         _fetch_in_flight -= 1
-        if lock_held:
-            try:
-                pool = await db.get_pool()
-                await pool.fetchval("SELECT pg_advisory_unlock($1)", _FETCH_LOCK_ID)
-            except Exception:  # pragma: no cover - best effort
-                logger.debug("Could not release the fetch advisory lock.")
 
 
 async def refresh_instagram_tokens() -> dict:
@@ -185,27 +165,13 @@ async def refresh_instagram_tokens() -> dict:
 
 
 async def _refresh_instagram_tokens_locked() -> None:
-    """The scheduled entry point, behind an advisory lock."""
-    pool = None
+    """Refresh under a renewable lease shared across application instances."""
     try:
-        pool = await db.get_pool()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Instagram refresh skipped; no database: %s", exc)
-        return
-    async with pool.acquire() as conn:
-        got = await conn.fetchval("SELECT pg_try_advisory_lock($1)", _IG_REFRESH_LOCK_ID)
-        if not got:
-            logger.info("Another instance is refreshing Instagram tokens; skipping.")
-            return
-        try:
-            await refresh_instagram_tokens()
-        finally:
-            try:
-                await conn.execute(
-                    "SELECT pg_advisory_unlock($1)", _IG_REFRESH_LOCK_ID
-                )
-            except Exception:  # noqa: BLE001
-                logger.debug("Could not release the Instagram refresh lock.")
+        async with job_lease("instagram-refresh") as acquired:
+            if acquired:
+                await refresh_instagram_tokens()
+    except Exception:
+        logger.exception("Scheduled Instagram refresh failed.")
 
 
 async def start_scheduler() -> Optional[Any]:

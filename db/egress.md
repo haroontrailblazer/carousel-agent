@@ -10,8 +10,7 @@ Using the native Storage API instead of S3 does not itself reduce egress.
 | --- | --- | --- |
 | `SUPABASE_URL` | Browser and server | Project URL |
 | `SUPABASE_ANON_KEY` | Browser | Supabase Auth; public by design |
-| `DATABASE_URL` | Server only | PostgreSQL session and application tables |
-| `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` | Server only | Background Storage uploads, private reads, signing and deletion |
+| `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY` | Server only | Database RPCs, saved agent sessions, memory and private Storage operations |
 | `MEDIA_BUCKET` | Server | Existing private bucket; preserve the configured spelling |
 
 Do not put management personal access tokens in application configuration.
@@ -24,6 +23,11 @@ remain `s3://bucket/key` as stable identifiers, even when transport is HTTP.
 The artifact service and media backup/restore utilities select native Storage
 when a server Storage key is present. Legacy S3 credentials continue working
 until that key has been configured and the new connection verified.
+
+All application database traffic uses `SUPABASE_URL` over HTTPS. No PostgreSQL
+connection string is loaded by the runtime. This transport change alone does
+not reduce egress; the read optimizations below still determine transfer volume.
+See [HTTPS setup](https-database.md) for migration and verification steps.
 
 ## Changes that reduce transfers
 
@@ -61,9 +65,11 @@ measurements, not a promised percentage reduction in the Supabase bill.
 
 Migration 008 was applied to the configured database and its three indexes
 verified; the event row count remained 141. The application optimizations
-require deploying the updated code. Native Storage activation still requires
-approval to retrieve/store its privileged server credential and a live smoke
-test; the existing S3 configuration remains in use until then.
+require deploying the updated code. Native Storage was subsequently verified
+using the service-role key supplied in the ignored local `.env`: existing media,
+upload/download, ADK metadata, signed downloads, anonymous denial and deletion
+all passed. The temporary verification object was removed. The three local
+`SUPABASE_S3_*` settings were then removed; Railway variables were not changed.
 
 ## Rollout and monitoring
 

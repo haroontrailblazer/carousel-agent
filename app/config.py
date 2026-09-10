@@ -93,10 +93,9 @@ class Settings:
     image_model: str = os.getenv("IMAGE_MODEL", "gpt-image-2")
 
     # --- storage / db (Supabase) ---
-    database_url: str = os.getenv("DATABASE_URL", "")  # postgresql+asyncpg://...
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     media_bucket: str = os.getenv("MEDIA_BUCKET", "carousel-media")
-    # Native Storage uses a server credential. Never expose this through
+    # Database RPCs and native Storage share a server credential. Never expose this through
     # /api/auth/config; browsers continue to receive only the anon key.
     supabase_storage_key: str = os.getenv("SUPABASE_SECRET_KEY", "").strip() or os.getenv(
         "SUPABASE_SERVICE_ROLE_KEY", ""

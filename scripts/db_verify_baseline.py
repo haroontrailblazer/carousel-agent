@@ -76,7 +76,7 @@ async def main() -> int:
     parser.add_argument("--dsn", default="")
     args = parser.parse_args()
 
-    dsn = (args.dsn or settings.database_url or "").replace("+asyncpg", "", 1)
+    dsn = (args.dsn or "").replace("+asyncpg", "", 1)
     declared = _declared(BASELINE.read_text(encoding="utf-8"))
 
     conn = await asyncpg.connect(dsn)

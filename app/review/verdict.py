@@ -316,7 +316,7 @@ async def submit_verdict(
             run_id=run_id,
             detail=(
                 "The review database is unreachable or not configured "
-                "(DATABASE_URL). Details are in the service log."
+                "(SUPABASE_URL and server key). Details are in the service log."
             ),
         )
 

@@ -1,6 +1,6 @@
 -- Carousel Factory - operational schema (Supabase / Postgres 14+).
 -- Idempotent: safe to apply repeatedly (CREATE ... IF NOT EXISTS only).
--- Apply with e.g.:  psql "$DATABASE_URL" -f db/schema.sql
+-- Apply with e.g.:  psql "$ADMIN_DSN" -f db/schema.sql
 -- (strip the "+asyncpg" marker from the URL first, if present)
 
 -- ---------------------------------------------------------------------------
@@ -38,13 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_news_id
 -- feedback: every human verdict (approve/reject) with its feedback text.
 -- targets holds the rework targets (agent names) as a JSON array.
 -- ---------------------------------------------------------------------------
--- NOTE: this definition is mirrored in app/services/memory_service.py's
--- _SCHEMA_DDL, which auto-creates the table so a fresh database works before
--- this file is applied by hand. Both are CREATE TABLE IF NOT EXISTS, so
--- whichever runs first wins - they MUST stay identical. They previously
--- disagreed (serial here vs BIGSERIAL there, and two different index names on
--- created_at); db/migrations/002_web_app.sql repairs databases created under
--- that split. Change one, change the other.
+-- Provisioned by migrations; application startup does not create tables.
 CREATE TABLE IF NOT EXISTS feedback (
     id         bigserial   PRIMARY KEY,
     run_id     text        NOT NULL,

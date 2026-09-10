@@ -197,7 +197,7 @@ class DatabaseFailureTests(unittest.IsolatedAsyncioTestCase):
             outcome = await verdict_mod.submit_verdict(RUN_ID, "approved", "")
 
         self.assertEqual(outcome.result, "db_error")
-        self.assertIn("DATABASE_URL", outcome.detail)
+        self.assertIn("SUPABASE_URL", outcome.detail)
 
 
 if __name__ == "__main__":

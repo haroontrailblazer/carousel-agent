@@ -153,22 +153,6 @@ export function RunDetailRoute() {
           while awaiting review it stacked with the approval card's own
           version, so one task explained itself twice before the reader
           got to the trace. */}
-      {/* Only on the trace tab: on the review tab the decision card below is
-          already saying this, louder. */}
-      {data.pending_review && active === "trace" && (
-        <Card className="flex flex-wrap items-center gap-4 p-4">
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">Ready for review</p>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {data.slide_count} slides and a cover are waiting for a decision.
-            </p>
-          </div>
-          <Button variant="brand" onClick={() => selectTab("review")}>
-            Review it
-          </Button>
-        </Card>
-      )}
-
       {data.qa.issues.length > 0 && (
         // Capped when fitted: a long QA list is worth reading, but not at the
         // price of the slide it is about.

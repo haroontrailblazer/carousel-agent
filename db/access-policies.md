@@ -26,9 +26,10 @@ credentials and S3 access keys also bypass RLS. These policies therefore
 protect browser/direct API access; server authorization remains necessary.
 No server credential was retrieved, added or changed by this migration.
 
-Run `.venv/Scripts/python.exe -B scripts/db_enforce_policies.py` to rehearse
+Run `.venv/Scripts/python.exe -B scripts/db_enforce_policies.py --dsn "$ADMIN_DSN"` to rehearse
 inside a rolled-back transaction. Add `--apply` to commit after validation.
-The runner uses existing `DATABASE_URL` and `MEDIA_BUCKET` settings. It checks
+The maintenance runner uses an explicit temporary admin DSN and `MEDIA_BUCKET`.
+The application itself uses the server key through Supabase HTTPS RPCs. It checks
 30 denied browser reads, verifies restrictive policies against temporary
 permissive-policy probes, rejects browser inserts and compares every
 application table's row count before committing. All probe changes roll back.

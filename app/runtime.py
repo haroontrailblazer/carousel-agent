@@ -1,28 +1,11 @@
-"""Process-wide ADK service singletons.
+"""Shared ADK services; database persistence uses Supabase HTTPS only.
 
-Every ``build_runner()`` used to construct a fresh ``DatabaseSessionService``,
-and each of those builds its own SQLAlchemy async engine with its own
-connection pool. In the CLI that was harmless - one process, one run, then
-exit. In a long-lived web service it is not: a run, a resume, and a scheduler
-tick each mint another pool, and Supabase's pooler starts refusing connections
-long before anything looks wrong in the application.
-
-So the three services live here, built once and shared. Note what is NOT cached:
-the agent tree. ``build_root_agent()`` re-reads ``skills/agents/*.md`` on every
-call, which is how the Learner's appended rules take effect without a redeploy -
-caching that would quietly disable the learning loop.
-
-Sharing is safe because ``Runner.close()`` (verified in google-adk 2.7.0) closes
-toolsets and plugins - both per-runner - and then calls
-``session_service.flush()``, which is a no-op on the base class. It never
-disposes the engine, so one run finishing cannot pull the pool out from under
-another that is still going.
+Agent trees are rebuilt independently so edited agent rules take effect.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from typing import Optional
 
@@ -44,77 +27,13 @@ _artifact_service: Optional[BaseArtifactService] = None
 _memory_service: Optional[BaseMemoryService] = None
 
 
-#: SQLAlchemy engine options for the session store.
-#:
-#: This pipeline does minutes of work with no database traffic at all - a video
-#: download and ffmpeg render, or a batch of image generations - and then asks
-#: ADK to write session state. A pooled connection that has been sitting idle
-#: through that is very likely dead: Supabase's pooler closes idle connections,
-#: and the failure surfaces as
-#: ``ConnectionDoesNotExistError: connection was closed in the middle of
-#: operation`` from whatever statement happened to run next. That is not a
-#: hypothetical - it killed a real run during first_page_visual.
-#:
-#: ADK already defaults ``pool_pre_ping=True``, which tests a connection at
-#: checkout. That is necessary but not sufficient here: pre-ping cannot help
-#: with a connection that dies mid-statement, and a half-open socket can pass
-#: the ping. ``pool_recycle`` is the part that actually matters - it retires
-#: connections by age, before the pooler has a reason to drop them.
-_ENGINE_KWARGS: dict = {
-    "pool_pre_ping": True,
-    # Comfortably under Supabase's idle timeout, so we retire a connection
-    # before the far end does it for us.
-    "pool_recycle": int(os.getenv("DB_POOL_RECYCLE_S", "280")),
-    # Sized against a SHARED budget, not this engine's own appetite. Supabase's
-    # session-mode pooler caps the whole project at 15 clients, and
-    # app.services.db opens its own asyncpg pool alongside this one - the two
-    # maxima add. At the previous defaults they summed to 20, and the pooler
-    # answered EMAXCONNSESSION to whichever write asked last. See the budget
-    # note on _MAX_CONNECTIONS in app/services/db.py.
-    "pool_size": int(os.getenv("DB_POOL_SIZE", "3")),
-    "max_overflow": int(os.getenv("DB_POOL_MAX_OVERFLOW", "2")),
-    "pool_timeout": 30,
-}
-
-# The SQLAlchemy half of the transaction-pooler rule (see
-# _statement_cache_size in app/services/db.py). SQLAlchemy's asyncpg driver
-# keeps its own prepared-statement cache, and it fails the same way behind a
-# transaction-mode pooler - so it is disabled under exactly the same
-# condition, and a switch to port 6543 needs no code change.
-if ":6543" in (settings.database_url or ""):
-    _ENGINE_KWARGS["connect_args"] = {
-        "prepared_statement_cache_size": 0,
-        "statement_cache_size": 0,
-    }
-
-
 def _build_session_service() -> BaseSessionService:
-    """Build the session service: Postgres-backed, else in-memory.
-
-    ``DatabaseSessionService`` persists sessions so a review pause survives a
-    process restart and any surface can resume the run. Without
-    ``DATABASE_URL`` the in-memory service keeps local ``adk web`` working, at
-    the cost of losing every run on exit.
-    """
-    if settings.database_url:
-        try:
-            from google.adk.sessions import DatabaseSessionService
-
-            return DatabaseSessionService(settings.database_url, **_ENGINE_KWARGS)
-        except Exception as exc:
-            logger.warning(
-                "DatabaseSessionService unavailable (%s); falling back to "
-                "InMemorySessionService.",
-                exc,
-            )
-    else:
-        logger.warning(
-            "DATABASE_URL not set; using InMemorySessionService - sessions "
-            "will not survive a restart and a paused run cannot be resumed "
-            "from another process."
-        )
+    """Persist sessions through the same Supabase HTTPS API as app data."""
+    if settings.supabase_url and settings.supabase_storage_key:
+        from app.services.session_service import SupabaseSessionService
+        return SupabaseSessionService()
+    logger.warning("Supabase server settings missing; using temporary in-memory sessions.")
     from google.adk.sessions import InMemorySessionService
-
     return InMemorySessionService()
 
 
@@ -151,14 +70,14 @@ def _build_artifact_service() -> BaseArtifactService:
 def _build_memory_service() -> BaseMemoryService:
     """Build the memory service: Postgres-backed, else in-memory.
 
-    ``PostgresMemoryService`` opens its pool lazily, so constructing it here
+    ``PostgresMemoryService`` uses the shared HTTPS client lazily, so constructing it here
     performs no I/O; runtime database errors degrade gracefully inside the
     orchestrator and learner, which treat memory as best-effort.
     """
-    if settings.database_url:
+    if settings.supabase_url and settings.supabase_storage_key:
         return PostgresMemoryService()
     logger.warning(
-        "DATABASE_URL not set; using InMemoryMemoryService - recent-feedback "
+        "Supabase server settings missing; using InMemoryMemoryService - recent-feedback "
         "injection and permanent feedback storage are disabled."
     )
     from google.adk.memory import InMemoryMemoryService

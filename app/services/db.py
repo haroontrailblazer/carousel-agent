@@ -1,16 +1,7 @@
-"""Postgres access layer for the Carousel Factory (asyncpg).
+"""Application persistence through fixed, server-only Supabase HTTPS RPCs.
 
-A single lazily-created connection pool over ``settings.database_url`` backs
-the operational tables defined in ``db/schema.sql``:
-
-- ``news_queue``      - fetched news items waiting for a pipeline run
-- ``runs``            - one row per pipeline run (phase tracking)
-- ``feedback``        - every human verdict + feedback text (learning input)
-- ``pending_reviews`` - the paused review invocation (session + call id)
-
-Nothing here touches the network at import time: the pool is created on the
-first call that needs it. When ``DATABASE_URL`` is unset every public function
-raises a clear ``RuntimeError`` telling the operator what to configure.
+The lazy shared HTTP client preserves typed query results. Atomic changes
+use dedicated database functions; no direct PostgreSQL connection is opened.
 """
 
 from __future__ import annotations
@@ -24,7 +15,8 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-import asyncpg
+from app.services.supabase_db import SupabaseDatabase
+from copy import deepcopy
 
 from app.config import settings
 from app.news_media import news_thumbnail
@@ -39,132 +31,25 @@ STATUS_DONE = "done"
 STATUS_FAILED = "failed"
 STATUS_DELETED = "deleted"
 
-# Explicit timeouts (seconds) for every network interaction with Postgres.
-_ACQUIRE_TIMEOUT_S = 15.0
-_COMMAND_TIMEOUT_S = 30.0
-
-#: How many connections THIS pool may hold.
-#:
-#: There is a hard budget to share. Supabase's pooler on port 5432 runs in
-#: SESSION mode, which holds a server connection for the whole client session
-#: and caps the project at a fixed number of clients - 15 here. This process
-#: opens connections from two independent places: this asyncpg pool, and the
-#: SQLAlchemy engine behind ADK's DatabaseSessionService (see
-#: ``app.runtime._ENGINE_KWARGS``). Their maxima ADD.
-#:
-#: At the old defaults that sum was 10 + (5 + 5) = 20 against a budget of 15,
-#: so under load the pooler simply refused:
-#:
-#:     asyncpg.exceptions.InternalServerError: (EMAXCONNSESSION)
-#:     max clients reached in session mode - max clients are limited to
-#:     pool_size: 15
-#:
-#: A refusal there is not a slow query, it is a write that never happens - and
-#: the write that happened to lose was ``save_pending_review``, which strands
-#: a run at 'review' with no way for any surface to answer it. Raising
-#: MAX_CONCURRENT_RUNS made it likelier, not less.
-#:
-#: Keep ``DB_MAX_CONNECTIONS`` plus ``DB_POOL_SIZE + DB_POOL_MAX_OVERFLOW``
-#: comfortably under the pooler's limit, with room left for a psql session.
-_MAX_CONNECTIONS = int(os.getenv("DB_MAX_CONNECTIONS", "5"))
-_MIN_CONNECTIONS = min(int(os.getenv("DB_MIN_CONNECTIONS", "2")), _MAX_CONNECTIONS)
-
-#: Attempts for the one write whose failure strands a run (see
-#: ``save_pending_review``). Three tries over ~4.5 s covers a pooler briefly at
-#: capacity and a connection that died idle, without holding the invocation.
-#: asyncpg's prepared-statement cache. Zero whenever the DSN points at a
-#: transaction-mode pooler, because prepared statements do not survive one.
-#: Detected from the port so a URL change is all a mode switch takes;
-#: ``DB_STATEMENT_CACHE`` overrides it either way.
-def _statement_cache_size(url: Optional[str] = None) -> int:
-    override = os.getenv("DB_STATEMENT_CACHE")
-    if override is not None:
-        return int(override)
-    dsn = settings.database_url if url is None else url
-    return 0 if ":6543" in (dsn or "") else 100
-
-
-_STATEMENT_CACHE_SIZE = _statement_cache_size()
-
 _PENDING_REVIEW_ATTEMPTS = int(os.getenv("PENDING_REVIEW_ATTEMPTS", "3"))
 _PENDING_REVIEW_BACKOFF_S = float(os.getenv("PENDING_REVIEW_BACKOFF_S", "1.5"))
-
-_pool: Optional[asyncpg.Pool] = None
+_pool = None
 _pool_lock = asyncio.Lock()
 _transcript_cache = RevisionCache()
 
 
-def _dsn() -> str:
-    """Return a plain-postgres DSN, or raise if DATABASE_URL is not set.
-
-    ``settings.database_url`` may carry the SQLAlchemy-style
-    ``postgresql+asyncpg://`` scheme (used by ADK's DatabaseSessionService
-    config); asyncpg itself wants the bare ``postgresql://`` scheme, so the
-    ``+asyncpg`` marker is stripped here.
-    """
-    url = settings.database_url
-    if not url:
-        raise RuntimeError(
-            "DATABASE_URL is not set. Point it at your Supabase/Postgres "
-            "instance (e.g. postgresql+asyncpg://user:pass@host:5432/postgres) "
-            "in .env before using app.services.db."
-        )
-    return url.replace("+asyncpg", "", 1)
-
-
-async def _init_connection(conn: asyncpg.Connection) -> None:
-    """Per-connection setup: encode/decode json & jsonb as Python objects."""
-    for typename in ("json", "jsonb"):
-        await conn.set_type_codec(
-            typename,
-            encoder=json.dumps,
-            decoder=json.loads,
-            schema="pg_catalog",
-        )
-
-
-async def get_pool() -> asyncpg.Pool:
-    """Return the shared connection pool, creating it on first use.
-
-    Raises:
-        RuntimeError: if ``DATABASE_URL`` is unset (clear operator message).
-    """
+async def get_pool() -> SupabaseDatabase:
+    """Shared HTTPS client; no PostgreSQL socket or connection string."""
     global _pool
-    if _pool is not None:
-        return _pool
-    dsn = _dsn()  # raise early, before taking the lock
-    async with _pool_lock:
-        if _pool is None:
-            # min_size=3 rather than 1: Supabase is a remote host, so opening
-            # a connection costs a TCP and TLS handshake - roughly a third of a
-            # second, which showed up as every first API call after an idle
-            # moment being slow. Keeping a few warm removes that from the path
-            # a user actually waits on.
-            _pool = await asyncpg.create_pool(
-                dsn,
-                min_size=_MIN_CONNECTIONS,
-                max_size=_MAX_CONNECTIONS,
-                # Prepared statements cannot survive a TRANSACTION-mode
-                # pooler. Supabase serves session mode on 5432 and
-                # transaction mode on 6543; the latter hands your connection
-                # to someone else between statements, so a statement prepared
-                # on one backend is executed on another and every query dies
-                # with "prepared statement _asyncpg_stmt_N does not exist".
-                #
-                # Transaction mode is the answer to the 15-client ceiling that
-                # stranded a run here, so switching to 6543 should be a URL
-                # change and nothing else. Turning the cache off costs a
-                # little planning time per query and makes both modes work.
-                statement_cache_size=_STATEMENT_CACHE_SIZE,
-                init=_init_connection,
-                timeout=_ACQUIRE_TIMEOUT_S,
-                command_timeout=_COMMAND_TIMEOUT_S,
-            )
+    if _pool is None:
+        async with _pool_lock:
+            if _pool is None:
+                _pool = SupabaseDatabase()
     return _pool
 
 
 async def close_pool() -> None:
-    """Close the shared pool (call on process shutdown). Safe if never opened."""
+    """Close the shared HTTP client (call on process shutdown). Safe if never opened."""
     global _pool
     async with _pool_lock:
         if _pool is not None:
@@ -740,17 +625,7 @@ async def record_verdict(
 
 
 def _as_timestamptz(value: Any) -> Any:
-    """Coerce an ISO-8601 string to a datetime for asyncpg binding.
-
-    asyncpg binds parameters by their INFERRED type, so writing
-    ``$1::timestamptz`` in the SQL does not make it accept a string - it makes
-    asyncpg demand a datetime and reject anything else. The API layer receives
-    ISO strings from query parameters, so the conversion happens here rather
-    than at every call site.
-
-    A trailing ``Z`` is normalised because ``datetime.fromisoformat`` did not
-    accept it before Python 3.11 and callers copy timestamps around freely.
-    """
+    """Normalize the API's optional ISO-8601 cursor before binding it."""
     if value is None or isinstance(value, datetime):
         return value
     text = str(value).strip()
@@ -818,7 +693,7 @@ async def rename_run(run_id: str, title: str) -> bool:
         str(run_id),
         title.strip(),
     )
-    # asyncpg returns the command tag, e.g. "UPDATE 1".
+    # The adapter preserves command tags, e.g. "UPDATE 1".
     return result.rsplit(" ", 1)[-1] != "0"
 
 
@@ -916,24 +791,12 @@ async def list_runs(
         status: optional exact status filter.
     """
     pool = await get_pool()
-    clauses: list[str] = []
-    args: list[Any] = []
-
-    if before:
-        args.append(_as_timestamptz(before))
-        clauses.append(f"created_at < ${len(args)}")
-    if phase:
-        args.append(phase)
-        clauses.append(f"phase = ${len(args)}")
-    if status:
-        args.append(status)
-        clauses.append(f"status = ${len(args)}")
-
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    args.append(max(1, min(int(limit), 100)))
     rows = await pool.fetch(
-        f"SELECT * FROM runs {where} ORDER BY created_at DESC LIMIT ${len(args)}",
-        *args,
+        "SELECT * FROM runs WHERE ($1::timestamptz IS NULL OR created_at < $1) "
+        "AND ($2::text IS NULL OR phase = $2) AND ($3::text IS NULL OR status = $3) "
+        "ORDER BY created_at DESC LIMIT $4",
+        _as_timestamptz(before) if before else None, phase or None, status or None,
+        max(1, min(int(limit), 100)),
     )
     return [_run_row(r) for r in rows]
 
@@ -1184,19 +1047,19 @@ async def load_run_events(
     nothing and duplicate nothing.
     """
     pool = await get_pool()
-    lifecycle_filter = "AND kind IN ('terminal', 'error') AND btrim(COALESCE(author, '')) = ''" if lifecycle_only else ""
     rows = await pool.fetch(
         f"""
         SELECT seq, kind, author, text, data, created_at
         FROM run_events
         WHERE run_id = $1 AND seq > $2
-        {lifecycle_filter}
+        AND (NOT $4::boolean OR (kind IN ('terminal', 'error') AND btrim(COALESCE(author, '')) = ''))
         ORDER BY seq ASC
         LIMIT $3
         """,
         str(run_id),
         int(after),
         max(1, min(int(limit), 5000)),
+        lifecycle_only,
     )
     out = []
     for r in rows:
@@ -1234,21 +1097,17 @@ async def get_config(key: str, default: Any = None) -> Any:
 async def update_config(key: str, update) -> Any:
     """Atomically read/modify a config value across concurrent app workers."""
     pool = await get_pool()
-    async with pool.acquire() as connection:
-        async with connection.transaction():
-            await connection.execute(
-                "INSERT INTO app_config (key, value) VALUES ($1, '{}'::jsonb) "
-                "ON CONFLICT (key) DO NOTHING", key,
-            )
-            value = await connection.fetchval(
-                "SELECT value FROM app_config WHERE key = $1 FOR UPDATE", key,
-            )
-            updated = update(value)
-            await connection.execute(
-                "UPDATE app_config SET value = $2, updated_at = now() WHERE key = $1",
-                key, updated,
-            )
-    return updated
+    for _ in range(12):
+        current = await pool.fetchrow("SELECT value FROM app_config WHERE key = $1", key)
+        original = current["value"] if current else {}
+        updated = update(deepcopy(original))
+        result = await pool.rpc("carousel_config_compare_swap", {
+            "config_key": key, "expected": original, "replacement": updated,
+            "expected_exists": current is not None,
+        })
+        if result:
+            return updated
+    raise RuntimeError("Configuration changed repeatedly; retry the update")
 
 
 async def set_config(key: str, value: Any) -> None:
@@ -1445,69 +1304,9 @@ async def delete_run(app_name: str, user_id: str, run_id: str) -> dict:
         Row counts per table, for the caller to report.
     """
     pool = await get_pool()
-    counts: dict[str, int] = {}
-
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                "SELECT news_id FROM runs WHERE run_id = $1", str(run_id)
-            )
-            news_id = row["news_id"] if row else None
-
-            for table, sql in (
-                ("run_events", "DELETE FROM run_events WHERE run_id = $1"),
-                ("pending_reviews", "DELETE FROM pending_reviews WHERE run_id = $1"),
-                ("feedback", "DELETE FROM feedback WHERE run_id = $1"),
-                ("runs", "DELETE FROM runs WHERE run_id = $1"),
-            ):
-                result = await conn.execute(sql, str(run_id))
-                counts[table] = int(result.rsplit(" ", 1)[-1] or 0)
-
-            # Keyed on session_id rather than run_id, which is exactly how it
-            # got missed the first time: an audit of every column named
-            # run_id/session_id is what surfaced it.
-            try:
-                result = await conn.execute(
-                    "DELETE FROM memory_entries "
-                    "WHERE app_name = $1 AND user_id = $2 AND session_id = $3",
-                    app_name,
-                    user_id,
-                    str(run_id),
-                )
-                counts["memory_entries"] = int(result.rsplit(" ", 1)[-1] or 0)
-            except Exception:
-                counts["memory_entries"] = 0
-
-            # ADK's own tables, addressed the way it addresses them.
-            for table, sql in (
-                (
-                    "events",
-                    "DELETE FROM public.events "
-                    "WHERE app_name = $1 AND user_id = $2 AND session_id = $3",
-                ),
-                (
-                    "sessions",
-                    "DELETE FROM public.sessions "
-                    "WHERE app_name = $1 AND user_id = $2 AND id = $3",
-                ),
-            ):
-                try:
-                    result = await conn.execute(sql, app_name, user_id, str(run_id))
-                    counts[table] = int(result.rsplit(" ", 1)[-1] or 0)
-                except Exception:
-                    counts[table] = 0
-
-            if news_id:
-                result = await conn.execute(
-                    "UPDATE news_queue SET status = $2 "
-                    "WHERE id = $1 AND status = $3",
-                    str(news_id),
-                    STATUS_QUEUED,
-                    STATUS_PROCESSING,
-                )
-                counts["requeued"] = int(result.rsplit(" ", 1)[-1] or 0)
-
-    return counts
+    return await pool.rpc("carousel_delete_run", {
+        "app": app_name, "usr": user_id, "sid": str(run_id),
+    })
 
 
 async def news_payload(news_id: str) -> Optional[dict]:
@@ -1737,33 +1536,5 @@ async def upsert_carousel_design(
 async def replace_carousel_designs(owner_email: str, designs: list[dict]) -> None:
     """Atomically replace one user's complete ordered design library."""
     owner = _clean_design_owner(owner_email)
-    ids = [str(design["id"]) for design in designs]
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                """
-                DELETE FROM carousel_designs
-                WHERE owner_email = $1
-                  AND NOT (design_id = ANY($2::text[]))
-                """,
-                owner,
-                ids,
-            )
-            await conn.executemany(
-                """
-                INSERT INTO carousel_designs (
-                    owner_email, design_id, name, payload, sort_order
-                )
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (owner_email, design_id) DO UPDATE SET
-                    name       = EXCLUDED.name,
-                    payload    = EXCLUDED.payload,
-                    sort_order = EXCLUDED.sort_order,
-                    updated_at = now()
-                """,
-                [
-                    (owner, str(design["id"]), str(design["name"]), dict(design), index)
-                    for index, design in enumerate(designs)
-                ],
-            )
+    await pool.rpc("carousel_replace_designs", {"owner": owner, "designs": designs})

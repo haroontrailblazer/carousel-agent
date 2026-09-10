@@ -63,7 +63,7 @@ Supabase Storage. The architecture is modeled in `architecture/carousel.c4`
 | `app/orchestrator.py` | `CarouselOrchestrator` - the re-entrant phase state machine (`generate → qa → review → publish/rework → done`) |
 | `app/agents/` | one file per agent (planner, first_page_visual, phrasing, template_design, cta, stitch_verify, review_dispatcher, feedback_router, publisher, learner) |
 | `app/tools/` | media (yt-dlp + FFmpeg), gpt-image-2, Gmail, Instagram Graph API tools |
-| `app/services/` | Supabase Storage artifact service, Postgres memory service, asyncpg helpers |
+| `app/services/` | Supabase Storage artifact service, HTTPS session and memory services, fixed database RPCs |
 | `fetcher/fetch_news.py` | pulls newsletters/RSS/YouTube into the news queue; starts runs |
 | `db/schema.sql` | `news_queue`, `runs`, `feedback`, `pending_reviews` |
 | `skills/` | the editable harness: cover style, design skill, per-agent instructions |
@@ -112,16 +112,16 @@ global account token. Telegram-only artwork omits Instagram identity marks.
 
 ### 4. Database (Supabase Postgres)
 
-Apply the schema once (idempotent - safe to re-run). Use the direct Postgres
-URL **without** the `+asyncpg` marker for psql:
+The application uses `SUPABASE_URL` and a server-only Supabase key for all
+queries, agent sessions and memory. It does not need a database connection URL.
+For a new project, apply `db/migrations/005_transfer_baseline.sql` and migrations
+`006` through `011` in order using Supabase Dashboard → SQL Editor. For `009`,
+configure the existing private bucket as described in `db/access-policies.md`.
+Schema changes run as an administrator during setup, never at app startup.
 
-```powershell
-psql "postgresql://postgres:PASSWORD@HOST:5432/postgres" -f db/schema.sql
-```
-
-or paste `db/schema.sql` into the Supabase Dashboard → SQL Editor. The ADK
-`DatabaseSessionService` creates its own session tables automatically on
-first use.
+The HTTPS RPCs grant execution only to `service_role`. Browser Auth continues
+using `SUPABASE_ANON_KEY`; browser roles cannot read application tables or call
+backend RPCs. See [HTTPS database setup](db/https-database.md).
 
 ### 5. Artifact bucket (Supabase Storage)
 
@@ -130,7 +130,7 @@ Create a **private** bucket named after `MEDIA_BUCKET` (default
 `SUPABASE_URL` and one **server-only** key: `SUPABASE_SECRET_KEY` (preferred)
 or `SUPABASE_SERVICE_ROLE_KEY` (legacy JWT). No separate S3 setup is needed.
 The browser uses `SUPABASE_ANON_KEY` for Auth; background uploads cannot use
-an anonymous identity. `DATABASE_URL` remains the server's Postgres connection.
+an anonymous identity. The same server key authorizes database RPCs.
 Never put a server key or management personal access token in `VITE_*` variables.
 
 Existing `SUPABASE_S3_*` deployments continue working until a native key is
@@ -200,22 +200,10 @@ orchestrator reads its phase from state and proceeds. Runs started by the
 fetcher normally seed `news_item` in state first; without one the run halts
 early with an explanatory event.
 
-**Watching the full mail → click → resume loop inside `adk web`** takes two
-extra alignments, because `adk web` builds its own runner (it does *not* use
-`app.agent.build_runner()`): by default it stores sessions in local `.adk`
-storage under its own app name (`app`, the folder name), while the review API
-resumes sessions via `build_runner()` under `APP_NAME` in the shared Postgres
-DB. So for an end-to-end run driven from the UI:
-
-```powershell
-# .env: APP_NAME=app   (must match the adk web app/folder name)
-adk web --session_service_uri "postgresql+asyncpg://postgres:PASSWORD@HOST:5432/postgres"
-```
-
-Both processes then address the same sessions and the review API's resume
-lands in the very session you're inspecting. For plain observation of the
-generate/QA phases none of this is needed - `adk web` alone works, with
-graceful in-memory fallbacks when Supabase env vars are missing.
+The application console and `app.agent.build_runner()` share persistent
+Supabase HTTPS sessions. Standalone `adk web` creates its own development
+session service, so its sessions are separate from production review runs.
+Use the application's console for the complete generate → review → resume flow.
 
 `adk web` is a development server with **no authentication** - keep it on
 localhost. (Terminal alternative without the UI: `adk run app`.)

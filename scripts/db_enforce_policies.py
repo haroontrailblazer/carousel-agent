@@ -1,7 +1,7 @@
 """Apply and verify application access policies without exposing credentials.
 
 Default is a rollback-only rehearsal. Pass --apply to commit the migration.
-Uses DATABASE_URL and MEDIA_BUCKET from the app configuration. No PAT or new
+Uses an explicit --dsn admin connection and the configured MEDIA_BUCKET. No PAT or new
 server key is needed. Existing application rows are never modified.
 """
 from __future__ import annotations
@@ -91,8 +91,8 @@ async def verify(conn):
     print('Verified: 15 restrictive table policies, 30 denied browser reads, no browser table/column/function grants, private Storage policies.')
 
 
-async def main(apply):
-    conn = await asyncpg.connect(settings.database_url.replace('+asyncpg','',1), statement_cache_size=0, timeout=20)
+async def main(apply, dsn):
+    conn = await asyncpg.connect(dsn.replace('+asyncpg','',1), statement_cache_size=0, timeout=20)
     try:
         sql = (REPO / 'db/migrations/009_enforce_access_policies.sql').read_text(encoding='utf-8')
         # The runner owns the transaction so verification must pass before commit.
@@ -123,4 +123,6 @@ async def main(apply):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
-    asyncio.run(main(parser.parse_args().apply))
+    parser.add_argument('--dsn', required=True)
+    args = parser.parse_args()
+    asyncio.run(main(args.apply, args.dsn))

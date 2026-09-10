@@ -1,0 +1,1204 @@
+{
+  "q_66d6ec24b25d3ac190dc": {
+    "sql": "DELETE FROM instagram_accounts WHERE id = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [],
+    "command": "DELETE",
+    "source": "app.services.db:1460"
+  },
+  "q_db06a33199c9486804a6": {
+    "sql": "DELETE FROM pending_reviews WHERE run_id = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [],
+    "command": "DELETE",
+    "source": "app.services.db:576"
+  },
+  "q_b9f11b639815277496d7": {
+    "sql": "DELETE FROM pending_reviews WHERE run_id = $1 RETURNING run_id, session_id, function_call_id",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "run_id",
+        "type": "text"
+      },
+      {
+        "name": "session_id",
+        "type": "text"
+      },
+      {
+        "name": "function_call_id",
+        "type": "text"
+      }
+    ],
+    "command": "DELETE",
+    "source": "app.services.db:551"
+  },
+  "q_c7ccaf1d349ca9c0b1a8": {
+    "sql": "INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+    "parameters": [
+      "text",
+      "jsonb"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.db:1135"
+  },
+  "q_b9eb5873954e0c5ddb20": {
+    "sql": "INSERT INTO app_users (email, role) VALUES (lower($1), $2) ON CONFLICT (email) DO NOTHING",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.db:1198"
+  },
+  "q_31b15702d6e871ae9ea7": {
+    "sql": "INSERT INTO carousel_designs ( owner_email, design_id, name, payload, sort_order ) VALUES ($1, $2, $3, $4, COALESCE($5::integer, 0)) ON CONFLICT (owner_email, design_id) DO UPDATE SET name = EXCLUDED.name, payload = EXCLUDED.payload, sort_order = COALESCE($5::integer, carousel_designs.sort_order), updated_at = now()",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "jsonb",
+      "int4"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.db:1535"
+  },
+  "q_8dd89723936f1007a918": {
+    "sql": "INSERT INTO feedback (run_id, verdict, feedback, targets, news_title, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "jsonb",
+      "text",
+      "timestamptz"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.memory_service:346"
+  },
+  "q_8221394f0d0a06bc0067": {
+    "sql": "INSERT INTO feedback (run_id, verdict, feedback, targets, news_title, decided_by, source) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "jsonb",
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "int8"
+      }
+    ],
+    "command": "INSERT",
+    "source": "app.services.db:613"
+  },
+  "q_257f54c3425331ee9258": {
+    "sql": "INSERT INTO instagram_accounts ( id, ig_user_id, username, name, avatar_key, auth_kind, token_enc, token_expires_at, is_default, connected_by ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (ig_user_id) DO UPDATE SET username = EXCLUDED.username, name = EXCLUDED.name, avatar_key = COALESCE(NULLIF(EXCLUDED.avatar_key, ''), instagram_accounts.avatar_key), auth_kind = EXCLUDED.auth_kind, token_enc = EXCLUDED.token_enc, token_expires_at = EXCLUDED.token_expires_at, disabled = false, connected_by = EXCLUDED.connected_by, last_refreshed_at = now()",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "text",
+      "text",
+      "text",
+      "text",
+      "timestamptz",
+      "bool",
+      "text"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.db:1395"
+  },
+  "q_5f15232ef02472dda91c": {
+    "sql": "INSERT INTO memory_entries (app_name, user_id, session_id, event_id, author, role, text_content, event_ts) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (app_name, user_id, session_id, event_id) DO NOTHING",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "text",
+      "text",
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.memory_service:247"
+  },
+  "q_5703021faed72a1fc5ea": {
+    "sql": "INSERT INTO news_queue (id, url_hash, payload, status) VALUES ($1, $2, $3, $4) ON CONFLICT (url_hash) DO NOTHING RETURNING id",
+    "parameters": [
+      "text",
+      "text",
+      "jsonb",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      }
+    ],
+    "command": "INSERT",
+    "source": "app.services.db:119"
+  },
+  "q_39816ede3cb98f6fa805": {
+    "sql": "INSERT INTO pending_reviews (run_id, session_id, function_call_id) VALUES ($1, $2, $3) ON CONFLICT (run_id) DO UPDATE SET session_id = EXCLUDED.session_id, function_call_id = EXCLUDED.function_call_id, created_at = now()",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.db:469"
+  },
+  "q_142f5eb3b635be7999e6": {
+    "sql": "INSERT INTO run_events (run_id, seq, kind, author, text, data) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (run_id, seq) DO NOTHING",
+    "parameters": [
+      "text",
+      "int4",
+      "text",
+      "text",
+      "text",
+      "jsonb"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.db:1044"
+  },
+  "q_81d29b5a1246b41abffa": {
+    "sql": "INSERT INTO runs (run_id, news_id, phase, review_round) VALUES ($1, $2, 'generate', 0) ON CONFLICT (run_id) DO UPDATE SET news_id = EXCLUDED.news_id, updated_at = now()",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "INSERT",
+    "source": "app.services.db:372"
+  },
+  "q_d01506a7a95cb13ae4a6": {
+    "sql": "SELECT (SELECT jsonb_object_agg(key, value) FROM jsonb_each(CASE WHEN jsonb_typeof(state) = 'string' THEN (state #>> '{}')::jsonb ELSE COALESCE(state, '{}'::jsonb) END) WHERE key = ANY($4::text[])) AS state FROM public.sessions WHERE app_name = $1 AND user_id = $2 AND id = $3",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "text[]"
+    ],
+    "columns": [
+      {
+        "name": "state",
+        "type": "jsonb"
+      }
+    ],
+    "command": "SELECT",
+    "source": "web_api.routes_runs:194"
+  },
+  "q_494f276d0c2e73072b8e": {
+    "sql": "SELECT * FROM runs WHERE ($1::timestamptz IS NULL OR created_at < $1) AND ($2::text IS NULL OR phase = $2) AND ($3::text IS NULL OR status = $3) ORDER BY created_at DESC LIMIT $4",
+    "parameters": [
+      "timestamptz",
+      "text",
+      "text",
+      "int8"
+    ],
+    "columns": [
+      {
+        "name": "run_id",
+        "type": "text"
+      },
+      {
+        "name": "news_id",
+        "type": "text"
+      },
+      {
+        "name": "phase",
+        "type": "text"
+      },
+      {
+        "name": "review_round",
+        "type": "int4"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "title",
+        "type": "text"
+      },
+      {
+        "name": "source",
+        "type": "text"
+      },
+      {
+        "name": "status",
+        "type": "text"
+      },
+      {
+        "name": "requested_by",
+        "type": "text"
+      },
+      {
+        "name": "account_id",
+        "type": "text"
+      },
+      {
+        "name": "title_locked",
+        "type": "bool"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:813"
+  },
+  "q_01773445dea14a19d433": {
+    "sql": "SELECT * FROM runs WHERE phase = ANY($1::text[]) AND status <> ALL($2::text[]) AND updated_at < now() - make_interval(secs => $3) ORDER BY created_at DESC",
+    "parameters": [
+      "text[]",
+      "text[]",
+      "float8"
+    ],
+    "columns": [
+      {
+        "name": "run_id",
+        "type": "text"
+      },
+      {
+        "name": "news_id",
+        "type": "text"
+      },
+      {
+        "name": "phase",
+        "type": "text"
+      },
+      {
+        "name": "review_round",
+        "type": "int4"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "title",
+        "type": "text"
+      },
+      {
+        "name": "source",
+        "type": "text"
+      },
+      {
+        "name": "status",
+        "type": "text"
+      },
+      {
+        "name": "requested_by",
+        "type": "text"
+      },
+      {
+        "name": "account_id",
+        "type": "text"
+      },
+      {
+        "name": "title_locked",
+        "type": "bool"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:909"
+  },
+  "q_b15c77692c7f308c6c33": {
+    "sql": "SELECT * FROM runs WHERE run_id = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "run_id",
+        "type": "text"
+      },
+      {
+        "name": "news_id",
+        "type": "text"
+      },
+      {
+        "name": "phase",
+        "type": "text"
+      },
+      {
+        "name": "review_round",
+        "type": "int4"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "title",
+        "type": "text"
+      },
+      {
+        "name": "source",
+        "type": "text"
+      },
+      {
+        "name": "status",
+        "type": "text"
+      },
+      {
+        "name": "requested_by",
+        "type": "text"
+      },
+      {
+        "name": "account_id",
+        "type": "text"
+      },
+      {
+        "name": "title_locked",
+        "type": "bool"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:794"
+  },
+  "q_edc732ff5423b6c65644": {
+    "sql": "SELECT account_id FROM runs WHERE run_id = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "account_id",
+        "type": "text"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1481"
+  },
+  "q_d5878fa1b98bfc26a50b": {
+    "sql": "SELECT count(*) FROM app_users",
+    "parameters": [],
+    "columns": [
+      {
+        "name": "count",
+        "type": "int8"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1195"
+  },
+  "q_f2fa2c19619b8853c24c": {
+    "sql": "SELECT count(*) FROM public.events WHERE app_name = $1 AND user_id = $2 AND session_id = $3",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "count",
+        "type": "int8"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1215"
+  },
+  "q_e263c30765e201849caa": {
+    "sql": "SELECT count(*) FROM runs WHERE created_at >= $1",
+    "parameters": [
+      "timestamptz"
+    ],
+    "columns": [
+      {
+        "name": "count",
+        "type": "int8"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:877"
+  },
+  "q_b337d4a5a13f14e7f3c1": {
+    "sql": "SELECT email, role, disabled FROM app_users WHERE lower(email) = lower($1)",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "email",
+        "type": "text"
+      },
+      {
+        "name": "role",
+        "type": "text"
+      },
+      {
+        "name": "disabled",
+        "type": "bool"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1157"
+  },
+  "q_c0445461a72264308f2b": {
+    "sql": "SELECT email, role, disabled, created_at FROM app_users ORDER BY email",
+    "parameters": [],
+    "columns": [
+      {
+        "name": "email",
+        "type": "text"
+      },
+      {
+        "name": "role",
+        "type": "text"
+      },
+      {
+        "name": "disabled",
+        "type": "bool"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1167"
+  },
+  "q_538c2d6dde84e4ab4e0f": {
+    "sql": "SELECT id FROM news_queue WHERE url_hash = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:133"
+  },
+  "q_b6f610789162c99e43ef": {
+    "sql": "SELECT id, author, role, text_content, event_ts, created_at FROM memory_entries WHERE app_name=$1 AND user_id=$2 AND text_content ILIKE ANY($3::text[]) ORDER BY created_at DESC LIMIT $4",
+    "parameters": [
+      "text",
+      "text",
+      "text[]",
+      "int8"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "int8"
+      },
+      {
+        "name": "author",
+        "type": "text"
+      },
+      {
+        "name": "role",
+        "type": "text"
+      },
+      {
+        "name": "text_content",
+        "type": "text"
+      },
+      {
+        "name": "event_ts",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.memory_service:286"
+  },
+  "q_793e6c2b2cae23805dbb": {
+    "sql": "SELECT id, ig_user_id, username, name, avatar_key, auth_kind, token_enc, token_expires_at, is_default, disabled, connected_by, connected_at, last_refreshed_at FROM instagram_accounts ORDER BY username",
+    "parameters": [],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      },
+      {
+        "name": "ig_user_id",
+        "type": "text"
+      },
+      {
+        "name": "username",
+        "type": "text"
+      },
+      {
+        "name": "name",
+        "type": "text"
+      },
+      {
+        "name": "avatar_key",
+        "type": "text"
+      },
+      {
+        "name": "auth_kind",
+        "type": "text"
+      },
+      {
+        "name": "token_enc",
+        "type": "text"
+      },
+      {
+        "name": "token_expires_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "is_default",
+        "type": "bool"
+      },
+      {
+        "name": "disabled",
+        "type": "bool"
+      },
+      {
+        "name": "connected_by",
+        "type": "text"
+      },
+      {
+        "name": "connected_at",
+        "type": "timestamptz"
+      },
+      {
+        "name": "last_refreshed_at",
+        "type": "timestamptz"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1367"
+  },
+  "q_dcf939d0ed39e5939414": {
+    "sql": "SELECT id, payload FROM news_queue WHERE id = $1 AND status <> $2",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      },
+      {
+        "name": "payload",
+        "type": "jsonb"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1339"
+  },
+  "q_1278e6f6628786a1cee6": {
+    "sql": "SELECT id, payload, created_at FROM news_queue WHERE status = $1 ORDER BY created_at ASC LIMIT $2",
+    "parameters": [
+      "text",
+      "int8"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      },
+      {
+        "name": "payload",
+        "type": "jsonb"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:198"
+  },
+  "q_8d6a6ed71afeda6dd765": {
+    "sql": "SELECT id, run_id, verdict, feedback, targets, news_title, created_at FROM feedback WHERE feedback ILIKE ANY($1::text[]) OR news_title ILIKE ANY($1::text[]) ORDER BY created_at DESC LIMIT $2",
+    "parameters": [
+      "text[]",
+      "int8"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "int8"
+      },
+      {
+        "name": "run_id",
+        "type": "text"
+      },
+      {
+        "name": "verdict",
+        "type": "text"
+      },
+      {
+        "name": "feedback",
+        "type": "text"
+      },
+      {
+        "name": "targets",
+        "type": "jsonb"
+      },
+      {
+        "name": "news_title",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.memory_service:290"
+  },
+  "q_6a10b8fa3f5a3158bada": {
+    "sql": "SELECT id, timestamp, event_data FROM public.events WHERE app_name = $1 AND user_id = $2 AND session_id = $3 ORDER BY timestamp ASC, id ASC OFFSET $4 LIMIT $5",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "int8",
+      "int8"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "varchar"
+      },
+      {
+        "name": "timestamp",
+        "type": "timestamp"
+      },
+      {
+        "name": "event_data",
+        "type": "jsonb"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1277"
+  },
+  "q_eabfe4448197a58cbb86": {
+    "sql": "SELECT max(seq) FROM run_events WHERE run_id = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "max",
+        "type": "int4"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1100"
+  },
+  "q_70c166007442d779103b": {
+    "sql": "SELECT md5(COALESCE(string_agg(id || ':' || revision, ',' ORDER BY timestamp, id), '')) FROM (SELECT id, timestamp, xmin::text AS revision FROM public.events WHERE app_name=$1 AND user_id=$2 AND session_id=$3 ORDER BY timestamp ASC, id ASC OFFSET $4 LIMIT $5) page",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "int8",
+      "int8"
+    ],
+    "columns": [
+      {
+        "name": "md5",
+        "type": "text"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1261"
+  },
+  "q_d59cf7928a56d20c71ac": {
+    "sql": "SELECT payload FROM carousel_designs WHERE owner_email = $1 AND design_id = $2",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "payload",
+        "type": "jsonb"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1515"
+  },
+  "q_bb94dad8ae7c419f7687": {
+    "sql": "SELECT payload FROM carousel_designs WHERE owner_email = $1 ORDER BY sort_order ASC, created_at ASC",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "payload",
+        "type": "jsonb"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1500"
+  },
+  "q_545645d7eb0642052cab": {
+    "sql": "SELECT run_id, session_id, function_call_id, created_at FROM pending_reviews WHERE run_id = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "run_id",
+        "type": "text"
+      },
+      {
+        "name": "session_id",
+        "type": "text"
+      },
+      {
+        "name": "function_call_id",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:510"
+  },
+  "q_ce6046ffb243baec4ef3": {
+    "sql": "SELECT run_id, verdict, feedback, targets, news_title, created_at FROM feedback ORDER BY created_at DESC LIMIT $1",
+    "parameters": [
+      "int8"
+    ],
+    "columns": [
+      {
+        "name": "run_id",
+        "type": "text"
+      },
+      {
+        "name": "verdict",
+        "type": "text"
+      },
+      {
+        "name": "feedback",
+        "type": "text"
+      },
+      {
+        "name": "targets",
+        "type": "jsonb"
+      },
+      {
+        "name": "news_title",
+        "type": "text"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.memory_service:370"
+  },
+  "q_f9daf15692827e28202e": {
+    "sql": "SELECT seq, kind, author, text, data, created_at FROM run_events WHERE run_id = $1 AND seq > $2 AND (NOT $4::boolean OR (kind IN ('terminal', 'error') AND btrim(COALESCE(author, '')) = '')) ORDER BY seq ASC LIMIT $3",
+    "parameters": [
+      "text",
+      "int4",
+      "int8",
+      "bool"
+    ],
+    "columns": [
+      {
+        "name": "seq",
+        "type": "int4"
+      },
+      {
+        "name": "kind",
+        "type": "text"
+      },
+      {
+        "name": "author",
+        "type": "text"
+      },
+      {
+        "name": "text",
+        "type": "text"
+      },
+      {
+        "name": "data",
+        "type": "jsonb"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamptz"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1069"
+  },
+  "q_5ce60c9f1a7635fffcb1": {
+    "sql": "SELECT state FROM sessions WHERE app_name = $1 AND user_id = $2 AND id = $3",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "state",
+        "type": "jsonb"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.review.verdict:99"
+  },
+  "q_0b42d4053d8d27e6d58c": {
+    "sql": "SELECT value FROM app_config WHERE key = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "value",
+        "type": "jsonb"
+      }
+    ],
+    "command": "SELECT",
+    "source": "app.services.db:1120"
+  },
+  "q_2049aaac51f7e0887d2f": {
+    "sql": "UPDATE instagram_accounts SET is_default = (id = $1)",
+    "parameters": [
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:1452"
+  },
+  "q_7e9bd40f96dfe13c5080": {
+    "sql": "UPDATE instagram_accounts SET token_enc = $2, token_expires_at = $3, last_refreshed_at = now() WHERE id = $1",
+    "parameters": [
+      "text",
+      "text",
+      "timestamptz"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:1432"
+  },
+  "q_c8f0f3d9d0796570cb63": {
+    "sql": "UPDATE news_queue SET payload = '{}'::jsonb, status = $2 WHERE id = $1 AND status = $3 AND NOT EXISTS (SELECT 1 FROM runs WHERE news_id = $1) RETURNING id",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      }
+    ],
+    "command": "UPDATE",
+    "source": "app.services.db:235"
+  },
+  "q_144a68a60b04847b8fff": {
+    "sql": "UPDATE news_queue SET payload = jsonb_set(payload, '{thumbnail_url}', to_jsonb($2::text)) WHERE id = $1 AND status = $3 AND COALESCE(payload->>'thumbnail_url', '') = ''",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:140"
+  },
+  "q_3205d58b34562cf9e2ec": {
+    "sql": "UPDATE news_queue SET status = $1 WHERE status = $2 AND NOT EXISTS ( SELECT 1 FROM runs r WHERE r.news_id = news_queue.id AND r.status = ANY($3::text[]) ) RETURNING id",
+    "parameters": [
+      "text",
+      "text",
+      "text[]"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      }
+    ],
+    "command": "UPDATE",
+    "source": "app.runs.recovery:105"
+  },
+  "q_22b46c72c050b2206f98": {
+    "sql": "UPDATE news_queue SET status = $2 WHERE id = $1",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:344"
+  },
+  "q_4354c21ea1f5c20f6906": {
+    "sql": "UPDATE news_queue SET status = $2 WHERE id = $1 AND status = $3 RETURNING id",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      }
+    ],
+    "command": "UPDATE",
+    "source": "app.services.db:322"
+  },
+  "q_7d4c661546af06a2bf54": {
+    "sql": "UPDATE news_queue SET status = $2 WHERE id = $1 AND status = $3 RETURNING id, payload",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      },
+      {
+        "name": "payload",
+        "type": "jsonb"
+      }
+    ],
+    "command": "UPDATE",
+    "source": "app.services.db:261"
+  },
+  "q_22db42828c603cf66478": {
+    "sql": "UPDATE news_queue SET status = $2 WHERE url_hash = $1 AND status = $3 RETURNING id",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      }
+    ],
+    "command": "UPDATE",
+    "source": "app.services.db:294"
+  },
+  "q_31360ef474d265b02e32": {
+    "sql": "UPDATE public.sessions SET state = jsonb_set(CASE WHEN jsonb_typeof(state)='string' THEN (state #>> '{}')::jsonb ELSE COALESCE(state,'{}'::jsonb) END, ARRAY[$5::text], $4::jsonb), update_time = now() WHERE app_name = $1 AND user_id = $2 AND id = $3",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "jsonb",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "web_api.routes_runs:796"
+  },
+  "q_7e6b9ea7526f4e28b446": {
+    "sql": "UPDATE runs SET account_id = $2, updated_at = now() WHERE run_id = $1",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:1466"
+  },
+  "q_ebfd36b970cef723b705": {
+    "sql": "UPDATE runs SET phase = $2, status = $3, review_round = $4, updated_at = now() WHERE run_id = $1",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "int4"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:430"
+  },
+  "q_f1236027540e78157c02": {
+    "sql": "UPDATE runs SET phase = $2, status = $3, updated_at = now() WHERE run_id = $1",
+    "parameters": [
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:420"
+  },
+  "q_78672084dee3b3f3f666": {
+    "sql": "UPDATE runs SET status = $2, updated_at = now() WHERE run_id = $1",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:755"
+  },
+  "q_387a5d2172323f7ee565": {
+    "sql": "UPDATE runs SET title = $2 WHERE run_id = $1 AND NOT title_locked",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:738"
+  },
+  "q_5f85587cea0e02fb38d3": {
+    "sql": "UPDATE runs SET title = COALESCE(NULLIF($2, ''), title), source = COALESCE(NULLIF($3, ''), source), requested_by = COALESCE(NULLIF($4, ''), requested_by), updated_at = now() WHERE run_id = $1",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:669"
+  },
+  "q_5c53db56592c1a9ea6f4": {
+    "sql": "UPDATE runs SET title = NULLIF($2, ''), title_locked = true WHERE run_id = $1",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:706"
+  },
+  "q_5913150d4367ae1cc498": {
+    "sql": "UPDATE runs SET updated_at = now() WHERE run_id = $1",
+    "parameters": [
+      "text"
+    ],
+    "columns": [],
+    "command": "UPDATE",
+    "source": "app.services.db:777"
+  },
+  "q_41c2a8fa77c0888aaddc": {
+    "sql": "UPDATE sessions SET state = jsonb_set( COALESCE(state, '{}'::jsonb), '{review_verdict}', $4::jsonb, true ), update_time = now() WHERE app_name = $1 AND user_id = $2 AND id = $3 AND COALESCE(state -> 'review_verdict', 'null'::jsonb) = 'null'::jsonb RETURNING id",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "jsonb"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "varchar"
+      }
+    ],
+    "command": "UPDATE",
+    "source": "app.services.db:1008"
+  },
+  "q_77ebda89c22e8ff6abca": {
+    "sql": "UPDATE sessions SET state = jsonb_set( jsonb_set( jsonb_set( COALESCE(state, '{}'::jsonb), '{rework_round}', '0'::jsonb, true ), '{qa_round}', '0'::jsonb, true ), '{phase}', to_jsonb($4::text), true ), update_time = now() WHERE app_name = $1 AND user_id = $2 AND id = $3 RETURNING id",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "varchar"
+      }
+    ],
+    "command": "UPDATE",
+    "source": "app.services.db:949"
+  },
+  "q_fc8dc8d7270214e12388": {
+    "sql": "WITH next AS ( SELECT id FROM news_queue WHERE status = $1 ORDER BY created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1 ) UPDATE news_queue q SET status = $2 FROM next WHERE q.id = next.id RETURNING q.id, q.payload",
+    "parameters": [
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "id",
+        "type": "text"
+      },
+      {
+        "name": "payload",
+        "type": "jsonb"
+      }
+    ],
+    "command": "WITH",
+    "source": "app.services.db:165"
+  },
+  "q_99ec7d2f1c8bd3068157": {
+    "sql": "WITH recent AS ( SELECT status FROM runs ORDER BY created_at DESC LIMIT 50 ) SELECT count(*) FILTER (WHERE status = $1) AS running, count(*) FILTER (WHERE status = $2) AS awaiting_review, count(*) FILTER (WHERE status IN ($3, $4)) AS stopped, (SELECT count(*) FROM news_queue WHERE status = $5) AS queued FROM recent",
+    "parameters": [
+      "text",
+      "text",
+      "text",
+      "text",
+      "text"
+    ],
+    "columns": [
+      {
+        "name": "running",
+        "type": "int8"
+      },
+      {
+        "name": "awaiting_review",
+        "type": "int8"
+      },
+      {
+        "name": "stopped",
+        "type": "int8"
+      },
+      {
+        "name": "queued",
+        "type": "int8"
+      }
+    ],
+    "command": "WITH",
+    "source": "app.services.db:843"
+  }
+}

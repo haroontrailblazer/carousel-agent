@@ -794,12 +794,15 @@ async def _apply_cover_choice(run_id: str, choice: Optional[str]) -> Optional[st
 
     pool = await db.get_pool()
     await pool.execute(
-        "UPDATE public.sessions SET state = $4, update_time = now() "
+        "UPDATE public.sessions SET state = jsonb_set("
+        "CASE WHEN jsonb_typeof(state)='string' THEN (state #>> '{}')::jsonb "
+        "ELSE COALESCE(state,'{}'::jsonb) END, ARRAY[$5::text], $4::jsonb), update_time = now() "
         "WHERE app_name = $1 AND user_id = $2 AND id = $3",
         settings.app_name,
         PIPELINE_USER_ID,
         run_id,
-        json.dumps(state, default=str),
+        bundle,
+        K_BUNDLE,
     )
     logger.info("Run %s will publish %r as its cover.", run_id, wanted)
     return wanted

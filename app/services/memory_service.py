@@ -21,20 +21,18 @@ Learner agent and the planner's "recent feedback" context:
 * ``store_feedback(record: FeedbackRecord)`` - inserts into ``feedback``.
 * ``recent_feedback(limit=20)`` - newest-first ``list[FeedbackRecord]``.
 
-The asyncpg pool is created lazily on first use - importing this module never
-opens a network connection. All pool/statement operations carry explicit
-timeouts.
+The shared Supabase HTTPS client is created lazily; importing this module
+never opens a network connection. Schema changes are applied via migrations.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Sequence
 
-import asyncpg
+from app.services import db
 from google.genai import types
 from typing_extensions import override
 
@@ -42,7 +40,6 @@ from google.adk.memory import BaseMemoryService
 from google.adk.memory.base_memory_service import SearchMemoryResponse
 from google.adk.memory.memory_entry import MemoryEntry
 
-from app.config import settings
 from app.schemas import FeedbackRecord
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, mirrors the installed ABC
@@ -54,66 +51,7 @@ _MAX_DIGEST_CHARS = 2000
 _MAX_QUERY_WORDS = 8
 _SEARCH_LIMIT = 50
 _FEEDBACK_SEARCH_LIMIT = 20
-_CONNECT_TIMEOUT_S = 30.0
 _COMMAND_TIMEOUT_S = 60.0
-
-_SCHEMA_DDL = """
-CREATE TABLE IF NOT EXISTS memory_entries (
-    id          BIGSERIAL PRIMARY KEY,
-    app_name    TEXT NOT NULL,
-    user_id     TEXT NOT NULL,
-    session_id  TEXT NOT NULL,
-    event_id    TEXT NOT NULL DEFAULT '',
-    author      TEXT,
-    role        TEXT,
-    text_content TEXT NOT NULL,
-    event_ts    TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS memory_entries_scope_idx
-    ON memory_entries (app_name, user_id);
-CREATE UNIQUE INDEX IF NOT EXISTS memory_entries_event_uq
-    ON memory_entries (app_name, user_id, session_id, event_id);
--- Mirrors db/schema.sql's feedback block EXACTLY. Both are
--- CREATE TABLE IF NOT EXISTS, so on a fresh database whichever runs first
--- wins; if the two disagree the surviving shape depends on boot order. They
--- previously disagreed (serial vs BIGSERIAL, feedback_created_at_idx vs
--- idx_feedback_created_at). Change one, change the other.
-CREATE TABLE IF NOT EXISTS feedback (
-    id          BIGSERIAL PRIMARY KEY,
-    run_id      TEXT NOT NULL,
-    verdict     TEXT NOT NULL,
-    feedback    TEXT NOT NULL DEFAULT '',
-    targets     JSONB NOT NULL DEFAULT '[]'::jsonb,
-    news_title  TEXT NOT NULL DEFAULT '',
-    decided_by  TEXT,
-    source      TEXT,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_feedback_run_id
-    ON feedback (run_id);
-CREATE INDEX IF NOT EXISTS idx_feedback_created_at
-    ON feedback (created_at DESC);
-"""
-
-
-def _normalize_dsn(url: str) -> str:
-    """Convert a SQLAlchemy-style URL to a plain asyncpg DSN.
-
-    ``postgresql+asyncpg://...`` (the shape stored in ``DATABASE_URL`` for
-    ADK's ``DatabaseSessionService``) becomes ``postgresql://...``; plain
-    ``postgresql://`` / ``postgres://`` URLs pass through unchanged.
-
-    Raises:
-        ValueError: if the URL is empty (DATABASE_URL not configured).
-    """
-    if not url:
-        raise ValueError(
-            "settings.database_url is empty - set DATABASE_URL in .env before "
-            "using PostgresMemoryService."
-        )
-    return re.sub(r"^(postgres(?:ql)?)\+[A-Za-z0-9_]+://", r"\1://", url, count=1)
-
 
 def _extract_words_lower(text: str) -> list[str]:
     """Extract unique lowercase keywords from *text* (order-preserving)."""
@@ -163,72 +101,27 @@ def _decode_targets(raw: Any) -> list[str]:
     return []
 
 
-async def _init_connection(conn: asyncpg.Connection) -> None:
-    """Per-connection setup: transparent jsonb <-> Python codec."""
-    await conn.set_type_codec(
-        "jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog"
-    )
-
-
 class PostgresMemoryService(BaseMemoryService):
-    """ADK memory service backed by Postgres (Supabase) via asyncpg.
+    """ADK memory service backed by Postgres (Supabase) via the Supabase HTTPS API.
 
     Keyword (ILIKE) search over compact per-event text digests - no
     embeddings. Also owns the ``feedback`` table used by the Learner agent
     and the planner's recent-feedback context.
 
-    The connection pool is created lazily on first use; constructing the
+    The HTTP client is created lazily on first use; constructing the
     service performs no I/O, so ``adk web`` can import the module without a
     database present.
     """
 
-    def __init__(
-        self,
-        database_url: Optional[str] = None,
-        *,
-        min_pool_size: int = 1,
-        max_pool_size: int = 5,
-    ) -> None:
-        """Create the service (no connection is opened here).
+    def __init__(self):
+        self._pool = None
 
-        Args:
-            database_url: Override for ``settings.database_url``. Accepts
-                plain ``postgresql://`` / ``postgres://`` DSNs as well as
-                SQLAlchemy-style ``postgresql+asyncpg://`` URLs.
-            min_pool_size: Minimum pool connections.
-            max_pool_size: Maximum pool connections.
-        """
-        self._database_url = database_url or settings.database_url
-        self._min_pool_size = min_pool_size
-        self._max_pool_size = max_pool_size
-        self._pool: Optional[asyncpg.Pool] = None
-        self._pool_lock = asyncio.Lock()
+    async def _get_pool(self):
+        return self._pool or await db.get_pool()
 
-    async def _get_pool(self) -> asyncpg.Pool:
-        """Return the shared pool, creating it (and the schema) on first use."""
-        if self._pool is not None:
-            return self._pool
-        async with self._pool_lock:
-            if self._pool is None:
-                dsn = _normalize_dsn(self._database_url)
-                pool = await asyncpg.create_pool(
-                    dsn,
-                    min_size=self._min_pool_size,
-                    max_size=self._max_pool_size,
-                    timeout=_CONNECT_TIMEOUT_S,
-                    command_timeout=_COMMAND_TIMEOUT_S,
-                    init=_init_connection,
-                )
-                async with pool.acquire() as conn:
-                    await conn.execute(_SCHEMA_DDL, timeout=_COMMAND_TIMEOUT_S)
-                self._pool = pool
-        return self._pool
-
-    async def close(self) -> None:
-        """Close the connection pool (safe to call when never connected)."""
-        if self._pool is not None:
-            await self._pool.close()
-            self._pool = None
+    async def close(self):
+        # The runtime owns the shared HTTP client.
+        pass
 
     # ------------------------------------------------------------------
     # BaseMemoryService interface (google-adk 2.7.0)
@@ -259,29 +152,10 @@ class PostgresMemoryService(BaseMemoryService):
             if digest
         ]
         pool = await self._get_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(
-                    "DELETE FROM memory_entries"
-                    " WHERE app_name = $1 AND user_id = $2 AND session_id = $3",
-                    session.app_name,
-                    session.user_id,
-                    session.id,
-                    timeout=_COMMAND_TIMEOUT_S,
-                )
-                await conn.executemany(
-                    "INSERT INTO memory_entries"
-                    " (app_name, user_id, session_id, event_id, author, role,"
-                    "  text_content, event_ts)"
-                    " VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
-                    " ON CONFLICT (app_name, user_id, session_id, event_id)"
-                    " DO UPDATE SET text_content = EXCLUDED.text_content,"
-                    "               author = EXCLUDED.author,"
-                    "               role = EXCLUDED.role,"
-                    "               event_ts = EXCLUDED.event_ts",
-                    params,
-                    timeout=_COMMAND_TIMEOUT_S,
-                )
+        await pool.rpc("carousel_replace_memory", {
+            "app": session.app_name, "usr": session.user_id, "sid": session.id,
+            "entries": [list(p) for p in params],
+        })
 
     @override
     async def add_events_to_memory(
@@ -364,34 +238,15 @@ class PostgresMemoryService(BaseMemoryService):
             return response
         patterns = [_like_pattern(word) for word in words]
 
-        like_clause = " OR ".join(
-            f"text_content ILIKE ${i}" for i in range(3, 3 + len(patterns))
-        )
-        memory_sql = (
-            "SELECT id, author, role, text_content, event_ts, created_at"
-            " FROM memory_entries"
-            f" WHERE app_name = $1 AND user_id = $2 AND ({like_clause})"
-            f" ORDER BY created_at DESC LIMIT {_SEARCH_LIMIT}"
-        )
-        fb_like_clause = " OR ".join(
-            f"(feedback ILIKE ${i} OR news_title ILIKE ${i})"
-            for i in range(1, 1 + len(patterns))
-        )
-        feedback_sql = (
-            "SELECT id, run_id, verdict, feedback, targets, news_title, created_at"
-            " FROM feedback"
-            f" WHERE {fb_like_clause}"
-            f" ORDER BY created_at DESC LIMIT {_FEEDBACK_SEARCH_LIMIT}"
-        )
-
         pool = await self._get_pool()
-        async with pool.acquire() as conn:
-            memory_rows = await conn.fetch(
-                memory_sql, app_name, user_id, *patterns, timeout=_COMMAND_TIMEOUT_S
-            )
-            feedback_rows = await conn.fetch(
-                feedback_sql, *patterns, timeout=_COMMAND_TIMEOUT_S
-            )
+        memory_rows = await pool.fetch(
+            "SELECT id, author, role, text_content, event_ts, created_at FROM memory_entries "
+            "WHERE app_name=$1 AND user_id=$2 AND text_content ILIKE ANY($3::text[]) "
+            "ORDER BY created_at DESC LIMIT $4", app_name, user_id, patterns, _SEARCH_LIMIT)
+        feedback_rows = await pool.fetch(
+            "SELECT id, run_id, verdict, feedback, targets, news_title, created_at FROM feedback "
+            "WHERE feedback ILIKE ANY($1::text[]) OR news_title ILIKE ANY($1::text[]) "
+            "ORDER BY created_at DESC LIMIT $2", patterns, _FEEDBACK_SEARCH_LIMIT)
 
         for row in memory_rows:
             response.memories.append(

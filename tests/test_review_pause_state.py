@@ -211,58 +211,17 @@ if __name__ == "__main__":  # pragma: no cover
     unittest.main()
 
 
-class ConnectionBudgetTests(unittest.TestCase):
-    """Two pools, one budget.
-
-    Supabase's pooler on port 5432 runs in SESSION mode and caps the project
-    at a fixed number of clients - 15 for this project. This process opens
-    connections from two independent places whose maxima ADD: the asyncpg pool
-    in ``app.services.db`` and the SQLAlchemy engine behind ADK's
-    ``DatabaseSessionService``. At the original defaults that sum was 20, and
-    the pooler answered whichever write asked last with::
-
-        (EMAXCONNSESSION) max clients reached in session mode -
-        max clients are limited to pool_size: 15
-
-    That is not a slow query, it is a write that never happens. The one that
-    lost in a real run was ``save_pending_review``, which strands a finished
-    carousel at 'review' with no live call for any surface to answer.
-    """
-
-    #: What Supabase reported for this project. Headroom below it is for a
-    #: psql session, a migration, or a diagnostic script.
-    POOLER_LIMIT = 15
-
-    def test_the_two_pools_fit_inside_the_pooler_limit(self) -> None:
-        from app.runtime import _ENGINE_KWARGS
-        from app.services.db import _MAX_CONNECTIONS
-
-        sqlalchemy_max = _ENGINE_KWARGS["pool_size"] + _ENGINE_KWARGS["max_overflow"]
-        total = _MAX_CONNECTIONS + sqlalchemy_max
-
-        self.assertLess(
-            total,
-            self.POOLER_LIMIT,
-            f"asyncpg ({_MAX_CONNECTIONS}) + SQLAlchemy ({sqlalchemy_max}) = "
-            f"{total} against a {self.POOLER_LIMIT}-client pooler. Under load "
-            "the pooler refuses connections outright, and a refused "
-            "save_pending_review strands a run at 'review' forever.",
-        )
-
-    def test_there_is_headroom_for_a_person(self) -> None:
-        from app.runtime import _ENGINE_KWARGS
-        from app.services.db import _MAX_CONNECTIONS
-
-        total = (
-            _MAX_CONNECTIONS
-            + _ENGINE_KWARGS["pool_size"]
-            + _ENGINE_KWARGS["max_overflow"]
-        )
-        self.assertLessEqual(
-            total,
-            self.POOLER_LIMIT - 3,
-            "leave room to open psql against production while it runs",
-        )
+class HTTPSPersistenceTests(unittest.TestCase):
+    def test_runtime_uses_https_services_without_a_database_url(self):
+        from types import SimpleNamespace
+        from app import runtime
+        from app.services.session_service import SupabaseSessionService
+        from app.services.memory_service import PostgresMemoryService
+        config = SimpleNamespace(supabase_url="https://project.supabase.co",
+                                 supabase_storage_key="server-key")
+        with patch.object(runtime, "settings", config):
+            self.assertIsInstance(runtime._build_session_service(), SupabaseSessionService)
+            self.assertIsInstance(runtime._build_memory_service(), PostgresMemoryService)
 
 
 class PendingReviewIsRetriedTests(unittest.TestCase):
