@@ -10,6 +10,8 @@ import { AgentComposer, type ComposerState } from "@/components/agent/agent-comp
 import { AgentWorkspace } from "@/components/agent/agent-workspace"
 import { StudioArtwork } from "@/components/layout/studio-artwork"
 import { useRunWorkspace } from "@/hooks/use-run-workspace"
+import { useComposerViewport } from "@/hooks/use-composer-viewport"
+import "./new-carousel-mobile.css"
 import { ApiError, get, post } from "@/lib/api"
 import { designPayload, useCarouselDesigns } from "@/lib/designs"
 import type { InstagramAccountSummary, Meta } from "@/lib/types"
@@ -102,6 +104,7 @@ export function NewRunRoute() {
   const [launch, setLaunch] = React.useState<{ prompt: string; designName: string } | null>(null)
   const submitting = React.useRef(false)
   const idleRoot = React.useRef<HTMLDivElement>(null)
+  useComposerViewport(idleRoot, !runId && !launch)
 
   React.useEffect(() => {
     if (runId) setLaunch(null)
@@ -250,9 +253,9 @@ export function NewRunRoute() {
   const composerState: ComposerState = start.isPending ? "starting" : "idle"
 
   return (
-    <div ref={idleRoot} className="agent-empty-workspace">
+    <div ref={idleRoot} className="agent-empty-workspace new-carousel-workspace">
       <div className="studio-create">
-        <div className="w-full">
+        <div className="studio-create-content w-full">
           <div className="studio-intro studio-intro--illustrated">
             <div className="studio-intro-copy">
               <p className="studio-eyebrow">Ideas in. Carousels out.</p>
