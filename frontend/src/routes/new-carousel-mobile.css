@@ -20,7 +20,7 @@
   .new-carousel-workspace .agent-composer { padding: 8px; }
   .new-carousel-workspace .agent-composer textarea { font-size: 16px; min-height: 64px; max-height: 128px; padding: 8px; overflow-y: auto; }
   .new-carousel-workspace .studio-prompt-label { margin: 16px 0 8px; }
-  .new-carousel-workspace .studio-suggestions { gap: 2px 14px; }
+  .new-carousel-workspace .studio-suggestions { --suggestion-gap: 14px; }
   .new-carousel-workspace .studio-review-note { margin-top: 14px; }
   .new-carousel-workspace [aria-label="Instagram account"] { max-height: 64px; overflow-y: auto; }
   .new-carousel-workspace .agent-composer > [role="listbox"] {

@@ -25,9 +25,10 @@
 .studio-composer-hint { min-width: 0; margin-left: 4px; font-size: 11px; color: var(--muted-foreground); }
 .studio-selected-design { display: block; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; background: var(--muted); color: var(--foreground); text-overflow: ellipsis; white-space: nowrap; }
 .studio-composer-hint kbd { display: inline-block; min-width: 17px; margin: 0 2px; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; background: var(--background); text-align: center; }
-.studio-prompt-label { margin: 24px 0 10px; color: var(--muted-foreground); font-size: 11px; }
-.studio-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; }
-.studio-suggestion { display: inline-flex; min-width: 0; min-height: 24px; align-items: center; border: 0; border-radius: 0; padding: 2px 0; background: transparent; color: var(--muted-foreground); text-align: left; font-size: 11px; line-height: 1.5; cursor: pointer; text-underline-offset: 3px; }
+.studio-prompt-label { margin: 24px 0 10px; color: var(--muted-foreground); font-size: 11px; text-align: center; }
+.studio-suggestions { --suggestion-gap: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: center; gap: var(--suggestion-gap); width: fit-content; max-width: 100%; margin-inline: auto; }
+.studio-suggestion { position: relative; display: inline-flex; min-width: 0; min-height: 24px; align-items: center; justify-content: center; border: 0; border-radius: 0; padding: 2px 0; background: transparent; color: var(--muted-foreground); text-align: center; font-size: 11px; line-height: 1.5; cursor: pointer; text-underline-offset: 3px; }
+.studio-suggestion:not(:last-child)::after { content: ""; position: absolute; top: 50%; inset-inline-end: calc(var(--suggestion-gap) / -2 - 2px); width: 4px; height: 4px; background: var(--brand); opacity: .5; transform: translateY(-50%) rotate(45deg); pointer-events: none; }
 .studio-suggestion:hover { color: var(--link); text-decoration: underline; }
 .studio-suggestion:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .studio-suggestion:disabled { opacity: .5; cursor: default; transform: none; }
