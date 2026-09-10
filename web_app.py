@@ -131,7 +131,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.exception("The agent tree failed to build; runs will not start.")
 
     scheduler = None
-    if settings.database_url:
+    # Database RPCs use the same HTTPS URL and server key as native Storage.
+    if settings.supabase_url and settings.supabase_storage_key:
         # Order matters: reconcile first (which demotes killed runs out of
         # "running"), THEN release queue items, so an item is only freed once
         # nothing live still claims it.
@@ -154,6 +155,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         except Exception as exc:
             logger.warning("Could not seed the user allowlist: %s", exc)
         scheduler = await start_scheduler()
+    else:
+        logger.warning(
+            "Supabase startup tasks are disabled: set SUPABASE_URL and "
+            "SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY."
+        )
 
     try:
         yield

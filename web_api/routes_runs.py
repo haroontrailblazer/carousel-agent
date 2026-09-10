@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from app import runtime
 from app.config import settings
+from app.design_limits import MAX_SUPPORTED_SLIDES
 from app.schemas import CarouselDesign
 from app.review.verdict import REJECT_QUESTION, submit_verdict
 from app.runs.bus import BUS
@@ -1106,7 +1107,8 @@ async def meta(_identity: Identity = Depends(current_identity)) -> dict:
             db.RUN_STATUS_FAILED, db.RUN_STATUS_CANCELLED,
         ],
         "reject_question": REJECT_QUESTION,
-        "max_slides": settings.max_carousel_slides,
+        # Platform ceiling; each run uses the limit in its saved design.
+        "max_slides": MAX_SUPPORTED_SLIDES,
         # Was "are the IG_* env vars set". Now: is there an account that
         # could actually be published to right now - which also goes false
         # when the only connected account's token has lapsed.
