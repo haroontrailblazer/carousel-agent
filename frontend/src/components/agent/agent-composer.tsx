@@ -217,6 +217,7 @@ export function AgentComposer({
           <span className="flex-1" />
         )}
 
+        {composing && <span className="studio-composer-hint">Type <kbd>/</kbd> to choose a design</span>}
         <div className="ml-auto shrink-0">
           {working ? (
             // Stop is live from the first frame, including while the run is
@@ -239,7 +240,7 @@ export function AgentComposer({
             <button
               type="submit"
               disabled={loading || value.trim().length < 3}
-              className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--foreground)] text-[var(--background)] transition-all hover:-translate-y-px hover:opacity-85 disabled:translate-y-0 disabled:opacity-25"
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[var(--brand-foreground)] transition-all hover:-translate-y-px hover:opacity-85 disabled:translate-y-0 disabled:opacity-25"
               title={
                 loading
                   ? "Loading this task…"

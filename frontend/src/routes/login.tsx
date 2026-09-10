@@ -2,7 +2,6 @@ import * as React from "react"
 import { Navigate, useLocation, useNavigate } from "react-router"
 
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { BrandLogo } from "@/components/layout/brand-logo"
 import { Input, Label } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
@@ -92,17 +91,20 @@ export function LoginRoute() {
   }
 
   return (
-    <div className="grid min-h-dvh place-items-center bg-[var(--background)] px-4">
-      <Card className="w-full max-w-sm p-7">
-        <div className="mb-6 flex items-center gap-2">
-          <BrandLogo className="size-10" />
-          <div>
-            <h1 className="text-base font-semibold leading-tight">Carousel Factory</h1>
-            <p className="text-xs text-[var(--muted-foreground)]">
-              Sign in to run and review carousels.
-            </p>
-          </div>
+    <div className="studio-login">
+      <section className="studio-login-story" aria-label="Carousel Factory">
+        <div className="studio-login-wordmark"><BrandLogo className="size-11" /><span>Carousel Factory</span></div>
+        <div className="studio-login-headline">
+          <p className="studio-eyebrow">Your agent-powered studio</p>
+          <h2>From the first<br />idea to the<br /><em>final swipe.</em></h2>
+          <p>A creative team for every story. Research, copy, design, and quality checks — brought together in one workspace.</p>
         </div>
+        <p className="studio-login-footer">Made by agents. Directed by you.</p>
+      </section>
+      <div className="studio-login-form">
+      <div>
+        <h1>Welcome to your studio.</h1>
+        <p className="studio-login-subtitle">Sign in to create something worth sharing.</p>
 
         {configured === false && (
           <p className="mb-4 rounded-[var(--radius-md)] bg-[var(--phase-failed-soft)] px-3 py-2 text-sm"
@@ -163,7 +165,8 @@ export function LoginRoute() {
         <p className="mt-5 text-center text-xs text-[var(--muted-foreground)]">
           Accounts are invite-only. Ask an admin to add you.
         </p>
-      </Card>
+      </div>
+      </div>
     </div>
   )
 }

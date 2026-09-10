@@ -182,35 +182,39 @@ export function ChatWorkspaceSkeleton() {
 }
 
 /**
- * The empty composer screen: a greeting, the bar, and its suggestions.
- *
- * Centred in the viewport exactly as the real one is, so the greeting does not
- * arrive somewhere else and slide into place.
+ * The studio's header, introduction, composer, and creative team placeholders.
  */
 export function ComposerSkeleton() {
   return (
     <div className="agent-empty-workspace">
       <LoadingAnnounce />
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-4 py-12 sm:px-8">
+      <div className="studio-topbar" aria-hidden><Skeleton className="h-4 w-32" /><Skeleton className="size-8 rounded-full" /></div>
+      <div className="studio-create">
         <div className="w-full">
-          {/* The mark and the greeting, at the two type steps the real
-              heading uses. Fixed sizes rather than the heading's own `em`
-              maths: the placeholder has no font to inherit from. */}
-          <div className="mb-7 flex items-center justify-center gap-2 sm:gap-3">
-            <Skeleton className="size-[1.35rem] shrink-0 rounded-full sm:size-[3.4rem]" />
-            <Skeleton className="h-5 w-56 max-w-[62%] sm:h-9 sm:w-[24rem]" />
+          <div className="studio-intro" aria-hidden>
+            <Skeleton className="mb-5 size-14 rounded-2xl" />
+            <Skeleton className="mb-4 h-3 w-44" />
+            <Skeleton className="mb-3 h-11 w-64 max-w-full" />
+            <Skeleton className="h-11 w-80 max-w-full" />
+            <Skeleton className="mb-2 mt-5 h-3 w-80 max-w-full" />
+            <Skeleton className="h-3 w-52 max-w-full" />
           </div>
-          <Skeleton className="h-[7.5rem] rounded-[20px]" />
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <Skeleton className="h-[2.1rem] w-40 rounded-[10px]" />
-            <Skeleton className="h-[2.1rem] w-48 rounded-[10px]" />
-            <Skeleton className="h-[2.1rem] w-36 rounded-[10px]" />
+          <Skeleton className="h-[164px] rounded-[18px]" />
+          <Skeleton className="mb-3 mt-6 h-3 w-28" />
+          <div className="studio-suggestions">
+            {[0, 1, 2].map(i => <Skeleton key={i} className="h-11 rounded-[11px] md:h-14" />)}
           </div>
           <div className="mt-5 flex justify-center">
             <Skeleton className="h-3 w-80 max-w-full" />
           </div>
+          <div className="studio-agents">
+            <Skeleton className="mb-5 h-4 w-40" />
+            <div className="studio-agent-grid">
+              {[0, 1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 rounded-[10px]" />)}
+            </div>
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

@@ -29,19 +29,15 @@ const NAV = [
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="flex items-center gap-2.5">
-      {/* 2.84625rem = 45.54px. Two deliberate steps up from the original
-          size-9 (36px): +15%, then +10% on that. Arbitrary values rather than
-          Tailwind's 4px scale, whose steps here would be +11% and +22% - the
-          scale simply has no rung at the sizes that were asked for. */}
-      <BrandLogo className="size-[2.84625rem]" />
+    <span className="flex min-w-0 items-center gap-2.5">
+      <BrandLogo className="size-10" />
       {!compact && (
         <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold leading-tight">
+          <span className="block truncate text-[15px] font-semibold leading-tight tracking-[-0.04em]">
             Carousel Factory
           </span>
-          <span className="block truncate text-xs text-[var(--muted-foreground)]">
-            News to Instagram
+          <span className="mt-1 block truncate text-[9px] font-medium tracking-[0.14em] text-[var(--muted-foreground)]">
+            THE CAROUSEL STUDIO
           </span>
         </span>
       )}
@@ -154,12 +150,12 @@ export function SidebarContent({
 
 
   return (
-    <div className="flex h-full flex-col gap-1 p-3">
+    <div className="studio-sidebar flex h-full flex-col gap-1 p-4">
       {/* Brand row, ruled off from the navigation below it - the same rule
           the footer uses above the theme switch. On the phone the drawer's
           close control lives on this row rather than on a row of its own,
           so the mark and the name occupy the space that row was wasting. */}
-      <div className="mb-2 flex items-center gap-2 border-b border-[var(--border)] px-2 py-3">
+      <div className="mb-5 flex items-center gap-2 border-b border-[var(--border)] px-1 pb-6 pt-3">
         <span className="flex min-w-0 flex-1">
           <BrandMark />
         </span>
@@ -176,7 +172,8 @@ export function SidebarContent({
         )}
       </div>
 
-      <nav className="flex shrink-0 flex-col gap-0.5">
+      <p className="mb-2 px-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--muted-foreground)]">Workspace</p>
+      <nav aria-label="Main navigation" className="mb-4 flex shrink-0 flex-col gap-1">
         {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -194,9 +191,9 @@ export function SidebarContent({
             onFocus={() => prefetch(to)}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-[13px] font-medium transition-colors",
                 (to === "/new" ? composingNew : isActive)
-                  ? "bg-[var(--muted)] text-[var(--foreground)]"
+                  ? "bg-[var(--brand-soft)] text-[var(--brand-soft-fg)]"
                   : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
               )
             }

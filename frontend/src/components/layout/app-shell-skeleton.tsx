@@ -49,25 +49,26 @@ export function AppShellSkeleton({
   return (
     <div className="min-h-dvh bg-[var(--background)]">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[17rem] border-r border-[var(--border)] bg-[var(--card)] md:block">
-        <div className="flex h-full flex-col gap-1 p-3">
+        <div className="studio-sidebar flex h-full flex-col gap-1 p-4">
           {/* The brand row is real. It needs nothing from the network and it
               is the part that makes the wait read as this app rather than as
               a generic loading screen. */}
-          <div className="mb-2 flex items-center gap-2.5 border-b border-[var(--border)] px-2 py-3">
-            <BrandLogo className="size-[2.84625rem]" />
+          <div className="mb-5 flex items-center gap-2.5 border-b border-[var(--border)] px-1 pb-6 pt-3">
+            <BrandLogo className="size-10" />
             <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold leading-tight">
+              <span className="block truncate text-[15px] font-semibold leading-tight tracking-[-0.04em]">
                 Carousel Factory
               </span>
-              <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                News to Instagram
+              <span className="mt-1 block truncate text-[9px] font-medium tracking-[0.14em] text-[var(--muted-foreground)]">
+                THE CAROUSEL STUDIO
               </span>
             </span>
           </div>
 
-          <div className="flex flex-col gap-0.5">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-9" />
+          <Skeleton className="mb-2 h-4 w-20" />
+          <div className="flex flex-col gap-1">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[42px]" />
             ))}
           </div>
 

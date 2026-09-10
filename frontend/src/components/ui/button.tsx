@@ -4,16 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
-/**
- * Buttons are pills, per the beautifului look.
- *
- * The `brand` variant is the lime one and it is deliberately scarce: it marks
- * the two moments that matter (approve, generate). Use it everywhere and it
- * becomes wallpaper.
- *
- * Note `text-brand-foreground` on the brand variant - that is INK, never
- * white. White on #B8EF43 is 1.36:1 and unreadable; ink is 13.2:1.
- */
+/** Shared action styles. Orange carries the primary action in both themes. */
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium " +
     "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] " +

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Carousel Factory</title>
-    <meta name="description" content="Turn news into reviewed Instagram carousels." />
+    <meta name="description" content="Your creative team of AI agents. Research, write, design, and review Instagram carousels in one workspace." />
     <!-- Paints the phone's own browser chrome - the address bar and the area
          behind the status bar - to match the page. Without it the app sits in
          a white bar in dark mode, which is the most obvious way a web app
@@ -15,12 +15,12 @@
          app has its own light/dark switch. Someone running a dark console on
          a light phone would get a white bar above a dark page. One tag, set
          from the theme actually in use, cannot disagree with the screen. -->
-    <meta name="theme-color" content="#F7F7F5" />
+    <meta name="theme-color" content="#F6F4F0" />
     <!-- The brand mark is one file, used for the tab icon and for every
          in-app logo (see components/layout/brand-logo.tsx). Same URL both
          places means the browser fetches it once and serves the sidebar mark
          from cache. -->
-    <link rel="icon" href="/logo.webp" type="image/webp" />
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
     <script>
       // Apply the theme before first paint. Without this the page renders in
       // light mode and then snaps to dark, which reads as a broken app. Kept
@@ -35,7 +35,7 @@
         // --background for the resolved theme. Kept in step with index.css;
         // hooks/use-theme.ts rewrites this tag when the switch is used.
         var bar = document.querySelector('meta[name="theme-color"]');
-        if (bar) bar.setAttribute("content", dark ? "#0F1210" : "#F7F7F5");
+        if (bar) bar.setAttribute("content", dark ? "#191A1C" : "#F6F4F0");
         // Tells the browser the page really is dark, so scrollbars, form
         // controls and the frame around the page are drawn to match instead
         // of staying light.

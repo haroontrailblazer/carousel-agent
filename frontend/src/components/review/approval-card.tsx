@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils"
 /**
  * The decision surface.
  *
- * Deliberately asymmetric: Approve is the lime pill, Reject is a quiet ghost
+ * Deliberately asymmetric: Approve is the brand action, Reject is a quiet ghost
  * button. The approval button explicitly names the action it authorizes.
  *
  * Three states, keyed on `status` rather than on guessing from a snapshot:

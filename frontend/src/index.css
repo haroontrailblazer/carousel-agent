@@ -1,167 +1,110 @@
 @import "tailwindcss";
+@import "./studio.css";
 
-/* ---------------------------------------------------------------------------
-   Design tokens.
-
-   The rule this palette encodes:
-
-     #B8EF43 is the REWARD colour. The status colours are the vocabulary.
-     The neutrals are the slides' own paper stock.
-
-   Lime marks the two moments that matter - a run reaching `done`, and the
-   Approve button. Using it for every button would make it wallpaper and it
-   would stop meaning anything. Movement is blue, verification is teal, "you
-   are needed" is orange, rejection is red.
-
-   The neutrals are derived from app/tools/brand_layout.py's PAPER (247,247,245)
-   and INK (22,24,17), so the console feels like the same stock as the slides it
-   is showing.
-
-   TWO CONTRAST TRAPS, measured, that this file exists to prevent:
-
-     * NEVER white on lime. #B8EF43 with white is 1.36:1. With ink it is
-       13.19:1. Lime can only ever carry near-black text - which is already
-       what brand_layout.py does when it paints slides.
-     * NEVER white on --phase-review. #E56D24 with white is 3.21:1 and fails
-       AA. Chip TEXT always uses the -fg step on its -soft background (5.2:1 to
-       6.7:1); the solid oranges are for dots, rails and borders only.
---------------------------------------------------------------------------- */
-
+/* Studio palette: warm paper, ink, and burnt orange. Brand marks actions;
+   blue means working, amber needs review, green means complete, red means failure.
+   Each semantic colour has its own readable text and soft surface token. */
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.875rem; /* 14px cards; buttons use --radius-pill */
-  --radius-pill: 9999px;
-
-  /* --- neutral base: the slides' paper stock --- */
-  --background: oklch(0.9756 0.0026 106.45);   /* #F7F7F5  PAPER */
-  --foreground: oklch(0.2043 0.0138 120.58);   /* #161811  INK   16.7:1 */
-  --card: oklch(1 0 0);
+  --radius: 1rem;
+  --radius-pill: .75rem;
+  --background: #F6F4F0;
+  --foreground: #252420;
+  --card: #FFFEFB;
   --card-foreground: var(--foreground);
-  --popover: oklch(1 0 0);
+  --popover: #FFFEFB;
   --popover-foreground: var(--foreground);
-  --muted: oklch(0.9575 0.0067 97.35);         /* #F2F1EC */
-  --muted-foreground: oklch(0.4878 0.0307 123.98); /* #5C6350  5.8:1 */
-  --border: oklch(0.8961 0.0108 100.84);       /* #DEDDD5 */
-  --input: oklch(0.8961 0.0108 100.84);
-  --ring: oklch(0.5200 0.0939 168.52);         /* teal focus ring */
-
-  /* --- brand: lime. FOREGROUND IS ALWAYS INK, NEVER WHITE. --- */
-  --brand: oklch(0.8838 0.2006 125.95);        /* #B8EF43 */
-  --brand-foreground: oklch(0.2043 0.0138 120.58); /* #161811  13.2:1 */
-  --brand-hover: oklch(0.9273 0.1323 121.46);  /* #D9F58E */
-  --brand-soft: oklch(0.9593 0.0621 122.25);   /* #EAF9CB  chip bg */
-  --brand-soft-fg: oklch(0.4424 0.0804 135.20); /* #3F5D2E  6.7:1 on soft */
-
+  --muted: #EDEAE4;
+  --muted-foreground: #706A62;
+  --border: #DEDAD2;
+  --input: #DEDAD2;
+  --ring: #C74726;
+  --sidebar: #EFECE6;
+  --brand: #C74726;
+  --brand-foreground: #FFFFFF;
+  --brand-hover: #AC381C;
+  --brand-soft: #FBE7DE;
+  --brand-soft-fg: #A9361D;
   --primary: var(--brand);
   --primary-foreground: var(--brand-foreground);
-  --secondary: oklch(0.9222 0.0610 167.29);    /* #BFF3DD */
-  --secondary-foreground: oklch(0.4324 0.0781 169.06); /* #155E49 */
-  --accent: oklch(0.9575 0.0067 97.35);
+  --secondary: #E1ECE6;
+  --secondary-foreground: #285D4B;
+  --accent: #EDEAE4;
   --accent-foreground: var(--foreground);
-  --link: oklch(0.4324 0.0781 169.06);         /* #155E49  7.2:1 on paper */
-
-  --destructive: oklch(0.5343 0.1825 30.79);   /* #C0311F - matches review_api */
-  --destructive-foreground: oklch(1 0 0);      /* 5.7:1 */
-
-  /* --- phase vocabulary: solid mark / soft background / readable text --- */
-  --phase-generate: oklch(0.5733 0.2002 261.92);      /* #2F6FEC */
-  --phase-generate-soft: oklch(0.8929 0.0553 246.79); /* #BFE0FF */
-  --phase-generate-fg: oklch(0.4677 0.1840 263.06);   /* #1D4FBF  5.2:1 */
-
-  --phase-qa: oklch(0.5200 0.0939 168.52);            /* #1F7A5F */
-  --phase-qa-soft: oklch(0.9222 0.0610 167.29);       /* #BFF3DD */
-  --phase-qa-fg: oklch(0.4324 0.0781 169.06);         /* #155E49  6.3:1 */
-
-  --phase-review: oklch(0.6680 0.1692 47.04);         /* #E56D24 */
-  --phase-review-soft: oklch(0.9034 0.0609 58.07);    /* #FFD6B8 */
-  --phase-review-fg: oklch(0.4719 0.1189 47.49);      /* #8F4212  5.3:1 */
-
-  --phase-rework: oklch(0.5365 0.1306 48.86);         /* #A8521A */
-  --phase-rework-soft: oklch(0.9034 0.0609 58.07);
-  --phase-rework-fg: oklch(0.4219 0.1054 47.98);      /* #7A380E  6.5:1 */
-
-  --phase-publish: oklch(0.4021 0.0755 167.60);       /* #0F5540 */
-  --phase-publish-soft: oklch(0.9222 0.0610 167.29);
-  --phase-publish-fg: oklch(0.4021 0.0755 167.60);    /* 7.1:1 */
-
-  --phase-done: var(--brand);                          /* the payoff wears lime */
-  --phase-done-soft: var(--brand-soft);
-  --phase-done-fg: var(--brand-soft-fg);
-
-  --phase-failed: oklch(0.5343 0.1825 30.79);
-  --phase-failed-soft: oklch(0.9448 0.0245 26.92);    /* #FDE7E4 */
-  --phase-failed-fg: oklch(0.4543 0.1575 31.09);      /* #9B2414  6.7:1 */
-
-  --shadow-card: 0 1px 2px -1px oklch(0.2043 0.0138 120.58 / 6%),
-                 0 8px 24px -12px oklch(0.2043 0.0138 120.58 / 14%);
-  --shadow-lift: 0 2px 4px -2px oklch(0.2043 0.0138 120.58 / 8%),
-                 0 16px 40px -16px oklch(0.2043 0.0138 120.58 / 20%);
+  --link: #A9361D;
+  --destructive: #B52D3F;
+  --destructive-foreground: #FFFFFF;
+  --phase-generate: #4C6BB2;
+  --phase-generate-soft: #E6ECFA;
+  --phase-generate-fg: #38528B;
+  --phase-qa: #36745E;
+  --phase-qa-soft: #E1EFE7;
+  --phase-qa-fg: #285C47;
+  --phase-review: #A37422;
+  --phase-review-soft: #F7EDD5;
+  --phase-review-fg: #7E581A;
+  --phase-rework: #AD643B;
+  --phase-rework-soft: #F7E8DD;
+  --phase-rework-fg: #8C4423;
+  --phase-publish: #36745E;
+  --phase-publish-soft: #E1EFE7;
+  --phase-publish-fg: #285C47;
+  --phase-done: #36745E;
+  --phase-done-soft: #E1EFE7;
+  --phase-done-fg: #285C47;
+  --phase-failed: #B52D3F;
+  --phase-failed-soft: #FBE6E9;
+  --phase-failed-fg: #9C2637;
+  --shadow-card: 0 1px 3px rgb(37 36 32 / 3%), 0 6px 20px -12px rgb(37 36 32 / 12%);
+  --shadow-lift: 0 2px 5px rgb(37 36 32 / 3%), 0 16px 40px -16px rgb(37 36 32 / 16%);
 }
 
 .dark {
-  /* Ink-derived, not neutral grey, so the hue family stays consistent with
-     light mode and with the slides. Every value checked >= 6.4:1 on --card. */
-  --background: oklch(0.1780 0.0063 156.53);   /* #0F1210 */
-  --foreground: oklch(0.9182 0.0192 93.67);    /* #E8E4D6  13.3:1 */
-  --card: oklch(0.2283 0.0145 131.83);         /* #1A1E17 */
-  --card-foreground: var(--foreground);
-  --popover: oklch(0.2283 0.0145 131.83);
-  --popover-foreground: var(--foreground);
-  --muted: oklch(0.2608 0.0206 124.05);        /* #22261B */
-  --muted-foreground: oklch(0.7012 0.0369 123.47); /* #9AA38A  6.4:1 */
-  --border: oklch(0.2965 0.0205 127.52);       /* #2A2F24 */
-  --input: oklch(0.2965 0.0205 127.52);
-
-  /* Brand is UNCHANGED across themes - 12.5:1 on the dark card, and being the
-     one fixed colour in the system is the entire point of it. */
-  --brand: oklch(0.8838 0.2006 125.95);
-  --brand-foreground: oklch(0.2043 0.0138 120.58);
-  --brand-hover: oklch(0.9273 0.1323 121.46);
-  --brand-soft: oklch(0.3096 0.0471 122.26);   /* #2C3418 */
-  --brand-soft-fg: oklch(0.8838 0.2006 125.95);
-
-  --primary: var(--brand);
-  --primary-foreground: var(--brand-foreground);
-  --secondary: oklch(0.2940 0.0270 144.85);
-  --secondary-foreground: oklch(0.7500 0.1260 165.68);
-  --accent: oklch(0.2608 0.0206 124.05);
-  --accent-foreground: var(--foreground);
-  --link: oklch(0.7500 0.1260 165.68);
-
-  --destructive: oklch(0.7411 0.1259 29.36);   /* #F08B7C  7.0:1 */
-  --destructive-foreground: oklch(0.1780 0.0063 156.53);
-
-  --phase-generate: oklch(0.7354 0.1200 261.73);      /* #7FA9F5  7.2:1 */
-  --phase-generate-soft: oklch(0.2833 0.0390 259.37); /* #1E2A3D */
-  --phase-generate-fg: oklch(0.7354 0.1200 261.73);
-
-  --phase-qa: oklch(0.7500 0.1260 165.68);            /* #4FC79B  8.0:1 */
-  --phase-qa-soft: oklch(0.2940 0.0270 144.85);       /* #243024 */
-  --phase-qa-fg: oklch(0.7500 0.1260 165.68);
-
-  --phase-review: oklch(0.7867 0.1208 55.12);         /* #F5A46B  8.4:1 */
-  --phase-review-soft: oklch(0.2805 0.0274 61.59);    /* #33261B */
-  --phase-review-fg: oklch(0.7867 0.1208 55.12);
-
-  --phase-rework: oklch(0.7400 0.1100 52.00);
-  --phase-rework-soft: oklch(0.2805 0.0274 61.59);
-  --phase-rework-fg: oklch(0.7400 0.1100 52.00);
-
-  --phase-publish: oklch(0.7500 0.1260 165.68);
-  --phase-publish-soft: oklch(0.2940 0.0270 144.85);
-  --phase-publish-fg: oklch(0.7500 0.1260 165.68);
-
-  --phase-done: var(--brand);
-  --phase-done-soft: var(--brand-soft);
-  --phase-done-fg: var(--brand-soft-fg);
-
-  --phase-failed: oklch(0.7411 0.1259 29.36);
-  --phase-failed-soft: oklch(0.2700 0.0450 25.00);
-  --phase-failed-fg: oklch(0.7411 0.1259 29.36);
-
-  --shadow-card: 0 1px 2px -1px oklch(0 0 0 / 40%), 0 8px 24px -12px oklch(0 0 0 / 60%);
-  --shadow-lift: 0 2px 4px -2px oklch(0 0 0 / 50%), 0 16px 40px -16px oklch(0 0 0 / 70%);
+  --background: #191A1C;
+  --foreground: #F4F1EB;
+  --card: #222427;
+  --popover: #222427;
+  --muted: #2B2D31;
+  --muted-foreground: #ABABA9;
+  --border: #3B3D40;
+  --input: #3B3D40;
+  --ring: #F79270;
+  --sidebar: #1E1F21;
+  --brand: #F79270;
+  --brand-foreground: #271B16;
+  --brand-hover: #FFA98D;
+  --brand-soft: #3D2B26;
+  --brand-soft-fg: #FFAC90;
+  --secondary: #263B33;
+  --secondary-foreground: #96CDB0;
+  --accent: #2B2D31;
+  --link: #FFAC90;
+  --destructive: #F394A0;
+  --destructive-foreground: #29191C;
+  --phase-generate: #9CB7F1;
+  --phase-generate-soft: #283247;
+  --phase-generate-fg: #ABC2F4;
+  --phase-qa: #96CDB0;
+  --phase-qa-soft: #263B33;
+  --phase-qa-fg: #A2D7BD;
+  --phase-review: #DFC080;
+  --phase-review-soft: #3C3323;
+  --phase-review-fg: #E8CB92;
+  --phase-rework: #E7AA84;
+  --phase-rework-soft: #3F3028;
+  --phase-rework-fg: #EFBA98;
+  --phase-publish: #96CDB0;
+  --phase-publish-soft: #263B33;
+  --phase-publish-fg: #A2D7BD;
+  --phase-done: #96CDB0;
+  --phase-done-soft: #263B33;
+  --phase-done-fg: #A2D7BD;
+  --phase-failed: #F394A0;
+  --phase-failed-soft: #402830;
+  --phase-failed-fg: #F5A8B2;
+  --shadow-card: 0 2px 8px rgb(0 0 0 / 12%);
+  --shadow-lift: 0 12px 36px -12px rgb(0 0 0 / 40%);
 }
 
 @theme inline {
