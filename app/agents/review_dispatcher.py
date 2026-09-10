@@ -62,6 +62,7 @@ from app.schemas import Bundle, Verdict
 from app.services import db
 from app.state import (
     AGENT_REVIEW_DISPATCHER,
+    K_ACCOUNT_ID,
     K_REVIEW_NOTICE_FAILED,
     K_BUNDLE,
     K_NEWS_ITEM,
@@ -345,6 +346,7 @@ async def send_review_request(tool_context: ToolContext) -> dict:
         "poster": poster_path,
         "slides": slide_paths,
     }
+    payload["delivery_target"] = "instagram" if state.get(K_ACCOUNT_ID) else "telegram"
     news_item = state.get(K_NEWS_ITEM) or {}
     payload["news_title"] = (
         str(news_item.get("title") or "") or bundle.cover.title or "Untitled carousel"

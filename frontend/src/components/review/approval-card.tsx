@@ -19,9 +19,7 @@ import { cn } from "@/lib/utils"
  * The decision surface.
  *
  * Deliberately asymmetric: Approve is the lime pill, Reject is a quiet ghost
- * button. Approve is the action that publishes publicly, so it is behind a
- * confirmation step - the email flow already refuses to decide anything on a
- * GET, and the console should not be laxer than the email.
+ * button. The approval button explicitly names the action it authorizes.
  *
  * Three states, keyed on `status` rather than on guessing from a snapshot:
  *
@@ -43,7 +41,6 @@ import { cn } from "@/lib/utils"
  */
 export function ApprovalCard({
   run,
-  publishConfigured,
   coverChoiceNeeded,
   onApprove,
   onReject,
@@ -53,7 +50,6 @@ export function ApprovalCard({
   embedded = false,
 }: {
   run: RunDetail
-  publishConfigured: boolean
   /** True when the task has both covers and none has been picked yet. */
   coverChoiceNeeded: boolean
   onApprove: () => void
@@ -68,7 +64,8 @@ export function ApprovalCard({
   const [rejecting, setRejecting] = React.useState(false)
   const [feedback, setFeedback] = React.useState("")
   const [picked, setPicked] = React.useState<string[]>([])
-  const [confirming, setConfirming] = React.useState(false)
+  const publishing = run.delivery_target === "instagram"
+  const needsReconnect = publishing && !run.publish_configured
 
   const predicted = React.useMemo(() => {
     const targets = REJECT_CATEGORIES.filter((c) => picked.includes(c.key)).flatMap(
@@ -266,7 +263,7 @@ export function ApprovalCard({
         </div>
       )}
 
-      {!publishConfigured && (
+      {needsReconnect && (
         <p
           className="mb-4 rounded-[var(--radius-md)] px-3 py-2 text-sm"
           style={{
@@ -274,8 +271,7 @@ export function ApprovalCard({
             color: "var(--phase-review-fg)",
           }}
         >
-          Instagram is not configured (IG_USER_ID / IG_ACCESS_TOKEN). Approving
-          will record the verdict, but publishing will fail.
+          Reconnect this carousel’s Instagram account in Profile before publishing.
         </p>
       )}
 
@@ -292,7 +288,7 @@ export function ApprovalCard({
         </p>
       )}
 
-      {!rejecting && !confirming && (
+      {!rejecting && (
         <div
           className={cn(
             "flex gap-2",
@@ -302,13 +298,13 @@ export function ApprovalCard({
           <Button
             variant="brand"
             className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
-            onClick={() => setConfirming(true)}
-            disabled={busy || coverChoiceNeeded}
+            onClick={onApprove}
+            disabled={busy || coverChoiceNeeded || needsReconnect}
             title={
               coverChoiceNeeded ? "Pick a video or image cover first" : undefined
             }
           >
-            <CheckCircle2 /> Approve &amp; publish
+            <CheckCircle2 /> {busy ? "Approving…" : publishing ? "Approve and publish" : "Approve and send"}
           </Button>
           <Button
             variant={embedded ? "default" : "ghost"}
@@ -318,32 +314,6 @@ export function ApprovalCard({
           >
             Reject
           </Button>
-        </div>
-      )}
-
-      {confirming && (
-        <div className="space-y-3">
-          <p className="text-sm">
-            This posts the carousel to Instagram publicly. Continue?
-          </p>
-          <div className={cn("flex gap-2", embedded && "grid grid-cols-1")}>
-            <Button
-              variant="brand"
-              className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
-              onClick={onApprove}
-              disabled={busy}
-            >
-              {busy ? "Approving…" : "Yes, approve and publish"}
-            </Button>
-            <Button
-              variant={embedded ? "default" : "ghost"}
-              className={cn(embedded && "w-full rounded-[var(--radius-md)]")}
-              onClick={() => setConfirming(false)}
-              disabled={busy}
-            >
-              Cancel
-            </Button>
-          </div>
         </div>
       )}
 

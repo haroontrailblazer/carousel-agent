@@ -1,4 +1,4 @@
-"""Deliver the finished carousel files without creating a human review."""
+"""Deliver the finished carousel files after human approval."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from google.adk.tools import ToolContext
 from app.agents.review_dispatcher import _materialize_artifact
 from app.config import settings
 from app.runs import cancellation
-from app.schemas import Bundle
-from app.state import K_BUNDLE, K_PUBLISH_RESULT, K_RUN_ID, get_model
+from app.schemas import Bundle, Verdict
+from app.state import K_BUNDLE, K_PUBLISH_RESULT, K_RUN_ID, K_VERDICT, get_model
 from app.tools import telegram_tools
 
 
@@ -19,12 +19,15 @@ async def deliver_carousel(tool_context: ToolContext) -> dict:
 
     The orchestrator persists the returned receipt before completing the run.
     A missing artifact or failed send raises so an incomplete delivery is never
-    reported as successful. This path has no publishing credentials or verdict.
+    reported as successful. A human approval is required before any send.
     """
     state = tool_context.state
     existing = state.get(K_PUBLISH_RESULT) or {}
     if existing.get("status") == "delivered":
         return existing
+    verdict = get_model(state, K_VERDICT, Verdict)
+    if verdict is None or verdict.status != "approved":
+        raise ValueError("Human approval is required before Telegram delivery.")
     run_id = str(state.get(K_RUN_ID) or "")
     bundle = get_model(state, K_BUNDLE, Bundle)
     if not run_id or bundle is None or not bundle.ordered_artifacts:

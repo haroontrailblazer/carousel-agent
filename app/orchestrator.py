@@ -553,10 +553,6 @@ class CarouselOrchestrator(BaseAgent):
             return
 
         if report.passed:
-            if not state.get(K_ACCOUNT_ID):
-                async for event in self._deliver_to_telegram(ctx, state, holder):
-                    yield event
-                return
             issue_count = len(report.issues)
             yield self._transition(
                 ctx,
@@ -584,12 +580,12 @@ class CarouselOrchestrator(BaseAgent):
     async def _deliver_to_telegram(
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]
     ) -> AsyncGenerator[Event, None]:
-        """Complete account-free runs only after all files reach Telegram."""
+        """Complete approved account-free runs after all files reach Telegram."""
         yield self._progress(ctx, "[delivery] Sending the finished carousel to Telegram.")
         result = await deliver_carousel(ToolContext(ctx))
         yield self._transition(
             ctx, str(state.get(K_PHASE) or PHASE_QA), PHASE_DONE,
-            extra_delta={K_PUBLISH_RESULT: result, K_VERDICT: None},
+            extra_delta={K_PUBLISH_RESULT: result},
             note="carousel delivered to Telegram", holder=holder,
         )
         await self._record_phase_quietly(state, PHASE_DONE)
@@ -605,10 +601,6 @@ class CarouselOrchestrator(BaseAgent):
         by an earlier invocation that stopped before routing), it is routed
         directly without re-running the dispatcher.
         """
-        if not state.get(K_ACCOUNT_ID):
-            async for event in self._deliver_to_telegram(ctx, state, holder):
-                yield event
-            return
         verdict = _safe_model(state, K_VERDICT, Verdict)
         if verdict is None:
             async for event in self._drive(
@@ -838,9 +830,24 @@ class CarouselOrchestrator(BaseAgent):
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]
     ) -> AsyncGenerator[Event, None]:
         """Publish: learner (optional approval feedback) -> publisher, -> done."""
+        # Resuming directly at this phase must never bypass human approval.
+        verdict = _safe_model(state, K_VERDICT, Verdict)
+        if verdict is None or verdict.status != "approved":
+            yield self._transition(
+                ctx, PHASE_PUBLISH, PHASE_REVIEW,
+                extra_delta={K_VERDICT: None},
+                note="human approval required before sending or publishing",
+                holder=holder,
+            )
+            await self._record_phase_quietly(state, PHASE_REVIEW)
+            return
         async for event in self._drive(self._child(AGENT_LEARNER), ctx, holder):
             yield event
         if holder["paused"]:
+            return
+        if not state.get(K_ACCOUNT_ID):
+            async for event in self._deliver_to_telegram(ctx, state, holder):
+                yield event
             return
         async for event in self._drive(self._child(AGENT_PUBLISHER), ctx, holder):
             yield event

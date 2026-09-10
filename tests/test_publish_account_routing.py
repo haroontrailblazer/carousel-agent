@@ -104,6 +104,7 @@ class PublishToolTests(unittest.IsolatedAsyncioTestCase):
         state = {
             "run_id": RUN_ID,
             K_ACCOUNT_ID: "acc-9",
+            publisher_mod.K_VERDICT: {"status": "approved"},
             "bundle": _bundle(["cover.mp4", "s1.png", "s2.png"]),
         }
         tool_context = SimpleNamespace(
@@ -138,6 +139,7 @@ class PublishToolTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_run_without_an_account_fails_before_any_upload(self) -> None:
         state = {
             "run_id": RUN_ID,
+            publisher_mod.K_VERDICT: {"status": "approved"},
             "bundle": _bundle(["cover.mp4", "s1.png"]),
         }
         tool_context = SimpleNamespace(
@@ -156,6 +158,15 @@ class PublishToolTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertIn("account", result["message"].lower())
+
+    async def test_no_approval_prevents_any_instagram_upload(self) -> None:
+        for verdict in (None, {"status": "rejected", "feedback": "Fix title"}):
+            ctx = SimpleNamespace(state={publisher_mod.K_VERDICT: verdict})
+            with patch.object(publisher_mod.instagram_tools, "publish_carousel") as publish:
+                result = await publisher_mod.publish_approved_carousel(ctx)
+            self.assertEqual(result["status"], "error")
+            self.assertIn("Human approval", result["message"])
+            publish.assert_not_called()
 
 
 if __name__ == "__main__":

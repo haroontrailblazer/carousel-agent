@@ -44,6 +44,7 @@ from app.runs.service import (
 )
 from app.services import db, instagram_accounts
 from app.state import (
+    K_ACCOUNT_ID,
     K_REVIEW_NOTICE_FAILED,
     AGENT_CTA,
     AGENT_FEEDBACK_ROUTER,
@@ -401,6 +402,8 @@ async def get_run(
     qa = state.get(K_QA_REPORT) or {}
     verdict = state.get(K_VERDICT) or {}
     publish = state.get(K_PUBLISH_RESULT) or {}
+    account_id = str(state.get(K_ACCOUNT_ID) or "")
+    account = instagram_accounts.get(account_id) if account_id else None
 
     return {
         **run,
@@ -413,6 +416,8 @@ async def get_run(
         "slide_count": len(bundle.get("slides") or []),
         "qa": {"passed": qa.get("passed"), "issues": qa.get("issues", [])},
         "verdict": verdict or None,
+        "delivery_target": "instagram" if account_id else "telegram",
+        "publish_configured": bool(account and account.usable),
         "publish": {
             "status": publish.get("status"),
             "media_id": publish.get("media_id"),

@@ -32,7 +32,7 @@ from google.adk.tools import FunctionTool, ToolContext
 
 from app.config import agent_instructions, settings
 from app.llm import resolve_model
-from app.schemas import Bundle
+from app.schemas import Bundle, Verdict
 from app.services import db, instagram_accounts
 from app.services.artifact_service import SupabaseArtifactService
 from app.state import (
@@ -40,6 +40,7 @@ from app.state import (
     K_ACCOUNT_ID,
     K_BUNDLE,
     K_RUN_ID,
+    K_VERDICT,
     PHASE_DONE,
     get_model,
 )
@@ -154,6 +155,10 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
             existing.get("media_id"),
         )
         return {**existing, "status": "already_published"}
+
+    verdict = get_model(state, K_VERDICT, Verdict)
+    if verdict is None or verdict.status != "approved":
+        return {"status": "error", "message": "Human approval is required before publishing."}
 
     bundle = get_model(state, K_BUNDLE, Bundle)
     if bundle is None:

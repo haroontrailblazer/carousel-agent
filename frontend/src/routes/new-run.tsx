@@ -53,7 +53,7 @@ function looksLikeUrl(value: string): boolean {
  * slide as it is generated. Choosing afterwards would mean re-rendering the
  * carousel or shipping one brand's artwork under another's name.
  *
- * Telegram delivery is always available, including with connected accounts.
+ * Every carousel pauses for review before sending or publishing.
  */
 function AccountPicker({
   accounts,
@@ -67,26 +67,16 @@ function AccountPicker({
   disabled: boolean
 }) {
   const usable = accounts.filter((account) => !account.needs_reconnect)
+  if (!usable.length) return null
 
   return (
     <div
       className="mt-4 flex flex-wrap items-center justify-center gap-2"
-      aria-label="Publish to"
+      aria-label="Instagram account"
     >
       <span className="text-[11px] text-[var(--muted-foreground)]">
-        Deliver to
+        Instagram
       </span>
-      <button
-        type="button"
-        disabled={disabled}
-        aria-pressed={!value}
-        onClick={() => onChange("")}
-        className={"rounded-[10px] border px-2.5 py-1.5 text-xs " + (!value
-          ? "border-[var(--foreground)] bg-[var(--muted)]"
-          : "border-[var(--border)] text-[var(--muted-foreground)]")}
-      >
-        Telegram only
-      </button>
       {usable.map((account) => {
         const selected = account.id === value
         return (
@@ -144,7 +134,7 @@ export function NewRunRoute() {
     () => meta.data?.accounts ?? [],
     [meta.data?.accounts],
   )
-  // Omitted chooses the server default; an explicit empty id is Telegram only.
+  // Omitted chooses the server default; no connected account still allows generation.
   const [accountId, setAccountId] = React.useState<string | undefined>(undefined)
   const [designs] = useCarouselDesigns()
   const [designId, setDesignId] = React.useState(() => designs.length === 1 ? designs[0].id : "")
@@ -187,7 +177,7 @@ export function NewRunRoute() {
       if (code === "no_account" || code === "account_needs_reconnect") {
         toast.error("No Instagram account", {
           description:
-            "Reconnect the selected account from Profile → Instagram, or choose Telegram only.",
+            "Reconnect the selected account from Profile → Instagram.",
         })
         return
       }
@@ -326,7 +316,7 @@ export function NewRunRoute() {
           />
 
           <p className="mt-5 text-center text-[11px] leading-5 text-[var(--muted-foreground)]">
-            Instagram publishing requires your approval. Telegram-only carousels finish with the files and caption sent to your chat.
+            Your carousel will wait in Needs review. Approve it to send or publish, or reject it for changes.
           </p>
         </div>
       </main>

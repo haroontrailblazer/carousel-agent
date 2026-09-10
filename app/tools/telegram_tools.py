@@ -284,7 +284,9 @@ def _send_review_message(run_id: str, bundle: dict, round_no: int, *, creds: dic
             lines += [
                 "",
                 "Open the review screen to approve or reject.",
-                "Sign-in required - approving publishes to Instagram.",
+                "Sign-in required - approving sends the files to Telegram."
+                if bundle.get("delivery_target") == "telegram"
+                else "Sign-in required - approving publishes to Instagram.",
             ]
         else:
             # Telegram refuses a non-public URL in a button, which would fail

@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card"
 import { ApiError, downloadFile, get, post } from "@/lib/api"
 import { isStopped, PHASE_LABELS } from "@/lib/pipeline"
 import { cn } from "@/lib/utils"
-import type { CoverChoice, Meta, RunArtifacts, RunDetail } from "@/lib/types"
+import type { CoverChoice, RunArtifacts, RunDetail } from "@/lib/types"
 
 /**
  * The review surface: the decision card plus the carousel it is about.
@@ -60,8 +60,6 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
     },
   })
 
-  const meta = useQuery({ queryKey: ["meta"], queryFn: () => get<Meta>("/api/meta") })
-
   // Retrying the notification is just re-entering the review phase: the
   // dispatcher runs again in SEND_MAIL mode and sends. Resume already does
   // exactly that, so there is no second endpoint to keep in step with it.
@@ -82,7 +80,9 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
       post(`/api/runs/${runId}/verdict`, { ...payload, cover: coverChoice }),
     onSuccess: (_data, variables) => {
       toast.success(
-        variables.status === "approved" ? "Approved — publishing" : "Rejected — reworking",
+        variables.status === "approved"
+          ? run.delivery_target === "instagram" ? "Approved — publishing" : "Approved — sending"
+          : "Rejected — reworking",
       )
       void queryClient.invalidateQueries({ queryKey: ["run", runId] })
       void queryClient.invalidateQueries({ queryKey: ["runs"] })
@@ -138,7 +138,6 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
     <>
       <ApprovalCard
         run={run}
-        publishConfigured={meta.data?.publish_configured ?? true}
         coverChoiceNeeded={coverChoiceNeeded}
         busy={decide.isPending}
         onApprove={() => decide.mutate({ status: "approved", feedback: "" })}

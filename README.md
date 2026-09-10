@@ -14,9 +14,10 @@ agent renders body slides with gpt-image-2 against the designer's templates, a
 CTA agent renders the closing slide, and a Stitch & Verify agent assembles and
 QA-checks the bundle.
 
-Instagram is optional. With no connected account (or **Telegram only** selected),
-QA-passed runs send every finished carousel file and the full caption to
-all connected Telegram bots’ chats, then complete without asking for approval. Files are
+Every QA-passed run stops at **Needs review** and waits for a human decision.
+Instagram is optional. With no connected account, **Approve and send** sends
+every finished carousel file and the full caption to all connected Telegram
+bots’ chats, then completes the run. **Reject** requests changes. Files are
 sent as documents to preserve their original quality. Telegram must be connected
 in **Profile → Telegram** for delivery to succeed. Add as many bots as needed;
 reconnecting or disconnecting one leaves the others intact. The backend broadcasts
@@ -32,7 +33,7 @@ Instagram**, using a separate access token for each account. Tokens are encrypte
 at rest. Choose the account before starting: its identity is used for the artwork
 and publishing. New connections use token entry only, with no Instagram OAuth
 redirect. A connected-account run sends a Telegram review request and pauses.
-**Approve** publishes to that selected account and sends a confirmation.
+**Approve and publish** publishes to that selected account and sends a confirmation.
 **Reject** (feedback compulsory) reworks the requested parts and asks for review
 again. Every piece of feedback is stored in
 long-term memory, and recurring feedback is distilled by the Learner agent

@@ -11,7 +11,7 @@ from PIL import Image
 from app import orchestrator as orch
 from app.runs import service
 from app.services import db, telegram_delivery
-from app.state import K_ACCOUNT_ID, K_PHASE, K_PUBLISH_RESULT, K_QA_REPORT
+from app.state import K_ACCOUNT_ID, K_PHASE, K_PUBLISH_RESULT, K_QA_REPORT, K_VERDICT
 from app.tools import brand_identity, brand_layout, telegram_tools as tg
 
 
@@ -57,55 +57,104 @@ class StartTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RoutingTests(unittest.IsolatedAsyncioTestCase):
-    async def run_qa(self, account_id, *, passed=True, error=None):
-        self.state = {K_ACCOUNT_ID: account_id, K_PHASE: "qa",
+    async def run_phase(self, account_id, *, phase="qa", passed=True, error=None, verdict=None):
+        self.state = {K_ACCOUNT_ID: account_id, K_PHASE: phase, K_VERDICT: verdict,
                       K_QA_REPORT: {"passed": passed, "issues": []}}
         ctx = SimpleNamespace(session=SimpleNamespace(state=self.state), invocation_id="test", branch=None)
         holder = {"paused": False}
         self.delivery = AsyncMock(return_value={"status": "delivered", "files_sent": 3}, side_effect=error)
 
-        async def drive(*args):
+        self.children = []
+        async def drive(_agent, child, *args):
+            self.children.append(child)
             if False:
                 yield
 
         agent = orch.CarouselOrchestrator(name="test")
-        with patch.object(orch.CarouselOrchestrator, "_child", return_value=object()), \
+        with patch.object(orch.CarouselOrchestrator, "_child", side_effect=lambda name: name), \
              patch.object(orch.CarouselOrchestrator, "_drive", drive), \
              patch.object(orch.CarouselOrchestrator, "_record_phase_quietly", AsyncMock()), \
-             patch.object(orch, "deliver_carousel", self.delivery):
-            async for event in agent._phase_qa(ctx, self.state, holder):
+             patch.object(orch, "deliver_carousel", self.delivery), \
+             patch.object(orch, "ToolContext", return_value=SimpleNamespace(state=self.state)):
+            async for event in getattr(agent, f"_phase_{phase}")(ctx, self.state, holder):
                 self.state.update(event.actions.state_delta)
 
-    async def test_unconnected_run_completes_without_review(self):
-        await self.run_qa("")
-        self.assertEqual(self.state[K_PHASE], "done")
-        self.assertEqual(self.state[K_PUBLISH_RESULT]["status"], "delivered")
-        self.assertNotIn("review_round", self.state)
-        self.delivery.assert_awaited_once()
+    async def test_unconnected_run_requires_review(self):
+        await self.run_phase("")
+        self.assertEqual(self.state[K_PHASE], "review")
+        self.assertNotIn(K_PUBLISH_RESULT, self.state)
+        self.delivery.assert_not_awaited()
 
     async def test_connected_run_requires_review_before_publishing(self):
-        await self.run_qa("account-a")
+        await self.run_phase("account-a")
         self.assertEqual(self.state[K_PHASE], "review")
         self.delivery.assert_not_awaited()
 
     async def test_failed_qa_is_reworked_before_delivery(self):
-        await self.run_qa("", passed=False)
+        await self.run_phase("", passed=False)
         self.assertEqual(self.state[K_PHASE], "rework")
         self.delivery.assert_not_awaited()
 
     async def test_delivery_failure_does_not_mark_done(self):
         with self.assertRaises(RuntimeError):
-            await self.run_qa("", error=RuntimeError("Telegram unavailable"))
-        self.assertEqual(self.state[K_PHASE], "qa")
+            await self.run_phase("", phase="publish", verdict={"status": "approved"},
+                                 error=RuntimeError("Telegram unavailable"))
+        self.assertEqual(self.state[K_PHASE], "publish")
         self.assertNotIn(K_PUBLISH_RESULT, self.state)
+
+    async def test_review_without_account_waits_for_a_verdict(self):
+        await self.run_phase("", phase="review")
+        self.assertEqual(self.state[K_PHASE], "review")
+        self.assertIn(orch.AGENT_REVIEW_DISPATCHER, self.children)
+        self.delivery.assert_not_awaited()
+
+    async def test_rejection_reworks_for_both_destinations(self):
+        for account in ("", "account-a"):
+            await self.run_phase(account, phase="review", verdict={"status": "rejected", "feedback": "Fix title"})
+            self.assertEqual(self.state[K_PHASE], "rework")
+            self.delivery.assert_not_awaited()
+
+    async def test_approval_routes_to_publish_phase(self):
+        for account in ("", "account-a"):
+            await self.run_phase(account, phase="review", verdict={"status": "approved"})
+            self.assertEqual(self.state[K_PHASE], "publish")
+            self.delivery.assert_not_awaited()
+
+    async def test_publish_resume_without_approval_returns_to_review(self):
+        for account in ("", "account-a"):
+            for verdict in (None, {"status": "rejected", "feedback": "Fix title"}):
+                await self.run_phase(account, phase="publish", verdict=verdict)
+                self.assertEqual(self.state[K_PHASE], "review")
+                self.assertEqual(self.children, [])
+                self.delivery.assert_not_awaited()
+
+    async def test_approved_unconnected_run_delivers_and_completes(self):
+        await self.run_phase("", phase="publish", verdict={"status": "approved"})
+        self.assertEqual(self.state[K_PHASE], "done")
+        self.assertEqual(self.state[K_PUBLISH_RESULT]["status"], "delivered")
+        self.delivery.assert_awaited_once()
+        self.assertNotIn(orch.AGENT_PUBLISHER, self.children)
+
+    async def test_approved_connected_run_invokes_publisher(self):
+        await self.run_phase("account-a", phase="publish", verdict={"status": "approved"})
+        self.assertIn(orch.AGENT_PUBLISHER, self.children)
+        self.delivery.assert_not_awaited()
 
 
 class DeliveryTests(unittest.IsolatedAsyncioTestCase):
     def context(self):
-        return SimpleNamespace(state={"run_id": "test", "bundle": {
+        return SimpleNamespace(state={K_VERDICT: {"status": "approved"}, "run_id": "test", "bundle": {
             "cover": {"title": "A carousel"}, "cta": {"cta_type": "follow"},
             "ordered_artifacts": ["cover.mp4", "body.png", "cta.png"],
             "caption": "Full caption"}})
+
+    async def test_unapproved_delivery_sends_nothing(self):
+        ctx = self.context()
+        ctx.state[K_VERDICT] = None
+        with patch.object(tg, "send_completed_carousel") as send:
+            with self.assertRaisesRegex(ValueError, "Human approval"):
+                await telegram_delivery.deliver_carousel(ctx)
+            send.assert_not_called()
 
     async def test_missing_file_prevents_any_send(self):
         with patch.object(telegram_delivery, "_materialize_artifact", AsyncMock(return_value="")), \
