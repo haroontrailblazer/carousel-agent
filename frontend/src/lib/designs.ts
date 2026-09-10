@@ -59,6 +59,8 @@ export type SlideDesign = {
 export type CarouselDesign = {
   id: string
   name: string
+  handleText?: string
+  logoDataUrl?: string
   logoVisible: boolean
   logoPosition: DesignPosition
   logoSize: number
@@ -139,7 +141,7 @@ function studioDesign(dark: boolean): CarouselDesign {
   }
 }
 
-export const PREBUILT_DESIGNS: CarouselDesign[] = [
+const ORIGINAL_DESIGNS: CarouselDesign[] = [
   studioDesign(false),
   studioDesign(true),
   {
@@ -336,6 +338,51 @@ export const PREBUILT_DESIGNS: CarouselDesign[] = [
   },
 ]
 
+// Keep the original definitions for an exact migration of untouched starter
+// designs. A customized saved design is never replaced by a refreshed preset.
+export const PREBUILT_DESIGNS: CarouselDesign[] = ORIGINAL_DESIGNS.map(original => {
+  const design = cloneDesign(original)
+  if (design.id.startsWith("studio-")) return design
+  const photo = design.id === "editorial-signal" || design.id === "newsroom-grid"
+  const mono = design.id === "minimal-mono"
+  const bold = design.id === "bold-type"
+  design.cover = {
+    ...design.cover,
+    background: mono ? "#F6F4F0" : bold ? "#C74726" : "#161616",
+    textColor: mono ? "#252420" : "#F6F4F0",
+    highlightTextColor: mono ? "#252420" : bold ? "#F6F4F0" : "#F79270",
+    accentColor: mono ? "#252420" : bold ? "#F6F4F0" : "#F79270",
+    fontFamily: design.id === "editorial-signal" || mono ? "serif" : bold ? "condensed" : "sans",
+    titleSize: bold ? 120 : photo ? 100 : 104,
+    titleTransform: { x: 8, y: photo ? 65 : 12, width: 84, height: 26, locked: false },
+    imageType: photo ? "editorial" : bold ? "illustration" : "product",
+    imageScale: 100, imagePosition: "middle-center",
+    imageTransform: { ...FULL_BLEED_COVER_TRANSFORM },
+    shadowVisible: photo,
+    logoTransform: { x: 8, y: photo ? 7 : 88, width: 6, height: 5, locked: false },
+  }
+  design.inside = {
+    ...design.inside,
+    background: bold ? "#000000" : "#F6F4F0",
+    textColor: bold ? "#F6F4F0" : "#252420",
+    highlightTextColor: mono ? "#252420" : bold ? "#F79270" : "#C74726",
+    accentColor: mono ? "#252420" : bold ? "#F79270" : "#C74726",
+    fontFamily: design.cover.fontFamily, titleSize: 80,
+    titleTransform: { x: 8, y: 12, width: 84, height: 30, locked: false },
+    imageType: design.cover.imageType,
+    imageTransform: { x: 8, y: 47, width: 84, height: 36, locked: false },
+    logoTransform: { x: 8, y: 88, width: 6, height: 5, locked: false },
+    handleTransform: { x: 17, y: 88, width: 32, height: 5, locked: false },
+  }
+  return design
+})
+
+function refreshUntouchedPreset(design: CarouselDesign): CarouselDesign {
+  const original = ORIGINAL_DESIGNS.find(item => item.id === design.id)
+  if (!original || JSON.stringify(designPayload(design)) !== JSON.stringify(designPayload(normalizeDesign(original)))) return design
+  return cloneDesign(PREBUILT_DESIGNS.find(item => item.id === design.id)!)
+}
+
 function cloneDesign(design: CarouselDesign): CarouselDesign {
   return {
     ...design,
@@ -478,6 +525,8 @@ type PersistedSlideDesign = {
 type PersistedCarouselDesign = {
   id: string
   name: string
+  handle_text?: string
+  logo_data_url?: string
   logo_visible?: boolean
   logo_position?: DesignPosition
   logo_size?: number
@@ -527,6 +576,8 @@ function fromPersistedDesign(value: PersistedCarouselDesign): CarouselDesign {
   const mapped: DesignInput = {
     id: value.id,
     name: value.name,
+    handleText: value.handle_text ?? "",
+    logoDataUrl: value.logo_data_url ?? "",
     logoVisible: value.logo_visible,
     logoPosition: value.logo_position,
     logoSize: value.logo_size,
@@ -544,7 +595,7 @@ function fromPersistedDesign(value: PersistedCarouselDesign): CarouselDesign {
 function withPrebuiltDesigns(saved: CarouselDesign[]): CarouselDesign[] {
   const savedIds = new Set(saved.map((design) => design.id))
   return [
-    ...saved,
+    ...saved.map(refreshUntouchedPreset),
     ...PREBUILT_DESIGNS.filter((design) => !savedIds.has(design.id)).map(cloneDesign),
   ]
 }
@@ -663,6 +714,8 @@ export function designPayload(design: CarouselDesign) {
   return {
     id: design.id,
     name: design.name,
+    handle_text: design.handleText ?? "",
+    logo_data_url: design.logoDataUrl ?? "",
     logo_visible: design.logoVisible,
     logo_position: design.logoPosition,
     logo_size: design.logoSize,

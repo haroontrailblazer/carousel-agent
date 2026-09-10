@@ -1,8 +1,9 @@
 import * as React from "react"
 import { Link } from "react-router"
-import { AlignCenter, AlignLeft, AlignRight, ArrowRight, Check, Copy, Eye, Image as ImageIcon, Lock, MousePointer2, Plus, RotateCcw, Trash2, Type, Undo2, Unlock } from "lucide-react"
+import { AlignCenter, AlignLeft, AlignRight, ArrowRight, Check, Copy, Eye, Image as ImageIcon, Lock, MousePointer2, PanelsTopLeft, Plus, RotateCcw, Trash2, Type, Undo2, Unlock } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { DesignBranding } from "@/components/design-branding"
 import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { type CarouselDesign, type DesignImageType, type DesignPosition, type ElementTransform, duplicateDesign, newDesign, PREBUILT_DESIGNS, useCarouselDesigns } from "@/lib/designs"
 import "./design-editor.css"
@@ -216,43 +217,55 @@ function CanvasElement({
 }
 
 
-function DesignCanvas({ design, surface, selectedElement, preview, onSelectElement, onElementTransform }: {
-  design: CarouselDesign; surface: Surface; selectedElement: ElementKind | null; preview: boolean
+const TEMPLATE_COPY: Record<string, { cover: [string, string]; inside: [string, string]; body: string }> = {
+  "editorial-signal": { cover: ["A new", "perspective."], inside: ["Look a little", "closer."], body: "The stories that matter deserve a different point of view." },
+  "newsroom-grid": { cover: ["The next", "big shift."], inside: ["What changes", "from here?"], body: "The context behind the headline. The details worth knowing." },
+  "minimal-mono": { cover: ["Less.", "But better."], inside: ["Room for", "what matters."], body: "A considered idea. Space to breathe. Nothing more than you need." },
+  "product-focus": { cover: ["Made for", "what's next."], inside: ["Small details.", "Big difference."], body: "Thoughtful design turns an everyday tool into something useful." },
+  "bold-type": { cover: ["MAKE IT", "MATTER."], inside: ["Stop the", "scroll."], body: "Lead with one big idea. Give people a reason to remember it." },
+}
+function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = false, onSelectElement, onElementTransform }: {
+  design: CarouselDesign; surface: Surface; selectedElement: ElementKind | null; preview: boolean; thumbnail?: boolean
   onSelectElement: (kind: ElementKind | null) => void
   onElementTransform: (kind: MoveableElementKind, transform: ElementTransform, scalar?: number) => void
 }) {
   const canvasRef = React.useRef<HTMLDivElement>(null)
   const slide = design[surface]
+  const copy = TEMPLATE_COPY[design.id]
+  const title = copy?.[surface] ?? (surface === "cover" ? ["Good ideas.", "Great stories."] : ["Make every", "swipe count."])
+  const photo = design.id === "editorial-signal" || slide.titleAlign === "center" ? "editorial-canyon" : "newsroom-atrium"
+  const visual = design.id === "minimal-mono" ? "research-lens" : slide.imageType === "product" ? "carousel-sculpture" : "design-stylus"
   const font = slide.fontFamily === "serif" ? "Georgia, serif" : slide.fontFamily === "condensed" ? "'Arial Narrow', Arial, sans-serif" : "Arial, sans-serif"
   function object(kind: MoveableElementKind, children: React.ReactNode, scalar?: number, scalarRange?: [number, number]) {
     const transform = slide[TRANSFORM_KEYS[kind]]
+    if (thumbnail) return <div className={"design-canvas-element design-canvas-element--" + kind} style={{ left: transform.x + "%", top: transform.y + "%", width: transform.width + "%", height: transform.height + "%" }}>{children}</div>
     return <CanvasElement kind={kind} transform={surface === "cover" && kind === "image" ? { ...transform, locked: true } : transform}
       selected={!preview && selectedElement === kind} canvasRef={canvasRef} scalar={scalar} scalarRange={scalarRange}
       onSelect={() => onSelectElement(kind)} onTransform={(next, size) => onElementTransform(kind, next, size)}>{children}</CanvasElement>
   }
-  return <div className="design-canvas" ref={canvasRef} data-surface={surface} data-preview={preview}
-    style={{ background: slide.background, color: slide.textColor }} onPointerDown={() => onSelectElement(null)}>
+  return <div className="design-canvas" ref={canvasRef} data-surface={surface} data-preview={preview} data-thumbnail={thumbnail} data-template={design.id}
+    style={{ background: slide.background, color: slide.textColor }} onPointerDown={thumbnail ? undefined : () => onSelectElement(null)}>
     <div className="simple-slide-content" inert={preview}>
       {slide.imageType !== "none" && object("image",
         <div className="simple-slide-visual" data-cover={surface === "cover"} data-type={slide.imageType}
           style={{ background: slide.background, color: slide.accentColor }}>
           {slide.imageType === "editorial"
-            ? <img src="/design-cover-preview.svg" alt="Sample landscape visual" draggable={false} />
+            ? <img src={"/illustrations/templates/" + photo + "-640.webp"} srcSet={"/illustrations/templates/" + photo + "-160.webp 160w, /illustrations/templates/" + photo + "-640.webp 640w"} sizes={thumbnail ? "140px" : "(max-width: 767px) 90vw, 480px"} alt="Sample editorial photograph" draggable={false} />
             : slide.imageType === "diagram"
               ? <svg viewBox="0 0 500 300" role="img" aria-label="Sample idea-to-carousel diagram"><path d="M100 150H400" stroke="currentColor" strokeWidth="3" strokeDasharray="6 8" />
                   {[75, 215, 355].map((x, i) => <g key={x}><rect x={x} y="94" width="80" height="112" rx="12" fill={slide.background} stroke="currentColor" strokeWidth="2"/><rect x={x + 14} y="114" width="52" height="42" rx="5" fill="currentColor" opacity={0.2 + i * 0.25}/><path d={"M" + (x + 14) + " 174h38m-38 12h24"} stroke={slide.textColor} strokeWidth="3"/></g>)}</svg>
-              : <img src={slide.imageType === "product" ? "/illustrations/carousel-sculpture-640.webp" : "/illustrations/design-stylus-320.webp"} alt="Sample dimensional carousel artwork" draggable={false} />}
+              : <img src={"/illustrations/" + visual + (thumbnail ? "-160.webp" : visual === "carousel-sculpture" ? "-640.webp" : "-320.webp")} alt="Sample dimensional carousel artwork" draggable={false} />}
         </div>, slide.imageScale, [30, 100])}
       {surface === "cover" && slide.shadowVisible && <div className="simple-slide-shadow" style={{
         height: slide.shadowHeight + "%", opacity: slide.shadowOpacity / 100,
         background: "linear-gradient(to top, " + slide.shadowColor + " 0%, " + slide.shadowColor + " " + Math.round(clamp(72 - slide.shadowSoftness * 0.45, 18, 62)) + "%, transparent 100%)",
       }} />}
       {object("title", <div className="simple-slide-text" style={{ fontFamily: font, fontSize: (slide.titleSize / 10.8) + "cqw", textAlign: slide.titleAlign }}>
-        <div>{surface === "cover" ? "Good ideas." : "Make every"}<br /><span style={{ color: slide.highlightTextColor }}>{surface === "cover" ? "Great stories." : "swipe count."}</span></div>
-        {surface === "inside" && <p style={{ fontSize: "3.33cqw" }}>One clear idea. A little curiosity.<br />Something worth sharing.</p>}
+        <div>{title[0]}<br /><span style={{ color: slide.highlightTextColor }}>{title[1]}</span></div>
+        {surface === "inside" && <p style={{ fontSize: "3.33cqw" }}>{copy?.body ?? "One clear idea. A little curiosity. Something worth sharing."}</p>}
       </div>, slide.titleSize, [44, 160])}
-      {design.logoVisible && slide.logoVisible && object("logo", <img className="simple-slide-logo" src="/logo.svg" alt="Sample brand logo" draggable={false} />, design.logoSize, [24, 120])}
-      {design.handleVisible && slide.handleVisible && object("handle", <span className="design-canvas-handle" style={{ fontSize: (design.handleSize / 10.8) + "cqw" }}>@yourhandle</span>, design.handleSize, [16, 64])}
+      {design.logoVisible && slide.logoVisible && object("logo", <img className="simple-slide-logo" src={design.logoDataUrl || "/logo.svg"} alt={design.logoDataUrl ? "Your design logo" : "Sample brand logo"} draggable={false} />, design.logoSize, [24, 120])}
+      {design.handleVisible && slide.handleVisible && object("handle", <span className="design-canvas-handle" style={{ fontSize: (design.handleSize / 10.8) + "cqw" }}>{design.handleText || "@yourhandle"}</span>, design.handleSize, [16, 64])}
     </div>
   </div>
 }
@@ -262,7 +275,23 @@ export function DesignsRoute() {
   const [selectedId, setSelectedId] = React.useState(() => designs.find(d => d.id === "studio-light")?.id ?? designs[0]?.id ?? "")
   const [surface, setSurface] = React.useState<Surface>("cover")
   const [selectedElement, setSelectedElement] = React.useState<ElementKind | null>(null)
+  const [preparingLogo, setPreparingLogo] = React.useState(false)
   const [preview, setPreview] = React.useState(false)
+  const [templatesOpen, setTemplatesOpen] = React.useState(false)
+  const templateBrowser = React.useRef<HTMLDivElement>(null)
+  const templateTrigger = React.useRef<HTMLButtonElement>(null)
+  React.useEffect(() => {
+    if (!templatesOpen) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!templateBrowser.current?.contains(event.target as Node)) setTemplatesOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setTemplatesOpen(false); templateTrigger.current?.focus() }
+    }
+    window.addEventListener("pointerdown", closeOutside)
+    window.addEventListener("keydown", escape)
+    return () => { window.removeEventListener("pointerdown", closeOutside); window.removeEventListener("keydown", escape) }
+  }, [templatesOpen])
   const [history, setHistory] = React.useState<CarouselDesign[]>([])
   const gesture = React.useRef({ active: false, recorded: false })
   const selected = designs.find(d => d.id === selectedId) ?? designs[0]
@@ -391,11 +420,21 @@ export function DesignsRoute() {
       <div className="simple-editor-heading"><StudioEmblem name="design-stylus" small /><div><h1>Design studio</h1><p>Your carousel, your way.</p></div></div>
       <div className="simple-header-actions">
         <span className="simple-save-state" role="status">{syncStatus === "synced" ? <><Check /> Saved</> : syncStatus === "offline" ? "Saved on this device · offline" : "Saving…"}</span>
-        {syncStatus === "synced" ? <Button variant="brand" size="sm" asChild><Link to={"/new?design=" + encodeURIComponent(selected.id)}>Use design <ArrowRight className="size-3.5" /></Link></Button> : <Button variant="brand" size="sm" disabled>Use design</Button>}
+        {syncStatus === "synced" && !preparingLogo ? <Button variant="brand" size="sm" asChild><Link to={"/new?design=" + encodeURIComponent(selected.id)}>Use design <ArrowRight className="size-3.5" /></Link></Button> : <Button variant="brand" size="sm" disabled>Use design</Button>}
       </div>
     </header>
     <div className="simple-editor-library">
       <label className="simple-library-select"><span className="sr-only">Saved design</span><select value={selected.id} onChange={e => selectDesign(e.target.value)}>{designs.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label>
+      <div className="simple-template-browser" ref={templateBrowser}>
+        <Button variant={templatesOpen ? "secondary" : "ghost"} size="sm" ref={templateTrigger} aria-expanded={templatesOpen} aria-controls="template-gallery" onClick={() => setTemplatesOpen(!templatesOpen)}><PanelsTopLeft className="size-3.5" /> Templates</Button>
+        {templatesOpen && <section className="simple-template-panel" id="template-gallery" aria-label="Visual templates">
+          <div className="simple-template-panel-heading"><strong>Find your starting point</strong><span>Choose a look, then make it yours.</span></div>
+          <div className="simple-template-gallery">{designs.map(design => <button key={design.id} type="button" aria-label={"Choose " + design.name} aria-pressed={selected.id === design.id} onClick={() => { selectDesign(design.id); setTemplatesOpen(false); templateTrigger.current?.focus() }}>
+            <div className="simple-template-card-art" aria-hidden="true"><DesignCanvas design={design} surface="cover" selectedElement={null} preview thumbnail onSelectElement={() => undefined} onElementTransform={() => undefined} /></div>
+            <strong>{design.name}</strong>
+          </button>)}</div>
+        </section>}
+      </div>
       <Button variant="ghost" size="sm" onClick={() => { const created = newDesign(); setDesigns(current => [...current, created]); selectDesign(created.id) }}><Plus className="size-3.5" /> New</Button>
       <Button variant="ghost" size="icon" aria-label="Duplicate design" title="Duplicate design" onClick={() => { const copy = duplicateDesign(selected); setDesigns(current => [...current, copy]); selectDesign(copy.id) }}><Copy className="size-3.5" /></Button>
       <div className="simple-library-spacer" />
@@ -408,10 +447,10 @@ export function DesignsRoute() {
         onSelectElement={setSelectedElement} onElementTransform={updateElementTransform} /></div>
       <div className="simple-slide-switcher" role="group" aria-label="Slide type">{(["cover", "inside"] as const).map((item, index) =>
         <button key={item} type="button" aria-pressed={surface === item} onClick={() => { setSurface(item); setSelectedElement(null) }}>
-          <span className="simple-mini-slide" style={{ background: selected[item].background, color: selected[item].highlightTextColor }}><i /><i /><i /></span>
+          <span className="simple-mini-slide simple-real-mini" aria-hidden="true"><DesignCanvas design={selected} surface={item} selectedElement={null} preview thumbnail onSelectElement={() => undefined} onElementTransform={() => undefined} /></span>
           <span><strong>{item === "cover" ? "Cover" : "Inside slide"}</strong><small>{String(index + 1).padStart(2, "0")}</small></span>
         </button>)}</div>
-      <p className="simple-preview-note">Sample words, artwork and branding. Your topic and account supply the final content.</p>
+      <p className="simple-preview-note">Words and artwork are samples. Your saved branding is used when this carousel is generated.</p>
     </section>
     <aside className="simple-editor-controls" aria-label="Design controls">
       <section className="simple-control-section">
@@ -431,6 +470,7 @@ export function DesignsRoute() {
             <label key={key}><input type="color" aria-label={label} value={slide[key]} onChange={e => updateSlide(key === "highlightTextColor" ? { highlightTextColor: e.target.value, accentColor: e.target.value } : { [key]: e.target.value })} /><span>{label}</span></label>)}
         </div>
       </section>
+      <DesignBranding key={selected.id} design={selected} onChange={updateDesign} onBusy={setPreparingLogo} />
       <section className="simple-control-section">
         <h2>Objects <span>{surface === "cover" ? "Cover" : "Inside slide"}</span></h2>
         <div className="simple-object-list" role="group" aria-label="Select an object">
@@ -461,7 +501,7 @@ export function DesignsRoute() {
         </>}
         {(selectedElement === "logo" || selectedElement === "handle") && <>
           <label className="simple-toggle"><input type="checkbox" checked={visible(selectedElement)} onChange={e => setLayerVisibility(selectedElement, e.target.checked)} />Show {ELEMENT_LABELS[selectedElement].toLowerCase()}</label>
-          <p className="simple-control-help">Your account supplies the final {selectedElement === "logo" ? "logo" : "handle"}. Drag this sample to place it.</p>
+          <p className="simple-control-help">Set your {selectedElement === "logo" ? "logo" : "handle"} in Your branding above. Drag it here to place it.</p>
         </>}
         {activeTransform && !fixedCoverVisual && visible(selectedElement) && <details className="simple-placement">
           <summary>Position & size</summary>

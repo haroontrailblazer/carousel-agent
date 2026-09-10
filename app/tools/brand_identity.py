@@ -1,5 +1,8 @@
 """Which brand the current run is rendering for.
 
+An explicit saved design may override the drawn handle and logo. These
+per-render overrides do not mutate the context or the publishing account.
+
 The handle and profile picture on every slide's brand rail used to come from
 one global: ``settings.ig_handle`` and a favicon file checked into the repo.
 That was correct while the console published to exactly one account. It stops
@@ -30,10 +33,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Iterator, Optional
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from app.services.instagram_accounts import Account
+    from app.schemas import CarouselDesign
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +56,7 @@ class BrandIdentity:
 
     @property
     def unbranded(self) -> bool:
-        return not self.account_id and not self.handle
+        return not self.account_id and not self.handle and not self.favicon_png
 
     @property
     def at_handle(self) -> str:
@@ -77,9 +81,17 @@ def from_account(account: "Account", *, favicon_png: bytes = b"") -> BrandIdenti
     )
 
 
-def current() -> Optional[BrandIdentity]:
-    """The identity for this run, or ``None`` outside one."""
-    return _current.get()
+def current(design: "CarouselDesign | None" = None) -> Optional[BrandIdentity]:
+    """Resolve explicit design branding without changing the publishing account."""
+    identity = _current.get()
+    if design is None or not (design.handle_text or design.logo_data_url):
+        return identity
+    from app.design_branding import decode_logo
+    return BrandIdentity(
+        handle=design.handle_text or (identity.handle if identity else ""),
+        favicon_png=decode_logo(design.logo_data_url) if design.logo_data_url else (identity.favicon_png if identity else b""),
+        account_id=identity.account_id if identity else "",
+    )
 
 
 def set_current(identity: Optional[BrandIdentity]) -> contextvars.Token:
@@ -101,14 +113,16 @@ def use(identity: Optional[BrandIdentity]) -> Iterator[None]:
         _current.reset(token)
 
 
-def require_handle() -> str:
+def require_handle(design: "CarouselDesign | None" = None) -> str:
     """The handle to draw, or a named failure.
 
     Raises:
         NoBrandIdentity: when no account is in context. Deliberately not a
             fallback - see the module docstring.
     """
-    identity = _current.get()
+    identity = current(design)
+    if design is not None and design.logo_data_url and identity is not None and not identity.at_handle:
+        return ""  # A logo-only design does not invent a handle.
     if identity is not None and identity.unbranded:
         return ""  # Explicit Telegram-only identity: omit Instagram branding.
     if identity is None or not identity.at_handle:
@@ -120,14 +134,14 @@ def require_handle() -> str:
     return identity.at_handle
 
 
-def require_favicon(size: int) -> Image.Image:
+def require_favicon(size: int, design: "CarouselDesign | None" = None) -> Image.Image:
     """The rail's profile mark at ``size`` px, as RGBA.
 
     Falls back to a generated monogram when the account has no usable picture
     - never to another account's logo, which would be a silent mis-branding
     rather than a visible gap.
     """
-    identity = _current.get()
+    identity = current(design)
     if identity is None:
         raise NoBrandIdentity(
             "No Instagram account is set for this run, so the brand rail has "
@@ -140,9 +154,12 @@ def require_favicon(size: int) -> Image.Image:
     if identity.favicon_png:
         try:
             with Image.open(io.BytesIO(identity.favicon_png)) as source:
-                return source.convert("RGBA").resize(
-                    (size, size), Image.Resampling.LANCZOS
-                )
+                if design is not None and design.logo_data_url:
+                    mark = ImageOps.contain(source.convert("RGBA"), (size, size), Image.Resampling.LANCZOS)
+                    tile = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+                    tile.alpha_composite(mark, ((size - mark.width) // 2, (size - mark.height) // 2))
+                    return tile
+                return source.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS)
         except Exception as exc:  # noqa: BLE001 - any decode failure
             logger.warning(
                 "The stored profile picture for %s could not be decoded (%s); "

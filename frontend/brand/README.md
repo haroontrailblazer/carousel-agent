@@ -49,6 +49,15 @@ The Designs page uses a large 4:5 sample carousel with a single contextual contr
 
 Text, the inside-slide image, logo, and handle can be dragged and resized. Arrow keys nudge an object; precise position controls are collapsed by default. One Undo restores a whole drag. Preview removes editing handles and makes the canvas inert. Cover media remains a full-canvas background, matching the existing render contract.
 
-Preview wording, artwork, and branding are samples, not a generated export. Inside headline and body move together because the renderer uses one text region. Typography scales with the 1080px slide width; final font fitting and generated content remain the renderer's responsibility. The editor reuses the existing optimized artwork and adds no remote asset dependencies.
+Preview wording and artwork are samples, not a generated export. Uploaded logos and configured handles are the design's real branding. Inside headline and body move together because the renderer uses one text region. Typography scales with the 1080px slide width; final font fitting and generated content remain the renderer's responsibility. The editor reuses the existing optimized artwork and adds no remote asset dependencies.
 
 Changes save automatically through the existing design library API. The save indicator includes the debounce period, and older saves cannot mark newer edits as saved. Use design becomes available after sync and opens New carousel with that design selected.
+
+
+## Per-design branding
+
+Each design stores its own optional handle and logo through the existing design library API. PNG, JPG and WebP uploads are normalized in the browser to a raster snapshot with a maximum 512px side and 48 KB encoded image bytes, preserving transparency and proportions. The API validates the data URL, decoded image format, dimensions and size; it does not fetch arbitrary logo URLs. Small inline snapshots make saved designs, duplicates and existing run snapshots independent of expiring URLs or later logo replacements.
+
+The handle is normalized to one leading @ and accepts up to 30 username characters. Setting branding makes that mark visible on both slide types; the existing object visibility controls can hide it again. Removing a logo returns to account branding and can be undone.
+
+Cover overlays, inside slides and CTA slides resolve design branding ahead of account branding. Blank fields preserve the connected account fallback. Explicit design branding also works for generation without Instagram. Publishing still uses the run's selected account, and review actions keep their Instagram connection requirement.

@@ -10,6 +10,18 @@
 .simple-library-select { min-width: 0; width: 210px; }
 .simple-library-select select { width: 100%; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); padding: 0 28px 0 10px; font-size: 12px; text-overflow: ellipsis; }
 .simple-library-spacer { flex: 1; }
+.simple-editor-library { position: relative; z-index: 10; }
+.simple-template-panel { position: absolute; top: calc(100% + 6px); left: 12px; right: 12px; max-height: min(540px, 72dvh); overflow-y: auto; overscroll-behavior: contain; padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); box-shadow: 0 18px 48px rgb(0 0 0 / .25); }
+.simple-template-panel-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 16px; font-size: 12px; }
+.simple-template-panel-heading span { color: var(--muted-foreground); font-size: 11px; }
+.simple-template-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 12px; }
+.simple-template-gallery > button { display: grid; align-content: start; gap: 8px; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 7px; text-align: left; }
+.simple-template-gallery > button:hover, .simple-template-gallery > button[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-soft); }
+.simple-template-gallery > button > strong { padding: 2px; font-size: 11px; font-weight: 500; overflow-wrap: anywhere; }
+.simple-template-card-art { min-width: 0; overflow: hidden; border-radius: 3px; aspect-ratio: 4 / 5; }
+.simple-design-editor .design-canvas[data-thumbnail="true"] { display: block; width: 100% !important; height: 100%; box-shadow: none; border: 0; border-radius: 0; pointer-events: none; }
+.simple-design-editor .simple-real-mini { display: block; width: 30px; height: 37.5px; padding: 0; overflow: hidden; }
+.simple-design-editor .design-canvas[data-template="minimal-mono"] .simple-slide-visual img { filter: grayscale(1); }
 .simple-editor-workspace { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 14px; padding: 20px 24px 16px; background: var(--background); }
 .simple-stage-hint { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--muted-foreground); font-size: 11px; text-align: center; }
 .simple-stage-hint svg { flex-shrink: 0; width: 13px; height: 13px; }
@@ -67,6 +79,12 @@
 .simple-placement summary, .simple-design-options summary { cursor: pointer; color: var(--muted-foreground); font-size: 11px; padding-block: 6px; }
 .simple-placement[open] > * + * { margin-top: 12px; }.simple-geometry { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.simple-placement-actions { display: flex; gap: 6px; }
 .simple-design-options { margin-top: 16px; }.simple-design-options button { margin-top: 8px; color: var(--destructive); }
+.simple-logo-upload { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.simple-logo-upload-preview { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px; background: var(--background); padding: 4px; }
+.simple-logo-upload-preview img { width: 100%; height: 100%; object-fit: contain; }.simple-logo-upload-preview > svg { width: 15px; height: 15px; color: var(--muted-foreground); }
+.simple-logo-upload > div:nth-child(2) { min-width: 0; flex: 1; }.simple-logo-upload small { display: block; margin-top: 5px; color: var(--muted-foreground); font-size: 9px; }
+.simple-logo-upload > button { display: grid; place-items: center; width: 26px; height: 30px; flex: 0 0 auto; border-radius: 5px; }.simple-logo-upload > button:hover { background: var(--muted); }
+.simple-branding-error { color: var(--destructive); font-size: 11px; line-height: 1.5; }
 .simple-design-editor button:focus-visible, .simple-design-editor input:focus-visible, .simple-design-editor select:focus-visible, .simple-design-editor summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 @media (min-width: 768px) and (max-width: 1100px) { .simple-design-editor { grid-template-columns: minmax(0, 1fr) 244px; }.simple-editor-header, .simple-editor-library { padding-inline: 16px; }.simple-editor-workspace { padding-inline: 14px; }.simple-editor-controls { padding-inline: 14px; }.simple-save-state { display: none; } }
 @media (min-width: 768px) and (max-width: 900px) { .design-editor-main:has(.simple-design-editor) { height: 100dvh; min-height: 0; overflow: hidden; }.simple-design-editor { grid-template-columns: minmax(0, 1fr) 218px; }.simple-editor-heading .studio-emblem { display: none; }.simple-stage-hint { font-size: 10px; }.simple-slide-switcher > button { width: 110px; gap: 6px; padding: 6px; }.simple-mini-slide { width: 22px; height: 28px; }.simple-preview-note { font-size: 9px; } }

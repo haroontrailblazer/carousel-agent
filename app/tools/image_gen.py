@@ -209,14 +209,14 @@ def _style_prompt() -> str:
     return skill if skill else _FALLBACK_STYLE
 
 
-def _current_handle() -> str:
+def _current_handle(design: CarouselDesign | None = None) -> str:
     """The handle of the account this run publishes to.
 
     Reads the run's brand identity rather than a global. There is no fallback
     on purpose: a slide stamped with the wrong account's handle is a mistake
     that only shows up after the carousel is live.
     """
-    return brand_identity.require_handle()
+    return brand_identity.require_handle(design)
 
 
 def _template_file(template_ref: str) -> Optional[Tuple[str, bytes, str]]:
@@ -561,7 +561,7 @@ def generate_slide_image(
             theme="paper",
             design=design,
         )
-        branded = apply_body_brand_rail(typeset, _current_handle(), slide_no, design)
+        branded = apply_body_brand_rail(typeset, _current_handle(design), slide_no, design)
     branded.save(result, format="PNG")
     logger.info("Rendered body slide %s -> %s", tag, result)
     return result
@@ -605,7 +605,7 @@ def generate_cta_image(
     }
     hint = variant_hints.get(cta_type, variant_hints["follow"])
     all_lines = [line for line in lines if line and line.strip()]
-    normalized_handle = _current_handle().strip().lstrip("@").lower()
+    normalized_handle = _current_handle(design).strip().lstrip("@").lower()
     normalized_link = link_text.strip().lstrip("@").lower()
     render_lines = list(all_lines)
     if link_text and normalized_link != normalized_handle:
@@ -660,7 +660,7 @@ def generate_cta_image(
         )
         branded = apply_cta_brand_rail(
             typeset,
-            _current_handle(),
+            _current_handle(design),
             design,
         )
     branded.save(result, format="PNG")

@@ -1384,7 +1384,7 @@ def _build_overlay_png(
         draw = ImageDraw.Draw(canvas)
         margin = design.cover.safe_margin
         if design.logo_visible and design.cover.logo_visible:
-            favicon = brand_identity.require_favicon(design.logo_size)
+            favicon = brand_identity.require_favicon(design.logo_size, design)
             left, top = (
                 _transform_origin(design.cover.logo_transform, design.logo_size, design.logo_size)
                 if design.cover.logo_transform is not None
@@ -1397,7 +1397,7 @@ def _build_overlay_png(
             )
             canvas.alpha_composite(favicon, (left, top))
         if design.handle_visible and design.cover.handle_visible:
-            handle = brand_identity.require_handle()
+            handle = brand_identity.require_handle(design)
             font = design_font(design.handle_size, "sans")
             box = draw.textbbox((0, 0), handle, font=font)
             text_width, text_height = box[2] - box[0], box[3] - box[1]

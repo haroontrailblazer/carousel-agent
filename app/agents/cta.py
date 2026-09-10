@@ -191,17 +191,17 @@ def _discover_template_ref(heading_hint: str) -> str:
     return ""
 
 
-def _handle_for_run() -> str:
+def _handle_for_run(design: CarouselDesign | None = None) -> str:
     """The handle of the Instagram account this run publishes to.
 
     Was ``settings.ig_handle`` - one global for the whole console. With
     several accounts connectable the answer is per run, and comes from the
     brand identity set when the run started.
     """
-    return brand_identity.require_handle()
+    return brand_identity.require_handle(design)
 
 
-def _normalized_handle() -> str:
+def _normalized_handle(design: CarouselDesign | None = None) -> str:
     """The run's IG handle with a leading ``@`` (or ``""`` outside a run).
 
     Returns empty rather than raising because the CTA copy path can run
@@ -210,7 +210,7 @@ def _normalized_handle() -> str:
     does raise.
     """
     try:
-        return _handle_for_run()
+        return _handle_for_run(design)
     except brand_identity.NoBrandIdentity:
         return ""
 
@@ -223,7 +223,7 @@ def _display_link(url: str) -> str:
     return text.rstrip("/")
 
 
-def _resolve_link(cta_type: str, redirect_destination: str) -> Tuple[str, str]:
+def _resolve_link(cta_type: str, redirect_destination: str, design: CarouselDesign | None = None) -> Tuple[str, str]:
     """Resolve (link_url, on-slide link_text) from settings for a CTA type.
 
     - ``follow`` / ``comment`` → the configured IG handle.
@@ -239,7 +239,7 @@ def _resolve_link(cta_type: str, redirect_destination: str) -> Tuple[str, str]:
         ``(link_url, link_text)``; both may be ``""`` when nothing is
         configured (the renderer then omits the link line).
     """
-    handle = _normalized_handle()
+    handle = _normalized_handle(design)
     if cta_type != "redirect":
         return handle, handle
     dest = (redirect_destination or "substack").strip().lower()
@@ -316,9 +316,9 @@ async def render_cta_slide(
             ),
         }
 
-    link_url, link_text = _resolve_link(kind, redirect_destination)
-    template_ref = _discover_template_ref("CTA slide")
     design = get_model(tool_context.state, K_DESIGN, CarouselDesign) or CarouselDesign()
+    link_url, link_text = _resolve_link(kind, redirect_destination, design)
+    template_ref = _discover_template_ref("CTA slide")
     out_path = _run_workdir(tool_context.state) / _ARTIFACT_NAME
 
     try:

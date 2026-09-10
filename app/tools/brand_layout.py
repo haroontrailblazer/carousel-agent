@@ -650,7 +650,7 @@ def _draw_round_line(
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=fill)
 
 
-def _favicon_from_source(size: int) -> Image.Image:
+def _favicon_from_source(size: int, design: CarouselDesign | None = None) -> Image.Image:
     """The profile mark of the account this run is publishing to.
 
     Raises:
@@ -659,7 +659,7 @@ def _favicon_from_source(size: int) -> Image.Image:
             other account's logo would mis-brand a post that nobody would
             check before it went live.
     """
-    return brand_identity.require_favicon(size)
+    return brand_identity.require_favicon(size, design)
 
 
 def _draw_handle(
@@ -797,13 +797,14 @@ def apply_body_brand_rail(
     design: CarouselDesign | None = None,
 ) -> Image.Image:
     """Add the official favicon, exact handle, divider, and arrow."""
+    handle = (design.handle_text or handle) if design else handle
     result = image.convert("RGB")
     background = hex_color(design.inside.background, PAPER) if design else _rail_colors(result)[0]
     text = _prepare_rail(result, design)
     if slide_no is not None:
         _clear_slide_number_zone(result, background)
         draw_slide_number(result, slide_no, fill=text)
-    identity = brand_identity.current()
+    identity = brand_identity.current(design)
     if identity is not None and identity.unbranded:
         _draw_swipe_arrow(result, text)
         return result
@@ -819,12 +820,13 @@ def apply_body_brand_rail(
             and design.inside.logo_visible
             and design.handle_visible
             and design.inside.handle_visible
+            and bool(handle)
             and design.handle_position == design.logo_position
             and design.inside.logo_transform is None
             and design.inside.handle_transform is None
         )
         if design.logo_visible and design.inside.logo_visible and not shared_anchor:
-            favicon = _favicon_from_source(design.logo_size)
+            favicon = _favicon_from_source(design.logo_size, design)
             left, top = (
                 _transform_origin(design.inside.logo_transform, design.logo_size, design.logo_size)
                 if design.inside.logo_transform is not None
@@ -836,7 +838,7 @@ def apply_body_brand_rail(
                 )
             )
             result.paste(favicon, (left, top), favicon)
-        if design.handle_visible and design.inside.handle_visible:
+        if design.handle_visible and design.inside.handle_visible and handle:
             # When both marks intentionally share one anchor, keep the handle
             # beside the logo rather than drawing both into the same pixels.
             if shared_anchor:
@@ -851,7 +853,7 @@ def apply_body_brand_rail(
                     margin=margin,
                 )
                 # Reposition the logo as one optical group.
-                favicon = _favicon_from_source(design.logo_size)
+                favicon = _favicon_from_source(design.logo_size, design)
                 result.paste(favicon, (logo_left, logo_top), favicon)
                 ImageDraw.Draw(result).text(
                     (logo_left + design.logo_size + 16 - box[0], logo_top + (design.logo_size - height) / 2 - box[1]),
@@ -879,9 +881,10 @@ def apply_cta_brand_rail(
     design: CarouselDesign | None = None,
 ) -> Image.Image:
     """Add only the official favicon and handle to the unnumbered CTA rail."""
+    handle = (design.handle_text or handle) if design else handle
     result = image.convert("RGB")
     text = _prepare_rail(result, design)
-    identity = brand_identity.current()
+    identity = brand_identity.current(design)
     if identity is not None and identity.unbranded:
         return result
     if design is None:
@@ -895,12 +898,13 @@ def apply_cta_brand_rail(
             and design.inside.logo_visible
             and design.handle_visible
             and design.inside.handle_visible
+            and bool(handle)
             and design.logo_position == design.handle_position
             and design.inside.logo_transform is None
             and design.inside.handle_transform is None
         )
         if design.logo_visible and design.inside.logo_visible and not shared_anchor:
-            favicon = _favicon_from_source(design.logo_size)
+            favicon = _favicon_from_source(design.logo_size, design)
             left, top = (
                 _transform_origin(design.inside.logo_transform, design.logo_size, design.logo_size)
                 if design.inside.logo_transform is not None
@@ -923,7 +927,7 @@ def apply_cta_brand_rail(
                 max(design.logo_size, height),
                 margin=design.inside.safe_margin,
             )
-            favicon = _favicon_from_source(design.logo_size)
+            favicon = _favicon_from_source(design.logo_size, design)
             result.paste(favicon, (left, top), favicon)
             ImageDraw.Draw(result).text(
                 (left + design.logo_size + 16 - box[0], top + (design.logo_size - height) / 2 - box[1]),
@@ -931,7 +935,7 @@ def apply_cta_brand_rail(
                 font=font,
                 fill=text,
             )
-        elif design.handle_visible and design.inside.handle_visible:
+        elif design.handle_visible and design.inside.handle_visible and handle:
             _draw_handle_positioned(
                 result,
                 handle,

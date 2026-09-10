@@ -85,6 +85,27 @@ class CarouselDesign(BaseModel):
 
     id: str = Field("editorial-signal", min_length=1, max_length=120)
     name: str = Field("Editorial Signal", min_length=1, max_length=120)
+    handle_text: str = Field("", max_length=31)
+    logo_data_url: str = Field("", max_length=65_558)
+
+    @field_validator("handle_text")
+    @classmethod
+    def validate_handle_text(cls, value: str) -> str:
+        text = value.strip().lstrip("@")
+        if not text:
+            return ""
+        if not re.fullmatch(r"[A-Za-z0-9._]{1,30}", text):
+            raise ValueError("Use up to 30 letters, numbers, periods or underscores for the handle.")
+        return "@" + text
+
+    @field_validator("logo_data_url")
+    @classmethod
+    def validate_logo_data_url(cls, value: str) -> str:
+        if value:
+            from app.design_branding import decode_logo
+            decode_logo(value)
+        return value
+
     logo_visible: bool = True
     logo_position: DesignPosition = "bottom-left"
     logo_size: int = Field(56, ge=24, le=120)
