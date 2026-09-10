@@ -1,13 +1,12 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link, useSearchParams } from "react-router"
-import { ArrowUpRight, Layers, Newspaper, Wrench, Moon, Sun, ShieldCheck } from "lucide-react"
+import { useSearchParams } from "react-router"
+import { ArrowUpRight, Layers, Newspaper, Wrench, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { AgentComposer, type ComposerState } from "@/components/agent/agent-composer"
 import { AgentWorkspace } from "@/components/agent/agent-workspace"
 import { StudioArtwork } from "@/components/layout/studio-artwork"
-import { useTheme } from "@/hooks/use-theme"
 import { useRunWorkspace } from "@/hooks/use-run-workspace"
 import { ApiError, get, post } from "@/lib/api"
 import { designPayload, useCarouselDesigns } from "@/lib/designs"
@@ -96,7 +95,6 @@ export function NewRunRoute() {
   const [params, setParams] = useSearchParams()
   const runId = params.get("run")
   const [value, setValue] = React.useState("")
-  const { dark, toggle } = useTheme()
   const [submittedPrompt, setSubmittedPrompt] = React.useState("")
   const isUrl = looksLikeUrl(value)
 
@@ -204,15 +202,6 @@ export function NewRunRoute() {
 
   return (
     <div className="agent-empty-workspace">
-      <header className="studio-topbar">
-        <span><span className="hidden sm:inline"><span className="text-[var(--muted-foreground)]">Workspace</span><span aria-hidden="true" className="mx-3 opacity-35">/</span></span>Create</span>
-        <div className="flex items-center gap-4">
-          <Link to="/designs" className="studio-template-link"><span className="hidden sm:inline">Design library</span><span className="sm:hidden">Designs</span><ArrowUpRight size={14} /></Link>
-          <button type="button" onClick={toggle} className="studio-theme-switch" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
-            {dark ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-        </div>
-      </header>
       <div className="studio-create">
         <div className="w-full">
           <div className="studio-intro studio-intro--illustrated">
@@ -222,7 +211,7 @@ export function NewRunRoute() {
               <p className="studio-description">Your idea, a team of agents, and a little creative direction. Let’s make something worth swiping.</p>
             </div>
             <div className="studio-hero-art" aria-hidden="true">
-              <StudioArtwork name="carousel-sculpture" priority sizes="(max-width: 767px) 160px, (max-width: 1100px) 210px, 340px" />
+              <StudioArtwork name="carousel-sculpture" priority sizes="(max-width: 767px) 120px, (max-width: 1100px) 210px, 300px" />
             </div>
           </div>
 

@@ -182,13 +182,12 @@ export function ChatWorkspaceSkeleton() {
 }
 
 /**
- * The studio's header, introduction, composer, and creative team placeholders.
+ * The studio's introduction, composer, and prompt suggestion placeholders.
  */
 export function ComposerSkeleton() {
   return (
     <div className="agent-empty-workspace">
       <LoadingAnnounce />
-      <div className="studio-topbar" aria-hidden><Skeleton className="h-4 w-32" /><Skeleton className="size-8 rounded-full" /></div>
       <div className="studio-create">
         <div className="w-full">
           <div className="studio-intro studio-intro--illustrated" aria-hidden>

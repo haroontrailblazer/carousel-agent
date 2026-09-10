@@ -13,7 +13,7 @@
 .studio-theme-switch { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: var(--card); }
 .studio-theme-switch:hover { background: var(--muted); }
 .agent-main:has(.agent-empty-workspace) { overflow-y: auto; min-height: 100dvh; }
-.studio-create { display: flex; flex: 1; align-items: center; width: 100%; max-width: 860px; margin: 0 auto; padding: 44px 40px 36px; }
+.studio-create { display: flex; flex: 1; align-items: center; width: 100%; max-width: 860px; margin: 0 auto; padding: 24px 40px; }
 .studio-intro { display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 30px; }
 .studio-eyebrow { margin-bottom: 13px; font-size: 10px; font-weight: 650; letter-spacing: .19em; text-transform: uppercase; color: var(--muted-foreground); }
 .studio-intro h1 { font-size: clamp(38px, 4.4vw, 58px); line-height: 1.06; font-weight: 550; letter-spacing: -.065em; }
@@ -58,7 +58,6 @@
 .studio-login-form form label { font-size: 12px; }
 .studio-login-form form input { height: 46px; background: var(--card); }
 .studio-login-form form button[type="submit"] { height: 46px; }
-@media (min-width: 1440px) { .studio-create { padding-top: 56px; padding-bottom: 48px; } }
 @media (max-width: 1100px) and (min-width: 768px) {
   .studio-create { padding-inline: 28px; }
   .studio-suggestion { gap: 7px; padding-inline: 9px; }
@@ -70,7 +69,7 @@
   .studio-topbar { min-height: 58px; padding: 0 18px 0 54px; font-size: 11px; }
   .studio-template-link { font-size: 11px; gap: 5px; }
   .studio-template-link svg { width: 18px; height: 18px; }
-  .studio-create { padding: 32px 20px; }
+  .studio-create { padding: 48px 20px 24px; }
   .studio-intro { margin-bottom: 24px; }
   .studio-intro h1 { font-size: clamp(36px, 9.5vw, 52px); }
   .studio-intro > img { width: 44px; height: 44px; margin-bottom: 18px; }
@@ -125,7 +124,7 @@
 .studio-intro-copy { min-width: 0; }
 .studio-intro--illustrated h1 { font-size: clamp(36px, 3.6vw, 50px); }
 .studio-intro--illustrated .studio-description { max-width: 340px; font-size: 13px; }
-.studio-hero-art { position: relative; width: 100%; max-width: 340px; justify-self: end; }
+.studio-hero-art { position: relative; width: 100%; max-width: clamp(180px, 30dvh, 300px); justify-self: end; }
 .studio-hero-art .studio-artwork { filter: drop-shadow(0 20px 20px rgb(37 24 15 / 12%)); }
 .dark .studio-hero-art .studio-artwork { filter: drop-shadow(0 12px 24px rgb(247 146 112 / 8%)); }
 .studio-agent-grid:has(.studio-agent--illustrated) { align-items: start; gap: 12px; }
@@ -156,7 +155,7 @@
 }
 @media (max-width: 767px) {
   .studio-intro--illustrated { display: flex; flex-direction: column; gap: 14px; text-align: center; }
-  .studio-hero-art { order: -1; width: 160px; }
+  .studio-hero-art { order: -1; width: 120px; }
   .studio-intro--illustrated h1 { font-size: clamp(36px, 9.5vw, 48px); }
   .studio-intro--illustrated .studio-description { max-width: 330px; margin-inline: auto; font-size: 12px; }
   .studio-agent-grid:has(.studio-agent--illustrated) { grid-template-columns: 1fr; gap: 10px; }
@@ -167,4 +166,30 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .studio-agent--illustrated > summary > .studio-artwork, .studio-agent-expand { transition: none; }
+}
+
+/* Short idle viewports keep the composer and starter prompts within reach.
+   Content can still scroll when zoom, the keyboard, or account choices need more room. */
+@media (max-height: 700px) and (min-width: 768px) {
+  .studio-create { padding-block: 16px; }
+  .studio-hero-art { max-width: 180px; }
+  .studio-intro--illustrated { margin-bottom: 16px; }
+  .studio-intro--illustrated h1 { font-size: 32px; }
+  .studio-create .agent-composer textarea { min-height: 64px; }
+  .studio-prompt-label { margin-top: 16px; }
+  .studio-review-note { margin-top: 12px; }
+}
+@media (max-height: 700px) and (max-width: 767px) {
+  .studio-create { padding-top: 48px; padding-bottom: 16px; }
+  .studio-hero-art { display: none; }
+  .studio-intro--illustrated { margin-bottom: 16px; }
+  .studio-intro--illustrated h1 { font-size: 32px; }
+  .studio-eyebrow { margin-bottom: 8px; }
+  .studio-intro--illustrated .studio-description { margin-top: 10px; font-size: 11px; line-height: 1.6; }
+  .studio-create .agent-composer textarea { min-height: 64px; }
+  .studio-prompt-label { margin-top: 16px; margin-bottom: 8px; }
+  .studio-suggestions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .studio-suggestion { min-height: 48px; padding: 6px; justify-content: center; text-align: center; font-size: 10px; }
+  .studio-suggestion > svg { display: none; }
+  .studio-review-note { margin-top: 12px; }
 }
