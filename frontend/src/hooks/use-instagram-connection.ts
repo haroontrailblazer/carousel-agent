@@ -8,7 +8,7 @@ export type InstagramConnection = {
 }
 
 /** UI review eligibility uses the same account list as the creation screen. */
-export function useInstagramConnection(enabled: boolean): InstagramConnection {
+export function useInstagramConnection(enabled: boolean, accountId?: string): InstagramConnection {
   const meta = useQuery({
     queryKey: ["meta"],
     queryFn: () => get<Meta>("/api/meta"),
@@ -18,7 +18,7 @@ export function useInstagramConnection(enabled: boolean): InstagramConnection {
   return {
     status: meta.isError ? "error"
       : !meta.data ? "checking"
-        : meta.data.accounts.some(account => !account.needs_reconnect)
+        : !!accountId && meta.data.accounts.some(account => account.id === accountId && !account.needs_reconnect)
           ? "connected" : "disconnected",
     retry: () => { void meta.refetch() },
   }

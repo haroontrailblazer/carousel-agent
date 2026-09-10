@@ -27,7 +27,7 @@ from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
 
 from app.config import agent_instructions, load_skill, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.schemas import CTASlide, CarouselDesign
 from app.state import AGENT_CTA, K_CTA_SLIDE, K_DESIGN, K_RUN_ID, get_model, set_model
 from app.text_rules import require_no_em_dash
@@ -380,7 +380,7 @@ follow or comment and update the copy to match before rendering again.
 """
     return LlmAgent(
         name=AGENT_CTA,
-        model=resolve_model(settings.utility_model),
+        model=resolve_role_model("utility"),
         description=(
             "Picks the call-to-action type (follow/comment/redirect), writes "
             "its copy, and renders the closing CTA slide as a PNG artifact "

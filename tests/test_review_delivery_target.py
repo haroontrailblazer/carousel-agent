@@ -18,9 +18,9 @@ class ReviewDeliveryTargetTests(unittest.IsolatedAsyncioTestCase):
             result = await routes.get_run("test")
         return result, get_account
 
-    async def test_unconnected_run_offers_send_even_if_other_accounts_exist(self):
+    async def test_unconnected_run_offers_download_even_if_other_accounts_exist(self):
         result, get_account = await self.detail("", SimpleNamespace(usable=True))
-        self.assertEqual(result["delivery_target"], "telegram")
+        self.assertEqual(result["delivery_target"], "download")
         self.assertFalse(result["publish_configured"])
         get_account.assert_not_called()
 

@@ -94,6 +94,12 @@ class ResolveTests(unittest.TestCase):
 
 
 class PublishToolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        receipt = patch.object(publisher_mod.publish_receipts, "claim", AsyncMock(return_value=(True, {"status": "publishing"})))
+        finish = patch.object(publisher_mod.publish_receipts, "finish", AsyncMock())
+        receipt.start(); finish.start()
+        self.addCleanup(receipt.stop); self.addCleanup(finish.stop)
+
     async def test_the_tool_hands_the_run_s_account_to_the_publisher(self) -> None:
         seen: dict = {}
 

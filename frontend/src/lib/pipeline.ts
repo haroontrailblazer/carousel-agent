@@ -173,7 +173,7 @@ export const REJECT_CATEGORIES = [
 const REWORK_DEPENDENTS: Record<string, string[]> = {
   research: ["planner"],
   planner: ["first_page_visual", "phrasing", "template_design", "cta"],
-  phrasing: ["template_design"],
+  phrasing: ["template_design", "cta"],
 }
 
 export function predictRework(targets: string[]): string[] {

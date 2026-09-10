@@ -24,6 +24,16 @@ from unittest.mock import patch
 
 from app.review import verdict as verdict_mod
 from app.services import db
+from types import SimpleNamespace
+
+def setUpModule():
+    global _account_patch
+    _account_patch = patch("app.services.instagram_accounts.get", return_value=SimpleNamespace(usable=True))
+    _account_patch.start()
+
+def tearDownModule():
+    _account_patch.stop()
+
 
 RUN_ID = "run-abc123def456"
 SESSION_ID = RUN_ID
@@ -46,6 +56,8 @@ class _SerialisingPool:
         self.inserted_verdicts: list[dict] = []
 
     async def fetchrow(self, query: str, *args):
+        if "SELECT state FROM sessions" in query:
+            return {"state": {"account_id": "account-test", "phase": "review", "qa_report": {"passed": True}, "bundle": {"ordered_artifacts": ["cover.mp4"]}}}
         if "DELETE FROM pending_reviews" in query:
             self.delete_calls += 1
             await asyncio.sleep(0)  # yield: let the racing caller run
@@ -197,7 +209,7 @@ class DatabaseFailureTests(unittest.IsolatedAsyncioTestCase):
             outcome = await verdict_mod.submit_verdict(RUN_ID, "approved", "")
 
         self.assertEqual(outcome.result, "db_error")
-        self.assertIn("SUPABASE_URL", outcome.detail)
+        self.assertIn("Retry shortly", outcome.detail)
 
 
 if __name__ == "__main__":

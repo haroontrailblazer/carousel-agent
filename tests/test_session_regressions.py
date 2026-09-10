@@ -201,7 +201,7 @@ class ClaimedStoryIsTheStoryClosedTests(unittest.IsolatedAsyncioTestCase):
             patch.object(db, "set_run_status", AsyncMock(return_value=None)),
             patch.object(db, "set_run_account", AsyncMock(return_value=None)),
             patch.object(db, "count_runs_since", AsyncMock(return_value=0)),
-            patch("app.agent.build_runner", lambda: runner),
+            patch("app.agent.build_configured_runner", AsyncMock(return_value=runner)),
             patch.object(service_mod, "spawn_run", lambda *a, **k: None),
             # A run now needs a connected Instagram account before it can
             # start: the account's handle is stamped into the artwork.

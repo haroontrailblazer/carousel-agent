@@ -81,15 +81,7 @@ class Settings:
     # spend the reviewer's whole allowance before they saw a carousel.
     max_qa_rounds: int = int(os.getenv("MAX_QA_ROUNDS", "3"))
 
-    # --- models (LLM) ---
-    # "openai/" ids go through LiteLLM (see app/llm.py); bare ids (gemini-*)
-    # use ADK's native Google path and need GOOGLE_API_KEY. Change these in
-    # .env, not here. All-OpenAI by default per the user's subscription.
-    planner_model: str = os.getenv("PLANNER_MODEL", "openai/gpt-5.6-sol")
-    utility_model: str = os.getenv("UTILITY_MODEL", "openai/gpt-5.4-mini")
-    # GPT-5.5 is the writing specialist for final slide/caption phrasing.
-    phrasing_model: str = os.getenv("PHRASING_MODEL", "openai/gpt-5.5")
-    image_model: str = os.getenv("IMAGE_MODEL", "gpt-image-2")
+    # AI models and credentials are managed in Profile & settings, via ai_config.
 
     # --- storage / db (Supabase) ---
     supabase_url: str = os.getenv("SUPABASE_URL", "")

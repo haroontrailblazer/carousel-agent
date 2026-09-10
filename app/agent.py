@@ -29,10 +29,14 @@ auto_create_session=False)`` - ``session_service`` is required; passing
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
+from contextlib import aclosing
 from typing import Optional
 
 from google.adk.agents import BaseAgent
 from google.adk.runners import Runner
+
+from app.services import ai_config
 
 from app.agents.cta import build_cta_agent
 from app.agents.feedback_router import build_feedback_router_agent
@@ -122,6 +126,26 @@ root_agent: CarouselOrchestrator = build_root_agent()
 # Learner's edits to skills/agents/*.md take effect without a redeploy.
 
 
+class ConfiguredRunner(Runner):
+    """Bind direct OpenAI tools to the same settings used to build the agents."""
+
+    async def run_async(self, **kwargs):
+        self.ai_settings.require_key()
+        with ai_config.bind(self.ai_settings):
+            try:
+                async with aclosing(super().run_async(**kwargs)) as events:
+                    async for event in events:
+                        yield event
+            finally:
+                self.ai_settings.close()
+
+
+async def build_configured_runner() -> Runner:
+    config = await ai_config.load()
+    config.require_key()
+    return build_runner()
+
+
 def build_runner(agent: Optional[BaseAgent] = None) -> Runner:
     """Build a Runner wired to the configured (or fallback) services.
 
@@ -137,18 +161,23 @@ def build_runner(agent: Optional[BaseAgent] = None) -> Runner:
     Returns:
         A ready :class:`google.adk.runners.Runner`.
     """
-    return Runner(
-        app_name=settings.app_name,
-        agent=agent if agent is not None else build_root_agent(),
-        session_service=runtime.session_service(),
-        artifact_service=runtime.artifact_service(),
-        memory_service=runtime.memory_service(),
-    )
+    snapshot = replace(ai_config.current())
+    with ai_config.bind(snapshot):
+        runner = ConfiguredRunner(
+            app_name=settings.app_name,
+            agent=agent if agent is not None else build_root_agent(),
+            session_service=runtime.session_service(),
+            artifact_service=runtime.artifact_service(),
+            memory_service=runtime.memory_service(),
+        )
+    runner.ai_settings = snapshot
+    return runner
 
 
 __all__ = [
     "build_root_agent",
     "build_runner",
+    "build_configured_runner",
     "build_sub_agents",
     "root_agent",
 ]

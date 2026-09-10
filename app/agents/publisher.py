@@ -32,9 +32,9 @@ from google.adk.tools import FunctionTool, ToolContext
 
 from app.design_limits import design_slide_limit
 from app.config import agent_instructions, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.schemas import Bundle, Verdict
-from app.services import db, instagram_accounts
+from app.services import db, instagram_accounts, publish_receipts
 from app.services.artifact_service import SupabaseArtifactService
 from app.state import (
     AGENT_PUBLISHER,
@@ -157,6 +157,9 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
         )
         return {**existing, "status": "already_published"}
 
+    if isinstance(existing, dict) and (existing.get("creation_id") or existing.get("status") in ("publishing", "uncertain")):
+        return {**existing, "status": "error", "retryable": False}
+
     verdict = get_model(state, K_VERDICT, Verdict)
     if verdict is None or verdict.status != "approved":
         return {"status": "error", "message": "Human approval is required before publishing."}
@@ -237,6 +240,20 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
         state[K_PUBLISH_RESULT] = result
         return result
 
+    # Reserve durably before any external publish. A process crash cannot
+    # erase this guard, even when ADK has not persisted the tool response yet.
+    try:
+        claimed, receipt = await publish_receipts.claim(run_id, account.id)
+    except Exception:
+        logger.exception("Could not reserve a durable publish receipt for %s", run_id)
+        return {"status": "error", "message": "Could not save the publish checkpoint. Nothing was sent; retry when storage is available."}
+    if not claimed:
+        state[K_PUBLISH_RESULT] = receipt
+        if receipt.get("media_id"):
+            return {**receipt, "status": "already_published"}
+        return {**receipt, "status": "error", "retryable": False}
+    state[K_PUBLISH_RESULT] = receipt
+
     try:
         ig_result: dict[str, Any] = await asyncio.to_thread(
             instagram_tools.publish_carousel,
@@ -258,7 +275,7 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
         # nothing is posted. The run's own ending is recorded by _drive_run.
         logger.info(
             "Run %s: publish cancelled; the upload aborts at its next "
-            "checkpoint and nothing is posted.",
+            "checkpoint. If Instagram already accepted it, the durable receipt blocks a duplicate.",
             run_id,
         )
         raise
@@ -270,13 +287,14 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
             exc.creation_id,
         )
         result = {
-            "status": "error",
+            "status": "uncertain",
             "retryable": False,
             "message": str(exc),
             "creation_id": exc.creation_id,
             "public_url_count": len(public_urls),
         }
         state[K_PUBLISH_RESULT] = result
+        await publish_receipts.finish(run_id, receipt, result)
         return result
     except instagram_tools.PublishAborted:
         logger.info("Run %s was stopped mid-publish; nothing posted.", run_id)
@@ -286,6 +304,7 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
             "cancelled": True,
         }
         state[K_PUBLISH_RESULT] = result
+        await publish_receipts.finish(run_id, receipt, result)
         return result
     except Exception as exc:  # noqa: BLE001 - ValueError/RuntimeError/HTTP
         logger.exception("Instagram publish failed for run %s.", run_id)
@@ -295,10 +314,24 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
             "public_url_count": len(public_urls),
         }
         state[K_PUBLISH_RESULT] = result
+        await publish_receipts.finish(run_id, receipt, result)
         return result
 
     media_id = str(ig_result.get("media_id", ""))
     permalink = str(ig_result.get("permalink", ""))
+
+    result = {
+        "status": "published", "media_id": media_id, "permalink": permalink,
+        "public_url_count": len(public_urls), "retryable": False,
+        "published_at": datetime.now(timezone.utc).isoformat(),
+    }
+    state[K_PUBLISH_RESULT] = result
+    try:
+        await publish_receipts.finish(run_id, receipt, result)
+    except Exception:
+        # The pre-publish receipt remains blocking. Keep the known media ID
+        # in state and continue; failure to notify must never repeat the POST.
+        logger.exception("Could not finalize publish receipt for %s", run_id)
 
     # (3) Confirmation mail - best-effort: the post is already live, so a
     # mail failure must not fail the publish.
@@ -411,7 +444,7 @@ def build_publisher_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_PUBLISHER) or DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_PUBLISHER,
-        model=resolve_model(settings.utility_model),
+        model=resolve_role_model("utility"),
         description=(
             "Publishes the approved carousel to Instagram and sends the "
             "confirmation mail."

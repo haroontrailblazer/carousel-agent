@@ -55,6 +55,7 @@ def build_resume_content(
     status: str,
     feedback: str,
     targets: Optional[list[str]] = None,
+    cover_choice: Optional[str] = None,
 ) -> Any:
     """Build the ``types.Content`` that answers the paused review tool call.
 
@@ -86,6 +87,7 @@ def build_resume_content(
                         "status": status,
                         "feedback": feedback,
                         **({"targets": list(targets)} if targets else {}),
+                        **({"cover_choice": cover_choice} if cover_choice else {}),
                     },
                 )
             )
@@ -140,6 +142,7 @@ async def resume_pipeline(
     status: str,
     feedback: str,
     targets: Optional[list[str]] = None,
+    cover_choice: Optional[str] = None,
 ) -> None:
     """Resume the paused run with the reviewer's verdict (background work).
 
@@ -171,7 +174,7 @@ async def resume_pipeline(
         # agent/tool dependency stack - the API itself must start without it.
         # consume_invocation is deferred for import-cycle reasons only.
         from app import observability
-        from app.agent import build_runner
+        from app.agent import build_configured_runner
         from app.runs import cancellation
         from app.runs.bus import KIND_TERMINAL
         from app.runs.service import _heartbeat
@@ -196,8 +199,8 @@ async def resume_pipeline(
             name=f"heartbeat-{run_id}",
         )
 
-        runner = build_runner()
-        content = build_resume_content(function_call_id, status, feedback, targets)
+        runner = await build_configured_runner()
+        content = build_resume_content(function_call_id, status, feedback, targets, cover_choice)
 
         result = await asyncio.wait_for(
             consume_invocation(
@@ -287,11 +290,12 @@ def spawn_resume(
     status: str,
     feedback: str,
     targets: Optional[list[str]] = None,
+    cover_choice: Optional[str] = None,
 ) -> None:
     """Fire the resume as a fire-and-forget asyncio task (strongly referenced)."""
     task = asyncio.get_running_loop().create_task(
         resume_pipeline(
-            run_id, session_id, function_call_id, status, feedback, targets
+            run_id, session_id, function_call_id, status, feedback, targets, cover_choice
         ),
         name=f"resume-{run_id}",
     )

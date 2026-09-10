@@ -257,7 +257,7 @@ async def fetch_url_item(url: str) -> dict:
 
     title = ""
     lowered = markup.lower()
-    if "<title" in lowered:
+    if "<title" in lowered and "</title>" in lowered:
         start = lowered.index("<title")
         start = markup.index(">", start) + 1
         end = lowered.index("</title>", start)
@@ -370,9 +370,9 @@ async def start_run(
         if news is not None:
             state[K_NEWS_ITEM] = news
 
-        from app.agent import build_runner
+        from app.agent import build_configured_runner
 
-        runner = build_runner()
+        runner = await build_configured_runner()
         await runner.session_service.create_session(
             app_name=settings.app_name,
             user_id=PIPELINE_USER_ID,
@@ -737,10 +737,9 @@ async def resume_interrupted_run(
     """Re-enter an interrupted run at whatever phase it stopped in.
 
     This works because the orchestrator is a re-entrant phase machine: it reads
-    the phase back out of persisted session state and starts that phase again
-    from the top. Some work inside the interrupted phase is repeated, but the
-    output is correct and the publisher is idempotent, so an interrupted run is
-    genuinely recoverable rather than merely restartable.
+    the phase back out of persisted session state. Generation and rework skip
+    validated, checkpointed agents. The unfinished agent may repeat work;
+    durable publish receipts protect completed or uncertain sends.
 
     Returns:
         True if a resume was started; False if the run is unknown or already
@@ -764,10 +763,10 @@ async def resume_interrupted_run(
         await _check_limits(run_id, new_run=False)
 
     try:
-        from app.agent import build_runner
+        from app.agent import build_configured_runner
         from google.genai import types
 
-        runner = build_runner()
+        runner = await build_configured_runner()
         message = types.Content(
             role="user",
             parts=[

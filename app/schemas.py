@@ -14,7 +14,6 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 from app.text_rules import require_no_em_dash, require_readable_text
 from app.design_limits import MIN_CAROUSEL_SLIDES, MAX_SUPPORTED_SLIDES
-from app.design_limits import MIN_CAROUSEL_SLIDES, MAX_SUPPORTED_SLIDES
 
 CarouselStyle = Literal["points", "prose"]
 CTAType = Literal["follow", "comment", "redirect"]
@@ -92,7 +91,6 @@ class CarouselDesign(BaseModel):
     substack_url: str = Field("", max_length=2048)
     youtube_url: str = Field("", max_length=2048)
     max_slides: int = Field(MAX_SUPPORTED_SLIDES, ge=MIN_CAROUSEL_SLIDES, le=MAX_SUPPORTED_SLIDES, strict=True)
-    max_slides: int = Field(MAX_SUPPORTED_SLIDES, ge=MIN_CAROUSEL_SLIDES, le=MAX_SUPPORTED_SLIDES, strict=True)
 
     @field_validator("substack_url", "youtube_url")
     @classmethod
@@ -146,6 +144,17 @@ class CarouselDesign(BaseModel):
         )
     )
     inside: SlideDesign = Field(default_factory=SlideDesign)
+    cta: SlideDesign = Field(default_factory=SlideDesign)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_cta_layout(cls, value: Any) -> Any:
+        # Saved designs originally shared the inside layout with the CTA.
+        # Copy it on read, then allow the two layouts to evolve independently.
+        if isinstance(value, dict) and value.get("cta") is None:
+            from copy import deepcopy
+            return {**value, "cta": deepcopy(value.get("inside") or {})}
+        return value
 
     @model_validator(mode="after")
     def enforce_full_bleed_cover_media(self) -> "CarouselDesign":
@@ -312,6 +321,7 @@ class Verdict(BaseModel):
     """What the human decided in the review mail."""
 
     status: VerdictStatus
+    cover_choice: Optional[Literal["video", "image"]] = None
     feedback: str = ""  # optional on approve, compulsory on reject
     reviewer: str = ""
     #: Agents the human POINTED AT, as ``state.REWORKABLE_AGENTS`` names.

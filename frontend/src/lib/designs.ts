@@ -72,6 +72,7 @@ export type CarouselDesign = {
   handleSize: number
   cover: SlideDesign
   inside: SlideDesign
+  cta?: SlideDesign
 }
 
 const STORAGE_KEY = "carousel-designs:v1"
@@ -441,6 +442,7 @@ function cloneDesign(design: CarouselDesign): CarouselDesign {
     ...design,
     cover: cloneSlide(design.cover),
     inside: cloneSlide(design.inside),
+    cta: cloneSlide(design.cta ?? design.inside),
   }
 }
 
@@ -528,9 +530,10 @@ function normalizeSlide(
   }
 }
 
-type DesignInput = Partial<Omit<CarouselDesign, "cover" | "inside">> & {
+type DesignInput = Partial<Omit<CarouselDesign, "cover" | "inside" | "cta">> & {
   cover?: Partial<SlideDesign>
   inside?: Partial<SlideDesign>
+  cta?: Partial<SlideDesign>
 }
 
 function normalizeDesign(value: DesignInput): CarouselDesign {
@@ -546,6 +549,7 @@ function normalizeDesign(value: DesignInput): CarouselDesign {
     handlePosition,
     cover: coverLayout(normalizeSlide(value.cover, logoPosition, handlePosition, "cover")),
     inside: normalizeSlide(value.inside, logoPosition, handlePosition, "inside"),
+    cta: normalizeSlide(value.cta ?? value.inside, logoPosition, handlePosition, "inside"),
   }
 }
 
@@ -591,6 +595,7 @@ type PersistedCarouselDesign = {
   handle_size?: number
   cover?: PersistedSlideDesign
   inside?: PersistedSlideDesign
+  cta?: PersistedSlideDesign
 }
 
 type DesignLibraryResponse = { items: PersistedCarouselDesign[] }
@@ -645,6 +650,7 @@ function fromPersistedDesign(value: PersistedCarouselDesign): CarouselDesign {
     handleSize: value.handle_size,
     cover: fromPersistedSlide(value.cover),
     inside: fromPersistedSlide(value.inside),
+    cta: value.cta ? fromPersistedSlide(value.cta) : undefined,
   }
   return normalizeDesign(Object.fromEntries(
     Object.entries(mapped).filter(([, fieldValue]) => fieldValue !== undefined),
@@ -785,55 +791,36 @@ export function designPayload(design: CarouselDesign) {
     handle_visible: design.handleVisible,
     handle_position: design.handlePosition,
     handle_size: design.handleSize,
-    cover: {
-      logo_visible: design.cover.logoVisible,
-      handle_visible: design.cover.handleVisible,
-      shadow_visible: design.cover.shadowVisible,
-      shadow_opacity: design.cover.shadowOpacity,
-      shadow_height: design.cover.shadowHeight,
-      shadow_softness: design.cover.shadowSoftness,
-      shadow_color: design.cover.shadowColor,
-      title_size: design.cover.titleSize,
-      title_position: design.cover.titlePosition,
-      title_align: design.cover.titleAlign,
-      font_family: design.cover.fontFamily,
-      background: design.cover.background,
-      text_color: design.cover.textColor,
-      highlight_text_color: design.cover.highlightTextColor,
-      accent_color: design.cover.accentColor,
-      safe_margin: design.cover.safeMargin,
-      image_type: design.cover.imageType,
-      image_position: design.cover.imagePosition,
-      image_scale: design.cover.imageScale,
-      title_transform: design.cover.titleTransform,
-      image_transform: design.cover.imageTransform,
-      logo_transform: design.cover.logoTransform,
-      handle_transform: design.cover.handleTransform,
-    },
-    inside: {
-      logo_visible: design.inside.logoVisible,
-      handle_visible: design.inside.handleVisible,
-      shadow_visible: design.inside.shadowVisible,
-      shadow_opacity: design.inside.shadowOpacity,
-      shadow_height: design.inside.shadowHeight,
-      shadow_softness: design.inside.shadowSoftness,
-      shadow_color: design.inside.shadowColor,
-      title_size: design.inside.titleSize,
-      title_position: design.inside.titlePosition,
-      title_align: design.inside.titleAlign,
-      font_family: design.inside.fontFamily,
-      background: design.inside.background,
-      text_color: design.inside.textColor,
-      highlight_text_color: design.inside.highlightTextColor,
-      accent_color: design.inside.accentColor,
-      safe_margin: design.inside.safeMargin,
-      image_type: design.inside.imageType,
-      image_position: design.inside.imagePosition,
-      image_scale: design.inside.imageScale,
-      title_transform: design.inside.titleTransform,
-      image_transform: design.inside.imageTransform,
-      logo_transform: design.inside.logoTransform,
-      handle_transform: design.inside.handleTransform,
-    },
+    cover: slidePayload(design.cover),
+    inside: slidePayload(design.inside),
+    cta: slidePayload(design.cta ?? design.inside),
+  }
+}
+
+function slidePayload(slide: SlideDesign) {
+  return {
+    logo_visible: slide.logoVisible,
+    handle_visible: slide.handleVisible,
+    shadow_visible: slide.shadowVisible,
+    shadow_opacity: slide.shadowOpacity,
+    shadow_height: slide.shadowHeight,
+    shadow_softness: slide.shadowSoftness,
+    shadow_color: slide.shadowColor,
+    title_size: slide.titleSize,
+    title_position: slide.titlePosition,
+    title_align: slide.titleAlign,
+    font_family: slide.fontFamily,
+    background: slide.background,
+    text_color: slide.textColor,
+    highlight_text_color: slide.highlightTextColor,
+    accent_color: slide.accentColor,
+    safe_margin: slide.safeMargin,
+    image_type: slide.imageType,
+    image_position: slide.imagePosition,
+    image_scale: slide.imageScale,
+    title_transform: slide.titleTransform,
+    image_transform: slide.imageTransform,
+    logo_transform: slide.logoTransform,
+    handle_transform: slide.handleTransform,
   }
 }

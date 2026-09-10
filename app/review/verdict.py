@@ -55,6 +55,7 @@ VerdictResult = Literal[
     "not_pending",        # unknown run, already decided, or lost the race
     "invalid_status",     # neither "approved" nor "rejected"
     "feedback_required",  # rejected with no feedback text
+    "instagram_required",
     "incomplete",         # the stored row could never be resumed
     "db_error",           # the database is unreachable / unconfigured
 ]
@@ -126,6 +127,8 @@ async def _decide_without_pause(
     *,
     reviewer: str,
     source: VerdictSource,
+    targets: Optional[list[str]] = None,
+    cover_choice: Optional[str] = None,
 ) -> VerdictOutcome:
     """Record a verdict into session state and re-enter the run.
 
@@ -172,6 +175,8 @@ async def _decide_without_pause(
             "status": status,
             "feedback": feedback,
             "reviewer": reviewer,
+            "targets": targets or [],
+            "cover_choice": cover_choice,
             "decided_at": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -247,6 +252,7 @@ async def submit_verdict(
     reviewer: str = "",
     source: VerdictSource = "telegram",
     targets: Optional[list[str]] = None,
+    cover_choice: Optional[str] = None,
 ) -> VerdictOutcome:
     """Record a human verdict and resume the paused run.
 
@@ -295,6 +301,17 @@ async def submit_verdict(
             detail=REJECT_FEEDBACK_REQUIRED_MESSAGE,
         )
 
+    from app.review.eligibility import ReviewNotReady, review_account_message
+    try:
+        blocked = await review_account_message(run_id)
+    except ReviewNotReady as exc:
+        return VerdictOutcome(result="not_pending", run_id=run_id, detail=str(exc))
+    except Exception:
+        logger.exception("Could not verify the review account for %s", run_id)
+        return VerdictOutcome(result="db_error", run_id=run_id, detail="Could not verify this carousel's Instagram connection. Retry shortly.")
+    if blocked:
+        return VerdictOutcome(result="instagram_required", run_id=run_id, detail=blocked)
+
     # No live pause, but the carousel is ready: the review notification failed,
     # so the dispatcher never reached `await_human_review`. There is nothing to
     # claim and nothing to answer - but the orchestrator's review phase routes
@@ -304,7 +321,7 @@ async def submit_verdict(
     # round whose function call had already been answered.
     if await _halted_awaiting_review(run_id):
         return await _decide_without_pause(
-            run_id, clean_status, clean_feedback, reviewer=reviewer, source=source
+            run_id, clean_status, clean_feedback, reviewer=reviewer, source=source, targets=clean_targets, cover_choice=cover_choice
         )
 
     try:
@@ -358,7 +375,8 @@ async def submit_verdict(
         logger.warning("record_verdict failed for run %s: %s", run_id, exc)
 
     spawn_resume(
-        run_id, session_id, function_call_id, clean_status, clean_feedback, clean_targets
+        run_id, session_id, function_call_id, clean_status, clean_feedback, clean_targets,
+        **({"cover_choice": cover_choice} if cover_choice else {}),
     )
     logger.info(
         "Verdict '%s' accepted for run %s from %s%s; resume dispatched.",

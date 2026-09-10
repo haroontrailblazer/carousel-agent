@@ -50,6 +50,8 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from app.services.ai_config import AISettingsNotConfigured
 from starlette.types import ASGIApp
 
 from app import runtime
@@ -65,6 +67,7 @@ from web_api.routes_auth import router as auth_router
 from web_api.routes_designs import router as designs_router
 from web_api.routes_runs import router as runs_router
 from web_api.routes_settings import router as settings_router
+from web_api.routes_ai_settings import router as ai_settings_router
 from web_api.spa import SPAStaticFiles
 
 
@@ -184,6 +187,10 @@ def build_app() -> ASGIApp:
         redoc_url=None,
     )
 
+    @root.exception_handler(AISettingsNotConfigured)
+    async def ai_setup_required(_request, exc):
+        return JSONResponse(status_code=409, content={"detail": {"code": "ai_not_configured", "message": str(exc)}})
+
     @root.get("/healthz", include_in_schema=False)
     async def healthz() -> dict:
         """Liveness probe. Touches no dependencies, so it cannot restart-loop."""
@@ -193,6 +200,7 @@ def build_app() -> ASGIApp:
     root.include_router(designs_router, prefix="/api", tags=["designs"])
     root.include_router(runs_router, prefix="/api", tags=["runs"])
     root.include_router(settings_router, prefix="/api", tags=["settings"])
+    root.include_router(ai_settings_router, prefix="/api", tags=["settings"])
 
     # Registered LAST: it is the catch-all, and anything mounted after it would
     # never be reached.

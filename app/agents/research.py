@@ -27,7 +27,7 @@ from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool
 
 from app.config import agent_instructions, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.state import AGENT_RESEARCH, K_NEWS_ITEM, K_RECENT_FEEDBACK, K_REWORK_FEEDBACK
 from app.tools.research_tools import save_research_brief, search_web
 
@@ -124,7 +124,7 @@ def build_research_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_RESEARCH) or DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_RESEARCH,
-        model=resolve_model(settings.planner_model),
+        model=resolve_role_model("planner"),
         description=(
             "Research: web-searches the news item first - official "
             "announcement, exact specs/numbers, reactions, official media - "

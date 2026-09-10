@@ -232,7 +232,15 @@ export function ApprovalCard({
     )
   }
 
+  if (run.phase !== "review" || run.qa.passed !== true) {
+    return <Card className={panelClass}><p className="font-medium">Verification is not complete</p><p className="mt-1 text-sm text-[var(--muted-foreground)]">Review actions appear after the current carousel passes its checks.</p></Card>
+  }
+
   // --- state 1: waiting for a human --------------------------------------
+  if (!publishing) {
+    return <Card className={panelClass}><p className="font-medium">Ready to download</p><p className="mt-1 text-sm text-[var(--muted-foreground)]">Preview your carousel and download it below. To publish from the app, start a carousel with an Instagram account selected.</p></Card>
+  }
+
   if (instagramConnection.status !== "connected") {
     return <Card className={panelClass}><InstagramReviewGate connection={instagramConnection} /></Card>
   }

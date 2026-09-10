@@ -29,7 +29,7 @@ from google.genai import types
 from PIL import Image
 
 from app.config import agent_instructions, load_skill, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.schemas import (
     CarouselDesign,
     CarouselPlan,
@@ -488,7 +488,7 @@ def build_template_design_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_TEMPLATE_DESIGN) or _DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_TEMPLATE_DESIGN,
-        model=resolve_model(settings.utility_model),
+        model=resolve_role_model("utility"),
         description=(
             "Renders the carousel body slides as 1080x1350 PNG artifacts from "
             "the approved copy, using the design-system template."

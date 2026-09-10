@@ -26,6 +26,7 @@ is raised as a ``RuntimeError`` that includes Instagram's error message.
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
@@ -33,6 +34,8 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 from app.design_limits import MAX_SUPPORTED_SLIDES
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -432,7 +435,7 @@ def publish_carousel(
                 },
                 target=target,
             )
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
+        except Exception as exc:
             # The request left; the answer did not come back. Whether the
             # carousel is live is genuinely unknown from here, and nothing in
             # the Graph API lets us ask "did creation_id already publish?"
@@ -442,23 +445,24 @@ def publish_carousel(
             raise PublishUncertain(str(parent_id), type(exc).__name__) from exc
         media_id = publish_payload.get("id")
         if not media_id:
-            raise RuntimeError(
-                f"Instagram media_publish returned no media id: "
-                f"{publish_payload}"
-            )
+            raise PublishUncertain(str(parent_id), "response contained no media ID")
         media_id = str(media_id)
 
         # (5) Permalink of the published post.
-        permalink_payload = _graph_request(
-            client,
-            "GET",
-            f"/{media_id}",
-            params={
-                "fields": "permalink",
-                "access_token": target.access_token,
-            },
-            target=target,
-        )
-        permalink = str(permalink_payload.get("permalink", ""))
+        permalink = ""
+        try:
+            permalink_payload = _graph_request(
+                client,
+                "GET",
+                f"/{media_id}",
+                params={
+                    "fields": "permalink",
+                    "access_token": target.access_token,
+                },
+                target=target,
+            )
+            permalink = str(permalink_payload.get("permalink", ""))
+        except Exception:
+            logger.warning("Published media %s, but permalink lookup failed", media_id, exc_info=True)
 
     return {"media_id": media_id, "permalink": permalink}

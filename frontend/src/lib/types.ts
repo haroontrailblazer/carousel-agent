@@ -60,7 +60,8 @@ export type RunDetail = RunSummary & {
   slide_count: number
   qa: { passed: boolean | null; issues: QAIssue[] }
   verdict: { status: string; feedback: string; reviewer?: string } | null
-  delivery_target: "instagram" | "telegram"
+  delivery_target: "instagram" | "telegram" | "download"
+  account_id?: string
   publish_configured: boolean
   publish: { status?: string | null; media_id: string | null; permalink: string | null; error: string | null }
   token_usage: Record<string, number>

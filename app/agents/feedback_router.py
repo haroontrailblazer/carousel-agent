@@ -29,7 +29,7 @@ from google.genai import types
 from pydantic import ValidationError
 
 from app.config import agent_instructions, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.schemas import ReworkPlan, ReworkReason, Verdict
 from app.state import (
     AGENT_CTA,
@@ -470,7 +470,7 @@ def build_feedback_router_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_FEEDBACK_ROUTER) or DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_FEEDBACK_ROUTER,
-        model=resolve_model(settings.utility_model),
+        model=resolve_role_model("utility"),
         description=(
             "Maps human review feedback to the exact pipeline agents that "
             "must re-run (rework plan)."

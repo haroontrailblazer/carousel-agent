@@ -44,6 +44,7 @@ from openai import (
 from PIL import Image, ImageOps
 
 from app import observability
+from app.services import ai_config
 from app.config import load_skill, settings
 from app.schemas import CarouselDesign, SlideDesign
 from app.text_rules import require_no_em_dash, require_readable_text
@@ -190,17 +191,10 @@ _NO_TEXT_RULE = (
 
 
 def _client() -> OpenAI:
-    """Return a lazily created OpenAI client.
-
-    The API key comes from the ``OPENAI_API_KEY`` environment variable, which
-    ``app.config`` loads from ``.env`` on import (no key is ever hard-coded).
-    SDK auto-retries are disabled so this module's own single-retry policy is
-    the only retry in play.
-    """
-    global _client_singleton
-    if _client_singleton is None:
-        _client_singleton = OpenAI(timeout=_REQUEST_TIMEOUT_S, max_retries=0)
-    return _client_singleton
+    """Use this run's credential; tests can inject a client without network calls."""
+    if _client_singleton is not None:
+        return _client_singleton
+    return ai_config.current().client.with_options(timeout=_REQUEST_TIMEOUT_S)
 
 
 def _style_prompt() -> str:
@@ -272,7 +266,7 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
         try:
             if template is not None:
                 response = client.images.edit(
-                    model=settings.image_model,
+                    model=ai_config.current().image_model,
                     image=template,
                     prompt=prompt,
                     size=size,
@@ -283,7 +277,7 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
                 )
             else:
                 response = client.images.generate(
-                    model=settings.image_model,
+                    model=ai_config.current().image_model,
                     prompt=prompt,
                     size=size,
                     n=1,
@@ -292,7 +286,7 @@ def _call_images_api(prompt: str, template: Optional[Tuple[str, bytes, str]]) ->
                     timeout=_REQUEST_TIMEOUT_S,
                 )
             observability.record_image_usage(
-                model=settings.image_model,
+                model=ai_config.current().image_model,
                 endpoint="images.edit" if template is not None else "images.generate",
                 usage=getattr(response, "usage", None),
                 prompt=prompt,
@@ -597,6 +591,9 @@ def generate_cta_image(
     """
     design = design or CarouselDesign()
     require_no_em_dash([headline, *lines, link_text], "CTA image copy")
+    # Typography and composition share the body renderer, with a dedicated
+    # closing-slide layout selected from the design saved on this run.
+    design = design.model_copy(update={"inside": design.cta})
     require_readable_text([headline, *lines, link_text], "CTA image copy")
     variant_hints = {
         "follow": "Follow CTA: make the value promise and action unmistakable.",
@@ -638,7 +635,16 @@ def generate_cta_image(
             "portrait 4:5.\n\n"
             f"{_style_prompt()}\n\n{text_spec}"
         )
-    png = _call_images_api(prompt, template)
+    prompt += (
+        f"\nArt direction: {design.cta.image_type}. "
+        f"Background {design.cta.background}; accent {design.cta.accent_color}."
+    )
+    if design.cta.image_type == "none":
+        buffer = BytesIO()
+        Image.new("RGB", (1080, 540), hex_color(design.cta.background, INK)).save(buffer, format="PNG")
+        png = buffer.getvalue()
+    else:
+        png = _call_images_api(prompt, template)
     result = _finalize(
         png,
         out_path,

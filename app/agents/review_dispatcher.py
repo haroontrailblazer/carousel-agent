@@ -57,7 +57,7 @@ from google.adk.tools import FunctionTool, LongRunningFunctionTool, ToolContext
 from google.genai import types
 
 from app.config import agent_instructions, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.schemas import Bundle, Verdict
 from app.services import db
 from app.state import (
@@ -205,7 +205,8 @@ def _verdict_from_payload(payload: dict) -> Verdict:
             "(visual, texts, design, CTA)."
         )
     return Verdict(
-        status=raw_status, feedback=feedback, reviewer=reviewer, targets=targets
+        status=raw_status, feedback=feedback, reviewer=reviewer, targets=targets,
+        cover_choice=payload.get("cover_choice") if payload.get("cover_choice") in ("video", "image") else None,
     )
 
 
@@ -760,7 +761,7 @@ def build_review_dispatcher_agent() -> LlmAgent:
     _ensure_default_instruction_file()
     return LlmAgent(
         name=AGENT_REVIEW_DISPATCHER,
-        model=resolve_model(settings.utility_model),
+        model=resolve_role_model("utility"),
         description=(
             "Review Dispatcher: sends the reviewers the assembled carousel on "
             "Telegram with Approve/Reject buttons, pauses the pipeline on a "

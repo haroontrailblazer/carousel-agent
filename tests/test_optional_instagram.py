@@ -22,7 +22,7 @@ class StartTests(unittest.IsolatedAsyncioTestCase):
         self.binding = AsyncMock()
         with patch.object(service.instagram_accounts, "resolve", self.resolve), \
              patch.object(service, "_check_limits", AsyncMock()), \
-             patch("app.agent.build_runner", return_value=SimpleNamespace(
+             patch("app.agent.build_configured_runner", return_value=SimpleNamespace(
                  session_service=SimpleNamespace(create_session=session))), \
              patch.object(service, "spawn_run"), \
              patch.object(db, "create_run", AsyncMock()), \
@@ -67,6 +67,8 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.children = []
         async def drive(_agent, child, *args):
             self.children.append(child)
+            if child == orch.AGENT_STITCH_VERIFY:
+                self.state[K_QA_REPORT] = {"passed": passed, "issues": []}
             if False:
                 yield
 
@@ -95,29 +97,28 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.state[K_PHASE], "rework")
         self.delivery.assert_not_awaited()
 
-    async def test_delivery_failure_does_not_mark_done(self):
-        with self.assertRaises(RuntimeError):
-            await self.run_phase("", phase="publish", verdict={"status": "approved"},
-                                 error=RuntimeError("Telegram unavailable"))
-        self.assertEqual(self.state[K_PHASE], "publish")
+    async def test_download_run_does_not_depend_on_telegram(self):
+        await self.run_phase("", phase="publish", verdict={"status": "approved"}, error=RuntimeError("Telegram unavailable"))
+        self.assertEqual(self.state[K_PHASE], "review")
         self.assertNotIn(K_PUBLISH_RESULT, self.state)
+        self.delivery.assert_not_awaited()
 
     async def test_review_without_account_waits_for_a_verdict(self):
         await self.run_phase("", phase="review")
         self.assertEqual(self.state[K_PHASE], "review")
-        self.assertIn(orch.AGENT_REVIEW_DISPATCHER, self.children)
+        self.assertNotIn(orch.AGENT_REVIEW_DISPATCHER, self.children)
         self.delivery.assert_not_awaited()
 
     async def test_rejection_reworks_for_both_destinations(self):
         for account in ("", "account-a"):
             await self.run_phase(account, phase="review", verdict={"status": "rejected", "feedback": "Fix title"})
-            self.assertEqual(self.state[K_PHASE], "rework")
+            self.assertEqual(self.state[K_PHASE], "rework" if account else "review")
             self.delivery.assert_not_awaited()
 
     async def test_approval_routes_to_publish_phase(self):
         for account in ("", "account-a"):
             await self.run_phase(account, phase="review", verdict={"status": "approved"})
-            self.assertEqual(self.state[K_PHASE], "publish")
+            self.assertEqual(self.state[K_PHASE], "publish" if account else "review")
             self.delivery.assert_not_awaited()
 
     async def test_publish_resume_without_approval_returns_to_review(self):
@@ -128,11 +129,11 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(self.children, [])
                 self.delivery.assert_not_awaited()
 
-    async def test_approved_unconnected_run_delivers_and_completes(self):
+    async def test_approval_cannot_send_a_download_only_run(self):
         await self.run_phase("", phase="publish", verdict={"status": "approved"})
-        self.assertEqual(self.state[K_PHASE], "done")
-        self.assertEqual(self.state[K_PUBLISH_RESULT]["status"], "delivered")
-        self.delivery.assert_awaited_once()
+        self.assertEqual(self.state[K_PHASE], "review")
+        self.assertIsNone(self.state[K_VERDICT])
+        self.delivery.assert_not_awaited()
         self.assertNotIn(orch.AGENT_PUBLISHER, self.children)
 
     async def test_approved_connected_run_invokes_publisher(self):

@@ -28,7 +28,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from google.adk.tools import ToolContext
 from openai import OpenAI, OpenAIError
 
-from app.config import settings
+from app.services import ai_config
 from app.llm import OPENAI_REASONING_EFFORT
 from app.schemas import ResearchBrief
 from app.state import K_NEWS_ITEM, K_RESEARCH
@@ -113,16 +113,15 @@ def _response_sources(response: Any) -> list[str]:
 
 
 def _client() -> OpenAI:
-    """Lazily created OpenAI client (key from env via app.config)."""
-    global _client_singleton
-    if _client_singleton is None:
-        _client_singleton = OpenAI(timeout=_SEARCH_TIMEOUT_S, max_retries=0)
-    return _client_singleton
+    """Use this run's credential; tests can inject a client without network calls."""
+    if _client_singleton is not None:
+        return _client_singleton
+    return ai_config.current().client.with_options(timeout=_SEARCH_TIMEOUT_S)
 
 
 def _search_model_id() -> str:
     """Bare OpenAI model id used for web search (utility model, unprefixed)."""
-    model = settings.utility_model
+    model = ai_config.current().utility_model
     return model.split("/", 1)[-1] if model.startswith("openai/") else model
 
 

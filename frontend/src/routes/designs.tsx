@@ -9,7 +9,7 @@ import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { type CarouselDesign, type DesignImageType, type DesignPosition, type ElementTransform, duplicateDesign, newDesign, PREBUILT_DESIGNS, useCarouselDesigns } from "@/lib/designs"
 import "./design-editor.css"
 
-type Surface = "cover" | "inside"
+type Surface = "cover" | "inside" | "cta"
 type ElementKind = "title" | "image" | "shadow" | "logo" | "handle"
 type MoveableElementKind = Exclude<ElementKind, "shadow">
 type ResizeHandle = "nw" | "ne" | "sw" | "se"
@@ -34,7 +34,10 @@ function nearestPosition(transform: ElementTransform): DesignPosition {
   return ((y < 34 ? "top" : y > 66 ? "bottom" : "middle") + "-" + (x < 34 ? "left" : x > 66 ? "right" : "center")) as DesignPosition
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="design-field"><span>{label}</span>{children}</label>
+  const labelId = React.useId()
+  return <label className="design-field"><span id={labelId}>{label}</span>{React.isValidElement(children)
+    ? React.cloneElement(children as React.ReactElement<{ "aria-labelledby"?: string }>, { "aria-labelledby": labelId })
+    : children}</label>
 }
 function RangeField({ label, value, min, max, suffix = "", onChange }: {
   label: string; value: number; min: number; max: number; suffix?: string; onChange: (value: number) => void
@@ -231,9 +234,9 @@ function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = f
   onElementTransform: (kind: MoveableElementKind, transform: ElementTransform, scalar?: number) => void
 }) {
   const canvasRef = React.useRef<HTMLDivElement>(null)
-  const slide = design[surface]
+  const slide = design[surface] ?? design.inside
   const copy = TEMPLATE_COPY[design.id]
-  const title = copy?.[surface] ?? (surface === "cover" ? ["Good ideas.", "Great stories."] : ["Make every", "swipe count."])
+  const title = surface === "cta" ? ["Stay curious.", "Follow for more."] : copy?.[surface] ?? (surface === "cover" ? ["Good ideas.", "Great stories."] : ["Make every", "swipe count."])
   const photo = design.id === "editorial-signal" || slide.titleAlign === "center" ? "editorial-canyon" : "newsroom-atrium"
   const visual = design.id === "minimal-mono" ? "research-lens" : slide.imageType === "product" ? "carousel-sculpture" : "design-stylus"
   const font = slide.fontFamily === "serif" ? "Georgia, serif" : slide.fontFamily === "condensed" ? "'Arial Narrow', Arial, sans-serif" : "Arial, sans-serif"
@@ -260,7 +263,7 @@ function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = f
       {surface === "cover" && <div className="simple-slide-shadow" />}
       {object("title", <div className="simple-slide-text" style={{ fontFamily: font, fontSize: (slide.titleSize / 10.8) + "cqw", textAlign: slide.titleAlign }}>
         <div>{title[0]}<br /><span style={{ color: slide.highlightTextColor }}>{title[1]}</span></div>
-        {surface === "inside" && <p style={{ fontSize: "3.33cqw" }}>{copy?.body ?? "One clear idea. A little curiosity. Something worth sharing."}</p>}
+        {surface !== "cover" && <p style={{ fontSize: "3.33cqw" }}>{surface === "cta" ? "The next story is worth a swipe. Join the conversation." : copy?.body ?? "One clear idea. A little curiosity. Something worth sharing."}</p>}
       </div>, slide.titleSize, [44, 160])}
       {design.logoVisible && slide.logoVisible && object("logo", <img className="simple-slide-logo" src={design.logoDataUrl || "/illustrations/carousel-sculpture-160.webp"} alt={design.logoDataUrl ? "Your design logo" : "Sample brand logo"} draggable={false} />, design.logoSize, [24, 120])}
       {design.handleVisible && slide.handleVisible && object("handle", <span className="design-canvas-handle" style={{ fontSize: (design.handleSize / 10.8) + "cqw" }}>{design.handleText || "@yourhandle"}</span>, design.handleSize, [16, 64])}
@@ -293,7 +296,7 @@ export function DesignsRoute() {
   const [history, setHistory] = React.useState<CarouselDesign[]>([])
   const gesture = React.useRef({ active: false, recorded: false })
   const selected = designs.find(d => d.id === selectedId) ?? designs[0]
-  const slide = selected?.[surface]
+  const slide = selected?.[surface] ?? selected?.inside
   React.useEffect(() => {
     const finish = () => { gesture.current.active = false }
     window.addEventListener("pointerup", finish)
@@ -320,7 +323,7 @@ export function DesignsRoute() {
   function updateSlide(change: Partial<CarouselDesign["cover"]>) {
     updateDesign((design) => ({
       ...design,
-      [surface]: { ...design[surface], ...change },
+      [surface]: { ...(design[surface] ?? design.inside), ...change },
     }))
   }
 
@@ -331,7 +334,7 @@ export function DesignsRoute() {
   ) {
     const position = nearestPosition(transform)
     updateDesign((design) => {
-      const nextSlide = { ...design[surface], [TRANSFORM_KEYS[kind]]: transform }
+      const nextSlide = { ...(design[surface] ?? design.inside), [TRANSFORM_KEYS[kind]]: transform }
       if (kind === "title") {
         nextSlide.titlePosition = position
         if (scalar !== undefined) nextSlide.titleSize = scalar
@@ -392,14 +395,14 @@ export function DesignsRoute() {
       updateDesign((design) => ({
         ...design,
         logoVisible: visible ? true : design.logoVisible,
-        [surface]: { ...design[surface], logoVisible: visible },
+        [surface]: { ...(design[surface] ?? design.inside), logoVisible: visible },
       }))
     }
     if (kind === "handle") {
       updateDesign((design) => ({
         ...design,
         handleVisible: visible ? true : design.handleVisible,
-        [surface]: { ...design[surface], handleVisible: visible },
+        [surface]: { ...(design[surface] ?? design.inside), handleVisible: visible },
       }))
     }
     if (kind === "shadow") updateSlide({ shadowVisible: visible })
@@ -443,12 +446,12 @@ export function DesignsRoute() {
       <div className="simple-stage-hint"><MousePointer2 /><span>{preview ? "A clean look at your layout" : "Select an object. Drag to move. Pull a corner to resize."}</span></div>
       <div className="simple-canvas-fit"><DesignCanvas design={selected} surface={surface} selectedElement={selectedElement} preview={preview}
         onSelectElement={setSelectedElement} onElementTransform={updateElementTransform} /></div>
-      <div className="simple-slide-switcher" role="group" aria-label="Slide type">{(["cover", "inside"] as const).map((item, index) =>
+      <div className="simple-slide-switcher" role="group" aria-label="Slide type">{(["cover", "inside", "cta"] as const).map((item, index) =>
         <button key={item} type="button" aria-pressed={surface === item} onClick={() => { setSurface(item); setSelectedElement(null) }}>
           <span className="simple-mini-slide simple-real-mini" aria-hidden="true"><DesignCanvas design={selected} surface={item} selectedElement={null} preview thumbnail onSelectElement={() => undefined} onElementTransform={() => undefined} /></span>
-          <span><strong>{item === "cover" ? "Cover" : "Inside slide"}</strong><small>{String(index + 1).padStart(2, "0")}</small></span>
+          <span><strong>{item === "cover" ? "Cover" : item === "cta" ? "CTA" : "Inside slide"}</strong><small>{String(index + 1).padStart(2, "0")}</small></span>
         </button>)}</div>
-      <p className="simple-preview-note">Sample media and title. Video and image covers share this layout, with your saved logo and handle.</p>
+      <p className="simple-preview-note">Sample copy and media. Your research shapes the final content. All three layouts use your saved logo and handle.</p>
     </section>
     <aside className="simple-editor-controls" aria-label="Design controls">
       <section className="simple-control-section">
@@ -457,9 +460,9 @@ export function DesignsRoute() {
           const name = e.target.value.trim() || "Untitled design"; e.target.value = name
           if (name !== selected.name) updateDesign(d => ({ ...d, name }))
         }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur() }} /></Field>
-        <div className="simple-palette-list" role="group" aria-label="Apply palette to both slides">
+        <div className="simple-palette-list" role="group" aria-label="Apply palette to all slides">
           {PALETTES.map(({ name, ...colors }) => <button key={name} type="button" aria-pressed={selected.inside.background.toLowerCase() === colors.background.toLowerCase() && selected.inside.textColor.toLowerCase() === colors.textColor.toLowerCase()}
-            onClick={() => updateDesign(d => ({ ...d, cover: { ...d.cover, ...colors, textColor: "#F6F4F0", highlightTextColor: colors.highlightTextColor === "#252420" ? "#F6F4F0" : "#C74726" }, inside: { ...d.inside, ...colors } }))}>
+            onClick={() => updateDesign(d => ({ ...d, cover: { ...d.cover, ...colors, textColor: "#F6F4F0", highlightTextColor: colors.highlightTextColor === "#252420" ? "#F6F4F0" : "#C74726" }, inside: { ...d.inside, ...colors }, cta: { ...(d.cta ?? d.inside), ...colors } }))}>
             <span aria-hidden="true" style={{ background: colors.background, color: colors.highlightTextColor, borderColor: colors.textColor + "33" }}>Aa</span>{name}
           </button>)}
         </div>
@@ -471,7 +474,7 @@ export function DesignsRoute() {
       <DesignBranding key={selected.id} design={selected} onChange={updateDesign} onBusy={setPreparingLogo} />
       <DesignGenerationSettings design={selected} onChange={updateDesign} />
       <section className="simple-control-section">
-        <h2>Objects <span>{surface === "cover" ? "Cover" : "Inside slide"}</span></h2>
+        <h2>Objects <span>{surface === "cover" ? "Cover" : surface === "cta" ? "CTA" : "Inside slide"}</span></h2>
         <div className="simple-object-list" role="group" aria-label="Select an object">
           {(surface === "cover" ? ["image", "shadow", "title", "logo", "handle"] as const : ["title", "image", "logo", "handle"] as const).map(kind =>
             <button key={kind} type="button" aria-pressed={selectedElement === kind} onClick={() => { setPreview(false); setSelectedElement(kind) }}>

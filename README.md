@@ -2,7 +2,7 @@
 
 Carousel Factory turns AI/product news (a new model release, a Lovable or
 Supabase feature drop, a paper worth explaining) into finished Instagram
-carousels - planned, written, designed, QA-checked, and delivered to Telegram
+carousels - planned, written, designed, QA-checked, and ready to download
 with optional approved Instagram publishing - using a Google ADK multi-agent pipeline. A fetcher pulls
 updates from Gmail newsletters, RSS feeds and YouTube channels into a queue;
 each queued item drives one pipeline run: an Editorial Planner decides
@@ -14,20 +14,14 @@ agent renders body slides with gpt-image-2 against the designer's templates, a
 CTA agent renders the closing slide, and a Stitch & Verify agent assembles and
 QA-checks the bundle.
 
-Every QA-passed run stops at **Needs review** and waits for a human decision.
-Instagram is optional for creation and Telegram delivery. The console shows
-approval, rejection, and chat feedback controls only while a usable Instagram
-account is connected in **Profile → Instagram**. Without a connection, previews
-and downloads remain available. This is a UI requirement; it does not change
-the delivery target saved when the run started. For Telegram-targeted runs,
-**Approve and send** sends
-every finished carousel file and the full caption to all connected Telegram
-bots’ chats, then completes the run. **Reject** requests changes. Files are
-sent as documents to preserve their original quality. Telegram must be connected
-in **Profile → Telegram** for delivery to succeed. Add as many bots as needed;
-reconnecting or disconnecting one leaves the others intact. The backend broadcasts
-the same finished files, review request, or publication confirmation to every bot
-from a single action. It does not regenerate content or invoke an agent per bot.
+Every QA-passed run stops at **Needs review**. Without an Instagram account
+selected for that run, preview and download are available; no approval or
+rejection is accepted and no files are automatically sent to Telegram.
+For Instagram runs, approval, rejection and chat feedback require that exact
+account to remain connected. Both the UI and server enforce this, together
+with passed QA. Connecting another account does not change a run's identity.
+Telegram can notify reviewers and send publication confirmations; a failed
+notification does not prevent a ready carousel from being reviewed in the app.
 
 On the Review page, choose the image or video cover, then click **Download
 carousel** to save a ZIP containing that cover, all body slides, and the CTA
@@ -75,10 +69,9 @@ Supabase Storage. The architecture is modeled in `architecture/carousel.c4`
 ## Setup
 
 Prerequisites: Python 3.11+ (developed on 3.13), FFmpeg, a Supabase project,
-a Google Cloud project with the Gmail API enabled, an OpenAI API key (all
-models run on it by default; a Gemini key is only needed if you point a
-`*_MODEL` at a bare `gemini-*` id),
-and a Telegram bot connected through Profile. Instagram publishing optionally
+an OpenAI API key saved through Profile > AI & models, and optional feed
+integrations. Gmail ingestion needs the Gmail API; Telegram notifications
+need a bot connected through Profile. Instagram publishing optionally
 uses a Professional account token with content-publishing permissions.
 
 ### 1. Python environment
@@ -103,12 +96,13 @@ point `FFMPEG_BIN` in `.env` at the executable.
 copy .env.example .env            # macOS/Linux: cp .env.example .env
 ```
 
-Fill in every section of `.env` - LLM keys, Supabase, Gmail, Instagram, CTA
-links, fetch sources. All secrets flow through `app/config.py`; nothing is
-hard-coded. Never commit `.env`.
+Use `.env` for infrastructure, Supabase, encryption and feed configuration.
+Save the OpenAI key and model choices in **Profile > AI & models**. Model
+dropdowns load from that key. Existing OpenAI credentials in `.env` are kept
+for copying but are never a runtime fallback. Never commit `.env`.
 
 Instagram credentials are connected per account in Profile, not through a
-global account token. Telegram-only artwork omits Instagram identity marks.
+global account token. Download-only artwork uses the selected design branding.
 
 Set Substack and YouTube destinations in **Designs > Your branding >
 Call-to-action links**. Each design saves its own optional URLs; new tasks
@@ -365,8 +359,43 @@ the system.
 - **`adk web` is unauthenticated** and for local development only; on Windows
   the CLI may disable auto-reload (a known ADK limitation - restart it after
   code changes, or use `--reload_agents` for agent files).
-- **Model ids are config switches**, not gospel: `PLANNER_MODEL`,
-  `PHRASING_MODEL` (keep the `openai/` prefix for LiteLLM), `IMAGE_MODEL`
-  can all be swapped in `.env` when providers move. GPT-5 text agents are
-  constructed with `reasoning_effort="high"`; the default phrasing model is
-  `openai/gpt-5.5` for final slide and caption writing.
+- **AI settings live in Profile & settings → AI & models.** Administrators
+  can save a workspace OpenAI API key and choose the Planner, Utility,
+  Phrasing and Image models. The key is encrypted in `app_config` using
+  `SECRETS_KEY` and is never returned to the browser. A blank key field keeps
+  the existing key. Saving does not modify `.env`. Legacy OpenAI keys and model variables in
+  `.env` are ignored. Models use the saved choices or the built-in suggested
+  defaults; a saved API key is required before a run can start.
+  New and resumed production runs refresh these settings from Supabase and
+  keep a private snapshot for that invocation, including image generation
+  and web search. Active runs keep their current settings. Text model IDs
+  use the `openai/` prefix; image model IDs are bare. GPT-5 text agents keep
+  `reasoning_effort="high"`. Suggested Planner and Phrasing models are
+  `openai/gpt-5.6-sol`, Utility is `openai/gpt-5.4-mini`, and Image is
+  `gpt-image-2`. Each role has a dropdown populated from OpenAI's model list
+  using the saved key. A replacement key can load its models before saving;
+  previewing does not persist the key. Saving rechecks key-visible models
+  and rejects selections that are no longer available. The list separates
+  general text models from GPT Image models and does not guarantee support
+  for every tool used by a carousel run. Discovery generates no content.
+  Standalone ADK model calls also refuse missing workspace credentials
+  instead of falling back to environment keys.
+
+
+### Pipeline recovery and CTA design
+
+The design editor has **Cover**, **Inside slide**, and **CTA** canvases. Each
+has independent geometry, typography, colors and image settings; old designs
+start the CTA from their inside-slide layout. The CTA renderer uses that saved
+layout, including No image, logo placement and handle placement.
+
+Generation validates every hand-off and checkpoints completed agents. A
+missing or inconsistent output gets one automatic repair attempt. Resume
+continues from the unfinished agent; interrupted rework retains its round and
+completed steps. QA waits on unavailable storage instead of redrawing slides.
+Publish attempts have durable receipts that block duplicates after a restart.
+An uncertain Instagram response requires checking the account before another
+publish attempt; notification and permalink failures do not erase a known post.
+
+See [the end-to-end audit](docs/pipeline-audit.md) for the failure matrix,
+verification coverage, and remaining setup requirements.

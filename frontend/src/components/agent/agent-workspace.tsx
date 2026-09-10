@@ -278,7 +278,7 @@ export function AgentWorkspace({
   // be a second copy of the same expression, which is how two things that are
   // meant to agree start not agreeing.
   const state = composerStateFor(workspace, booting, justStarted)
-  const instagramConnection = useInstagramConnection(state === "review")
+  const instagramConnection = useInstagramConnection(state === "review", run.data?.account_id)
 
   /**
    * What happens to a message typed after the agents have stopped.
@@ -366,7 +366,7 @@ export function AgentWorkspace({
     const text = followUp.trim()
     if (text.length < 3 || rework.isPending || startAnother.isPending) return
     if (state === "review") {
-      if (instagramConnection.status !== "connected") return
+      if (instagramConnection.status !== "connected" || run.data?.qa.passed !== true) return
       rework.mutate({ feedback: text, to: target })
       return
     }
@@ -378,7 +378,7 @@ export function AgentWorkspace({
       return
     }
     startAnother.mutate({ text, design })
-  }, [designId, designs, followUp, target, state, rework, startAnother, instagramConnection.status])
+  }, [designId, designs, followUp, target, state, rework, startAnother, instagramConnection.status, run.data?.qa.passed])
 
 
   // Gated on `booting`, so the skeleton gets the whole width and the rail
@@ -431,8 +431,8 @@ export function AgentWorkspace({
     </>
   )
 
-  const composer = state === "review" && instagramConnection.status !== "connected" ? (
-    <InstagramReviewGate connection={instagramConnection} compact />
+  const composer = state === "review" && (instagramConnection.status !== "connected" || run.data?.qa.passed !== true) ? (
+    run.data?.qa.passed !== true ? <p className="p-4 text-center text-sm text-[var(--muted-foreground)]">Verification is not complete. Follow the trace for progress.</p> : run.data?.delivery_target !== "instagram" ? <p className="p-4 text-center text-sm text-[var(--muted-foreground)]">Your carousel is ready. Open Review to preview and download.</p> : <InstagramReviewGate connection={instagramConnection} compact />
   ) : (
     <AgentComposer
       value={followUp}

@@ -41,6 +41,7 @@ def _halted_run(**overrides):
     }
     base.update(overrides)
     return [
+        patch("app.review.eligibility.review_account_message", AsyncMock(return_value="")),
         patch.object(verdict_mod, "_halted_awaiting_review", base["_halted"]),
         patch.object(db, "claim_pending_review", base["claim"]),
         patch.object(db, "set_session_verdict", base["set_verdict"]),

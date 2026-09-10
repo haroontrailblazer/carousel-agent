@@ -28,7 +28,7 @@ from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
 
 from app.config import agent_instructions, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.schemas import CarouselDesign, CarouselPlan, CoverSpec, NewsItem
 from app.state import (
     AGENT_FIRST_PAGE_VISUAL,
@@ -562,7 +562,7 @@ def build_first_page_visual_agent() -> LlmAgent:
     instruction = agent_instructions(AGENT_FIRST_PAGE_VISUAL) or DEFAULT_INSTRUCTION
     return LlmAgent(
         name=AGENT_FIRST_PAGE_VISUAL,
-        model=resolve_model(settings.utility_model),
+        model=resolve_role_model("utility"),
         description=(
             "Builds the carousel's cover (slide 1): a short 1080x1350 video "
             "sourced from the news update (never AI-generated) - announcement "

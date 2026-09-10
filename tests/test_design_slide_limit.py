@@ -46,7 +46,7 @@ async def test_planner_uses_run_limit_and_preserves_template_context():
 @pytest.mark.parametrize('limit,exceeded',[(3,True),(4,False)])
 async def test_qa_flags_design_limit_including_cover_and_cta(limit,exceeded):
     state={K_DESIGN:{'max_slides':limit},K_BODY_SLIDES:[{'index':2,'artifact':'two.png'},{'index':3,'artifact':'three.png'}]}
-    with patch.object(stitch_verify,'_existing_artifacts',AsyncMock(return_value=None)), patch.object(stitch_verify,'_verify_rendered_png',AsyncMock(return_value=None)), patch.object(stitch_verify,'_verify_brand_padding',AsyncMock(return_value=None)):
+    with patch.object(stitch_verify,'_existing_artifacts',AsyncMock(return_value=set())), patch.object(stitch_verify,'_verify_rendered_png',AsyncMock(return_value=None)), patch.object(stitch_verify,'_verify_brand_padding',AsyncMock(return_value=None)):
         await stitch_verify.assemble_and_verify(SimpleNamespace(state=state))
     issues=state[K_QA_REPORT]['issues']
     assert any('exceeds the design cap' in issue['message'] for issue in issues)==exceeded

@@ -27,7 +27,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.utils.instructions_utils import inject_session_state
 
 from app.config import agent_instructions, load_skill, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.design_limits import MAX_SUPPORTED_SLIDES, design_slide_limit
 from app.schemas import CarouselPlan
 from app.state import (
@@ -228,7 +228,7 @@ def build_planner_agent() -> LlmAgent:
     """
     return LlmAgent(
         name=AGENT_PLANNER,
-        model=resolve_model(settings.planner_model),
+        model=resolve_role_model("planner"),
         description=(
             "Editorial Planner: reads the queued news item and decides the "
             "carousel structure - points vs prose, slide count, cover hook "

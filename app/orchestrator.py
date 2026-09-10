@@ -36,6 +36,7 @@ Design points (verified against the installed google-adk 2.7.0 source):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import uuid
@@ -51,6 +52,7 @@ from pydantic import BaseModel
 from typing_extensions import override
 
 from app import observability
+from app.pipeline_outputs import OUTPUT_KEYS, validate_output
 from app.agents.publisher import K_PUBLISH_RESULT
 from app.config import settings
 from app.schemas import CarouselPlan, NewsItem, QAReport, ReworkPlan, Verdict
@@ -123,7 +125,7 @@ _REWORK_DEPENDENTS: dict[str, tuple[str, ...]] = {
         AGENT_TEMPLATE_DESIGN,
         AGENT_CTA,
     ),
-    AGENT_PHRASING: (AGENT_TEMPLATE_DESIGN,),
+    AGENT_PHRASING: (AGENT_TEMPLATE_DESIGN, AGENT_CTA),
 }
 
 #: Safety bound on phase-machine iterations within one invocation. The real
@@ -418,20 +420,27 @@ class CarouselOrchestrator(BaseAgent):
             Every event the child produces.
         """
         logger.info("[%s] running child agent '%s'", self.name, child.name)
-        async with Aclosing(child.run_async(ctx)) as agen:
-            async for event in agen:
-                usage = getattr(event, "usage_metadata", None)
-                if usage is not None:
-                    tokens = holder["tokens"]
-                    tokens["prompt_tokens"] += int(usage.prompt_token_count or 0)
-                    tokens["output_tokens"] += int(
-                        usage.candidates_token_count or 0
-                    )
-                    tokens["total_tokens"] += int(usage.total_token_count or 0)
-                    tokens["llm_calls"] += 1
-                if ctx.should_pause_invocation(event):
-                    holder["paused"] = True
-                yield event
+        event_count = 0
+        try:
+            async with asyncio.timeout(1200), Aclosing(child.run_async(ctx)) as agen:
+                async for event in agen:
+                    event_count += 1
+                    if event_count > 160:
+                        raise RuntimeError(f"{child.name} exceeded its step limit. Resume to retry the unfinished step.")
+                    usage = getattr(event, "usage_metadata", None)
+                    if usage is not None:
+                        tokens = holder["tokens"]
+                        tokens["prompt_tokens"] += int(usage.prompt_token_count or 0)
+                        tokens["output_tokens"] += int(
+                            usage.candidates_token_count or 0
+                        )
+                        tokens["total_tokens"] += int(usage.total_token_count or 0)
+                        tokens["llm_calls"] += 1
+                    if ctx.should_pause_invocation(event):
+                        holder["paused"] = True
+                    yield event
+        except TimeoutError as exc:
+            raise RuntimeError(f"{child.name} did not finish within 20 minutes. Resume to retry this step; completed outputs are saved.") from exc
 
     # ------------------------------------------------------------------
     # Phase handlers (each an async generator of events)
@@ -464,7 +473,9 @@ class CarouselOrchestrator(BaseAgent):
                 )
                 return
             title = text.splitlines()[0].strip()[:150] or "Untitled update"
-            news = NewsItem(id=run_id, title=title, body=text, source_name="adhoc")
+            urls = re.findall(r"https?://[^\s<>]+", text)
+            news = NewsItem(id=run_id, title=title, body=text, source_name="adhoc",
+                            source_url=urls[0].rstrip(".,;)") if urls else "")
             delta[K_NEWS_ITEM] = news.model_dump(mode="json")
             news_id = news.id
         else:
@@ -516,15 +527,46 @@ class CarouselOrchestrator(BaseAgent):
         except Exception as exc:  # DB may be absent in local runs - never fatal
             logger.debug("runs-table title update skipped (%s).", exc)
 
+    async def _generate_steps(self, ctx, state, holder, names, checkpoint_key):
+        completed = list(state.get(checkpoint_key) or [])
+        for name in names:
+            if name in completed:
+                try:
+                    validate_output(name, state)
+                    continue
+                except (ValueError, TypeError):
+                    # A corrupt checkpoint invalidates its downstream results.
+                    completed = completed[:completed.index(name)]
+            yield self._progress(ctx, f"[generate] preparing {name}", {
+                OUTPUT_KEYS[name]: None, checkpoint_key: completed,
+                "bundle": None, "qa_report": None,
+            })
+            for attempt in range(2):
+                async for event in self._drive(self._child(name), ctx, holder):
+                    yield event
+                if holder["paused"]:
+                    return
+                try:
+                    validate_output(name, state)
+                    break
+                except (ValueError, TypeError) as exc:
+                    if attempt:
+                        raise RuntimeError(f"{name} could not finish: {exc}. Resume to retry this step; completed steps are saved.") from exc
+                    feedback = str(state.get(K_REWORK_FEEDBACK) or "")
+                    yield self._progress(ctx, f"[recovery] retrying {name}: {exc}", {
+                        K_REWORK_FEEDBACK: feedback + f"\nRepair the {name} output: {exc}. Save the complete result with your output tool.",
+                    })
+            completed.append(name)
+            yield self._progress(ctx, f"[checkpoint] {name} complete", {checkpoint_key: list(completed)})
+
     async def _phase_generate(
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]
     ) -> AsyncGenerator[Event, None]:
         """Generate: run all six content agents in pipeline order, -> qa."""
-        for name in GENERATE_ORDER:
-            async for event in self._drive(self._child(name), ctx, holder):
-                yield event
-            if holder["paused"]:
-                return
+        async for event in self._generate_steps(ctx, state, holder, GENERATE_ORDER, "generation_completed"):
+            yield event
+        if holder["paused"]:
+            return
         # The plan exists by now, so the task can stop being called by the
         # words that were typed to start it.
         await self._name_run_quietly(state)
@@ -535,6 +577,7 @@ class CarouselOrchestrator(BaseAgent):
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]
     ) -> AsyncGenerator[Event, None]:
         """QA: stitch_verify; auto-route criticals to rework, else -> review."""
+        yield self._progress(ctx, "[qa] checking the current artifacts", {K_QA_REPORT: None})
         async for event in self._drive(
             self._child(AGENT_STITCH_VERIFY), ctx, holder
         ):
@@ -601,6 +644,11 @@ class CarouselOrchestrator(BaseAgent):
         by an earlier invocation that stopped before routing), it is routed
         directly without re-running the dispatcher.
         """
+        if not state.get(K_ACCOUNT_ID):
+            holder["halted"] = True
+            yield self._progress(ctx, "[review] Your carousel is ready to preview and download. No Instagram account was selected for this run.", {K_VERDICT: None, K_REVIEW_NOTICE_FAILED: False})
+            await self._record_phase_quietly(state, PHASE_REVIEW, status=db.RUN_STATUS_AWAITING_REVIEW)
+            return
         verdict = _safe_model(state, K_VERDICT, Verdict)
         if verdict is None:
             async for event in self._drive(
@@ -730,6 +778,12 @@ class CarouselOrchestrator(BaseAgent):
         reviewer's real allowance varied run to run depending on how flaky the
         renders happened to be.
         """
+        active = state.get("rework_active")
+        if isinstance(active, dict) and active.get("targets"):
+            async for event in self._finish_rework(ctx, state, holder, active["targets"], active["round"]):
+                yield event
+            return
+
         verdict = _safe_model(state, K_VERDICT, Verdict)
         human_driven = verdict is not None and verdict.status == "rejected"
         if human_driven:
@@ -804,15 +858,19 @@ class CarouselOrchestrator(BaseAgent):
             ctx,
             f"[rework] {kind} {next_round}/{cap}: "
             f"re-running {', '.join(targets)}",
-            {K_REWORK_FEEDBACK: feedback, counter_key: next_round},
+            {K_REWORK_FEEDBACK: feedback, counter_key: next_round,
+             "rework_active": {"targets": targets, "round": next_round}, "rework_completed": []},
             holder=holder,
         )
 
-        for name in targets:
-            async for event in self._drive(self._child(name), ctx, holder):
-                yield event
-            if holder["paused"]:
-                return
+        async for event in self._finish_rework(ctx, state, holder, targets, next_round):
+            yield event
+
+    async def _finish_rework(self, ctx, state, holder, targets, next_round):
+        async for event in self._generate_steps(ctx, state, holder, targets, "rework_completed"):
+            yield event
+        if holder["paused"]:
+            return
 
         # The plan and verdict are consumed; K_REWORK_FEEDBACK stays set so
         # stitch_verify re-checks against it (it clears the key on QA pass).
@@ -820,7 +878,7 @@ class CarouselOrchestrator(BaseAgent):
             ctx,
             PHASE_REWORK,
             PHASE_QA,
-            extra_delta={K_REWORK_PLAN: None, K_VERDICT: None},
+            extra_delta={K_REWORK_PLAN: None, K_VERDICT: None, "rework_active": None, "rework_completed": []},
             note=f"round {next_round} pieces regenerated - re-verifying",
             holder=holder,
         )
@@ -841,13 +899,24 @@ class CarouselOrchestrator(BaseAgent):
             )
             await self._record_phase_quietly(state, PHASE_REVIEW)
             return
+        if verdict.cover_choice:
+            bundle = dict(state.get("bundle") or {})
+            cover = dict(bundle.get("cover") or {})
+            video, poster = cover.get("video_artifact"), cover.get("poster_artifact")
+            wanted = video if verdict.cover_choice == "video" else poster
+            if not wanted:
+                raise RuntimeError("The approved cover is missing. Resume after restoring the artifact or review a regenerated carousel.")
+            bundle["ordered_artifacts"] = [wanted, *[name for name in bundle.get("ordered_artifacts", []) if name not in (video, poster)]]
+            bundle["cover"] = {**cover, "published_artifact": wanted}
+            yield self._progress(ctx, f"[publish] using approved {verdict.cover_choice} cover", {"bundle": bundle})
         async for event in self._drive(self._child(AGENT_LEARNER), ctx, holder):
             yield event
         if holder["paused"]:
             return
         if not state.get(K_ACCOUNT_ID):
-            async for event in self._deliver_to_telegram(ctx, state, holder):
-                yield event
+            yield self._transition(ctx, PHASE_PUBLISH, PHASE_REVIEW,
+                extra_delta={K_VERDICT: None}, note="Ready to download; no Instagram target", holder=holder)
+            await self._record_phase_quietly(state, PHASE_REVIEW, status=db.RUN_STATUS_AWAITING_REVIEW)
             return
         async for event in self._drive(self._child(AGENT_PUBLISHER), ctx, holder):
             yield event
@@ -877,8 +946,7 @@ class CarouselOrchestrator(BaseAgent):
         yield self._progress(
             ctx,
             f"[publish] publish failed ({message}) - halting; phase stays "
-            "'publish', re-run the pipeline to retry (the publisher is "
-            "idempotent and will not double-post).",
+            "'publish'. Resume can retry a safe failure. An uncertain send is blocked until the Instagram result is checked.",
         )
 
     async def _phase_done(

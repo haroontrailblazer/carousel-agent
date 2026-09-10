@@ -35,7 +35,7 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
   const runId = run.run_id
   const queryClient = useQueryClient()
   const [coverChoice, setCoverChoice] = React.useState<CoverChoice>(null)
-  const instagramConnection = useInstagramConnection(run.pending_review || run.phase === "review")
+  const instagramConnection = useInstagramConnection(run.pending_review || run.phase === "review", run.account_id)
 
   const artifacts = useQuery({
     queryKey: ["artifacts", runId],
@@ -80,6 +80,7 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
 
   const decide = useMutation({
     mutationFn: (payload: { status: string; feedback: string }) => {
+      if (run.phase !== "review" || run.qa.passed !== true) throw new Error("Wait for verification to finish before reviewing.")
       if (instagramConnection.status !== "connected") throw new Error("Connect Instagram before reviewing this carousel.")
       return post(`/api/runs/${runId}/verdict`, { ...payload, cover: coverChoice })
     },

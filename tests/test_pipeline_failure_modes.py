@@ -128,7 +128,7 @@ def _notice_failed_run(daily_count: int = 999):
         patch.object(db, "set_run_status", AsyncMock(return_value=None)),
         patch.object(db, "max_run_seq", AsyncMock(return_value=0)),
         patch.object(service_mod, "record_event", AsyncMock(return_value=None)),
-        patch("app.agent.build_runner", lambda: object()),
+        patch("app.agent.build_configured_runner", AsyncMock(return_value=object())),
         patch.object(service_mod, "_drive_run", AsyncMock(return_value=None)),
     )
 
@@ -248,7 +248,7 @@ class ResumeIsNotAStartTests(unittest.TestCase):
         self.addCleanup(lambda: [p.stop() for p in patches])
 
         async def scenario() -> None:
-            with patch("app.agent.build_runner", lambda: object()), patch.object(
+            with patch("app.agent.build_configured_runner", AsyncMock(return_value=object())), patch.object(
                 service_mod, "_drive_run", AsyncMock(return_value=None)
             ):
                 await service_mod.resume_interrupted_run(RUN_ID, requested_by="a@b.co")
@@ -741,7 +741,7 @@ class ConcurrencySlotIsReservedTests(unittest.TestCase):
             return task
 
         patches = [
-            patch("app.agent.build_runner", lambda: _Runner()),
+            patch("app.agent.build_configured_runner", AsyncMock(return_value=_Runner())),
             patch.object(service_mod, "spawn_run", fake_spawn),
             patch.object(db, "create_run", AsyncMock(return_value=None)),
             patch.object(db, "set_run_meta", AsyncMock(return_value=None)),

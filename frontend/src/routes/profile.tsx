@@ -37,6 +37,7 @@ import { useTheme } from "@/hooks/use-theme"
 import { ApiError, del, get, post, postBytes } from "@/lib/api"
 import { compressAvatar } from "@/lib/image"
 import "./profile.css"
+import { AISettingsSection } from "./ai-settings"
 
 type InstagramAccount = {
   id: string
@@ -799,12 +800,12 @@ function InstagramSection() {
 
 export function ProfileRoute() {
   const { profile } = useProfile()
-  type SettingsView = "account" | "appearance" | "connections"
+  type SettingsView = "account" | "appearance" | "connections" | "ai"
   const [view, setView] = React.useState<SettingsView>(() => {
     const params = new URLSearchParams(window.location.search)
     return params.has("instagram") || params.has("instagram_error")
       ? "connections"
-      : "account"
+      : params.get("view") === "ai" ? "ai" : "account"
   })
 
   const views = [
@@ -823,6 +824,7 @@ export function ProfileRoute() {
       label: "Connections",
       icon: <Cable />,
     },
+    { value: "ai" as const, label: "AI & models", icon: <KeyRound /> },
   ]
 
   return (
@@ -837,6 +839,7 @@ export function ProfileRoute() {
         <span className="profile-overview-note"><CircleUserRound /> Your studio account</span>
       </div>
       <Tabs items={views} value={view} onChange={setView} label="Settings views" className="profile-tabs" />
+      <TabPanel value="ai" selected={view === "ai"}><AISettingsSection /></TabPanel>
       <TabPanel value="account" selected={view === "account"}><IdentitySection /></TabPanel>
       <TabPanel value="appearance" selected={view === "appearance"}><AppearanceSection /></TabPanel>
       <TabPanel value="connections" selected={view === "connections"} className="profile-connections">

@@ -41,7 +41,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools import FunctionTool, ToolContext
 
 from app.config import agent_instructions, settings
-from app.llm import resolve_model
+from app.llm import resolve_role_model
 from app.design_limits import design_slide_limit
 from app.schemas import (
     Bundle,
@@ -642,13 +642,10 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
     # 7. Every referenced artifact must actually exist in the artifact store.
     existing = await _existing_artifacts(tool_context)
     if existing is None:
-        issues.append(
-            QAIssue(
-                severity="minor",
-                message="Artifact existence and copy-vs-rendered checks "
-                "skipped: no artifact service available in this run.",
-            )
-        )
+        # A storage outage is not an instruction to redraw every slide. Pause
+        # QA so Resume can retry the checks against the existing artifacts.
+        state[K_QA_REPORT] = None
+        return {"passed": False, "retryable": True, "error": "Artifact storage could not be checked. Resume when storage is available; no regeneration is needed."}
     else:
         to_check: list[tuple[str, str]] = [
             (name, _owner_of_artifact(name, bundle)) for name in ordered_artifacts
@@ -696,6 +693,17 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
             )
             if padding_issue is not None:
                 issues.append(padding_issue)
+
+    # The first and last PNGs need the same file/dimension checks as body
+    # slides. Existence alone does not prove the stored image is usable.
+    for filename, index, owner in (
+        (cover.poster_artifact if cover else "", 1, AGENT_FIRST_PAGE_VISUAL),
+        (cta.artifact if cta else "", total_slides, AGENT_CTA),
+    ):
+        if filename and filename in existing:
+            issue = await _verify_rendered_png(tool_context, RenderedSlide(index=index, artifact=filename))
+            if issue is not None:
+                issues.append(issue.model_copy(update={"message": issue.message.replace(AGENT_TEMPLATE_DESIGN, owner)}))
 
     # ------------------------------------------------------- report + route
     critical = [i for i in issues if i.severity == "critical"]
@@ -795,7 +803,7 @@ def build_stitch_verify_agent() -> LlmAgent:
     _ensure_default_instruction_file()
     return LlmAgent(
         name=AGENT_STITCH_VERIFY,
-        model=resolve_model(settings.utility_model),
+        model=resolve_role_model("utility"),
         description=(
             "Stitch & Verify: assembles the final carousel Bundle (cover video "
             "first) and runs deterministic QA - slide count, cover duration, "

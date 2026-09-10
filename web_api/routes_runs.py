@@ -428,13 +428,14 @@ async def get_run(
         "slide_count": len(bundle.get("slides") or []),
         "qa": {"passed": qa.get("passed"), "issues": qa.get("issues", [])},
         "verdict": verdict or None,
-        "delivery_target": "instagram" if account_id else "telegram",
+        "delivery_target": "instagram" if account_id else "download",
+        "account_id": account_id,
         "publish_configured": bool(account and account.usable),
         "publish": {
             "status": publish.get("status"),
             "media_id": publish.get("media_id"),
             "permalink": publish.get("permalink"),
-            "error": publish.get("message") if publish.get("status") == "error" else None,
+            "error": publish.get("message") if publish.get("status") in ("error", "uncertain", "publishing") else None,
         },
         "token_usage": state.get(K_TOKEN_USAGE, {}),
         "last_seq": last_seq,
@@ -820,22 +821,24 @@ async def post_verdict(
     first - almost always the same person, from their phone. It is a normal
     outcome, not an error, and the UI shows the decision rather than a failure.
     """
-    # The choice has to land BEFORE the verdict, because submitting the
-    # verdict resumes the pipeline immediately - write it afterwards and the
-    # publisher may already have read the old bundle.
+    from app.review.eligibility import account_message, validate_review_state, ReviewNotReady
+    state = await _session_state(run_id)
+    blocked = account_message(state)
+    if blocked:
+        raise HTTPException(409, {"code": "instagram_required", "message": blocked})
+    try:
+        validate_review_state(state)
+    except ReviewNotReady as exc:
+        raise HTTPException(409, {"code": "not_pending", "message": str(exc)}) from exc
+
+    # The accepted verdict owns this choice. Never mutate a shared bundle
+    # before the single-winner claim, where another reviewer could overwrite it.
     chosen_cover = None
-    if payload.status == "approved":
-        try:
-            chosen_cover = await _apply_cover_choice(run_id, payload.cover)
-        except Exception as exc:
-            logger.exception("Could not apply the cover choice for %s.", run_id)
-            raise HTTPException(
-                500,
-                {
-                    "code": "cover_choice_failed",
-                    "message": f"Could not record which cover to publish ({exc}).",
-                },
-            ) from exc
+    if payload.status == "approved" and payload.cover:
+        cover = (state.get(K_BUNDLE) or {}).get("cover") or {}
+        chosen_cover = cover.get("video_artifact" if payload.cover == "video" else "poster_artifact")
+        if not chosen_cover:
+            raise HTTPException(400, {"code": "cover_unavailable", "message": "That cover is not available. Refresh the carousel and choose again."})
 
     outcome = await submit_verdict(
         run_id,
@@ -844,6 +847,7 @@ async def post_verdict(
         reviewer=identity.email,
         source="web",
         targets=payload.targets,
+        cover_choice=payload.cover if payload.status == "approved" else None,
     )
     if outcome.ok:
         return {
@@ -854,6 +858,7 @@ async def post_verdict(
         }
 
     codes = {
+        "instagram_required": 409,
         "not_pending": 409,
         # The decision was recorded; only the automatic restart did not
         # happen (a run cap, or a leg already in flight). 409 so the console

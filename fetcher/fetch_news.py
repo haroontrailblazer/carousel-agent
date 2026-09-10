@@ -436,9 +436,9 @@ async def run_one() -> Optional[str]:
     # Imported lazily: app.agent builds the full agent tree at import time.
     from google.genai import types
 
-    from app.agent import build_runner
+    from app.agent import build_configured_runner
 
-    runner = build_runner()
+    runner = await build_configured_runner()
     phase = ""
     paused_on_tool = False
     # Say "still alive" on a timer for as long as this run is going.

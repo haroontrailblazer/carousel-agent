@@ -91,7 +91,9 @@ async def release_stuck_queue_items() -> int:
     that run then dies, the item is stranded: never carouselled, never retried,
     and invisible in the queue.
 
-    An item is only freed when NO run still references it with a live status.
+    An item is only freed when NO running, reviewable or interrupted run
+    still references it. Interrupted runs retain their claim so a restart
+    cannot generate the same queued story twice.
     Call this AFTER :func:`reconcile_on_startup`, which is what demotes a
     killed run out of ``running`` - the ordering is what makes the check
     meaningful. Freeing an item whose run is genuinely still going would let a
@@ -115,7 +117,7 @@ async def release_stuck_queue_items() -> int:
             """,
             db.STATUS_QUEUED,
             db.STATUS_PROCESSING,
-            [db.RUN_STATUS_RUNNING, db.RUN_STATUS_AWAITING_REVIEW],
+            [db.RUN_STATUS_RUNNING, db.RUN_STATUS_AWAITING_REVIEW, db.RUN_STATUS_INTERRUPTED],
         )
     except Exception as exc:
         logger.warning("Could not release stuck queue items: %s", exc)
