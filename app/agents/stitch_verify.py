@@ -42,6 +42,7 @@ from google.adk.tools import FunctionTool, ToolContext
 
 from app.config import agent_instructions, settings
 from app.llm import resolve_model
+from app.design_limits import design_slide_limit
 from app.schemas import (
     Bundle,
     CTASlide,
@@ -183,7 +184,7 @@ def _instruction_provider(ctx: ReadonlyContext) -> str:
     parts.append(
         "## Runtime limits (authoritative, from configuration)\n\n"
         f"- Total slides (cover + body + CTA) must be <= "
-        f"{settings.max_carousel_slides}.\n"
+        f"{design_slide_limit(ctx.state)} (selected design limit).\n"
         f"- Cover video duration must be {COVER_MIN_DURATION_S:g}-"
         f"{COVER_MAX_DURATION_S:g} seconds.\n"
         f"- Slides render at {settings.slide_width}x{settings.slide_height} px."
@@ -556,15 +557,16 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
             )
         )
 
-    # 4. Total slide count within the Instagram cap.
+    # 4. Total slide count within this task's saved design limit.
     total_slides = 1 + len(body_slides) + 1  # cover + body + CTA
-    if total_slides > settings.max_carousel_slides:
+    max_slides = design_slide_limit(state)
+    if total_slides > max_slides:
         issues.append(
             QAIssue(
                 severity="critical",
                 message=(
-                    f"Total slide count {total_slides} exceeds the Instagram "
-                    f"cap of {settings.max_carousel_slides} - {AGENT_PLANNER} "
+                    f"Total slide count {total_slides} exceeds the design "
+                    f"cap of {max_slides} - {AGENT_PLANNER} "
                     "must re-plan with fewer slides."
                 ),
             )

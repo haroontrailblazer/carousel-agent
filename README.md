@@ -110,6 +110,16 @@ hard-coded. Never commit `.env`.
 Instagram credentials are connected per account in Profile, not through a
 global account token. Telegram-only artwork omits Instagram identity marks.
 
+Set Substack and YouTube destinations in **Designs > Your branding >
+Call-to-action links**. Each design saves its own optional URLs; new tasks
+snapshot those links with the selected design. These links are not environment
+variables. With no links configured, use a follow or comment CTA.
+
+Use **Designs > Carousel length > Maximum slides** to save a 3-10 slide
+limit for each design. This total includes the cover and final CTA. New tasks
+keep a snapshot of this setting; planning, QA and publishing enforce it.
+Older designs without this setting default to 10 slides.
+
 ### 4. Database (Supabase Postgres)
 
 The application uses `SUPABASE_URL` and a server-only Supabase key for all

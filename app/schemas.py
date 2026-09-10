@@ -10,9 +10,11 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 from app.text_rules import require_no_em_dash, require_readable_text
+from app.design_limits import MIN_CAROUSEL_SLIDES, MAX_SUPPORTED_SLIDES
+from app.design_limits import MIN_CAROUSEL_SLIDES, MAX_SUPPORTED_SLIDES
 
 CarouselStyle = Literal["points", "prose"]
 CTAType = Literal["follow", "comment", "redirect"]
@@ -87,6 +89,23 @@ class CarouselDesign(BaseModel):
     name: str = Field("Editorial Signal", min_length=1, max_length=120)
     handle_text: str = Field("", max_length=31)
     logo_data_url: str = Field("", max_length=65_558)
+    substack_url: str = Field("", max_length=2048)
+    youtube_url: str = Field("", max_length=2048)
+    max_slides: int = Field(MAX_SUPPORTED_SLIDES, ge=MIN_CAROUSEL_SLIDES, le=MAX_SUPPORTED_SLIDES, strict=True)
+    max_slides: int = Field(MAX_SUPPORTED_SLIDES, ge=MIN_CAROUSEL_SLIDES, le=MAX_SUPPORTED_SLIDES, strict=True)
+
+    @field_validator("substack_url", "youtube_url")
+    @classmethod
+    def validate_destination_url(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            return ""
+        if any(char.isspace() for char in text):
+            raise ValueError("Use a full http:// or https:// URL without spaces.")
+        url = HttpUrl(text)
+        if url.username is not None or url.password is not None:
+            raise ValueError("Links must not contain a username or password.")
+        return str(url)
 
     @field_validator("handle_text")
     @classmethod

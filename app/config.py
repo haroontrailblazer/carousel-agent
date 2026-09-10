@@ -80,7 +80,6 @@ class Settings:
     # not either. Sharing max_rework_rounds meant flaky renders could
     # spend the reviewer's whole allowance before they saw a carousel.
     max_qa_rounds: int = int(os.getenv("MAX_QA_ROUNDS", "3"))
-    max_carousel_slides: int = int(os.getenv("MAX_CAROUSEL_SLIDES", "10"))  # IG limit
 
     # --- models (LLM) ---
     # "openai/" ids go through LiteLLM (see app/llm.py); bare ids (gemini-*)
@@ -155,10 +154,6 @@ class Settings:
     ig_app_id: str = os.getenv("IG_APP_ID", "")
     ig_app_secret: str = os.getenv("IG_APP_SECRET", "")
     ig_api_version: str = os.getenv("IG_API_VERSION", "v23.0")
-
-    # --- CTA destinations ---
-    substack_url: str = os.getenv("SUBSTACK_URL", "")
-    youtube_url: str = os.getenv("YOUTUBE_URL", "")
 
     # --- fetcher sources ---
     # Two, not three. NEWSLETTER_QUERY and the Gmail source it drove are gone;

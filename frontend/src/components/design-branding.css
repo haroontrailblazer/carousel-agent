@@ -19,4 +19,12 @@
 .branding-handle { display: grid; }
 .simple-design-editor .branding-handle input { height: 40px; padding-inline: 12px; border-radius: 9px; }
 .branding-handle input:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.branding-destinations { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+.branding-destinations h3 { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+.branding-destinations h3 svg { width: 15px; height: 15px; color: var(--brand); }
+.branding-destination { min-width: 0; }
+.branding-destination .design-field > span { display: flex; justify-content: space-between; gap: 8px; }
+.branding-destination small { font-size: 10px; color: var(--muted-foreground); font-weight: 400; }
+.branding-destination input { width: 100%; min-width: 0; }
+.branding-destination input[aria-invalid="true"] { border-color: var(--destructive); }
 @media(prefers-reduced-motion:reduce) { .branding-logo-picker { transition: none; } }

@@ -64,8 +64,6 @@ services:
       # Setting it to anything else silently breaks every resume.
       - key: PUBLIC_BASE_URL
         sync: false          # https://<service>.onrender.com
-      - key: MAX_CAROUSEL_SLIDES
-        value: "10"
 
       # --- cost control ---------------------------------------------------
       # A carousel costs real image and reasoning credits. These are the only
@@ -125,12 +123,6 @@ services:
       - key: IG_APP_ID
         sync: false
       - key: IG_APP_SECRET
-        sync: false
-
-      # --- cta destinations -----------------------------------------------
-      - key: SUBSTACK_URL
-        sync: false
-      - key: YOUTUBE_URL
         sync: false
 
       # --- news sources ---------------------------------------------------

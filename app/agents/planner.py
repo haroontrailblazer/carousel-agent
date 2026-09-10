@@ -23,9 +23,12 @@ updates the harness) with :data:`_DEFAULT_INSTRUCTION` as the inline fallback.
 from __future__ import annotations
 
 from google.adk.agents import LlmAgent
+from google.adk.agents.readonly_context import ReadonlyContext
+from google.adk.utils.instructions_utils import inject_session_state
 
 from app.config import agent_instructions, load_skill, settings
 from app.llm import resolve_model
+from app.design_limits import MAX_SUPPORTED_SLIDES, design_slide_limit
 from app.schemas import CarouselPlan
 from app.state import (
     AGENT_PLANNER,
@@ -177,12 +180,12 @@ def _ensure_default_instruction_file() -> None:
         path.write_text(_DEFAULT_INSTRUCTION, encoding="utf-8")
 
 
-def _build_instruction() -> str:
+def _build_instruction(max_slides: int = MAX_SUPPORTED_SLIDES) -> str:
     """Assemble the planner's full instruction string.
 
     Loads ``skills/agents/planner.md`` (falling back to
     :data:`_DEFAULT_INSTRUCTION`), then appends the concrete runtime limits
-    from :mod:`app.config` and the shared ``skills/cover-style.md`` skill so
+    from the selected design and :mod:`app.config` and the shared ``skills/cover-style.md`` skill so
     the hook rules always reflect the live style guide. Curly braces in the
     appended shared skill are neutralised so ADK's ``{var}`` state templating
     never trips over prose that merely looks like a placeholder.
@@ -191,9 +194,9 @@ def _build_instruction() -> str:
     instruction = agent_instructions(AGENT_PLANNER) or _DEFAULT_INSTRUCTION
 
     instruction += (
-        "\n\n## Runtime limits (authoritative, from configuration)\n\n"
+        "\n\n## Runtime limits (authoritative, from the selected design)\n\n"
         f"- slide_count (cover + body + CTA) must be <= "
-        f"{settings.max_carousel_slides}.\n"
+        f"{max_slides}. Use fewer slides when the story does not need the full budget.\n"
         "- max_lines_per_slide must be <= 4.\n"
         f"- Slides render at {settings.slide_width}x{settings.slide_height} "
         "px (4:5); the cover is a short sourced video, never AI-generated.\n"
@@ -207,6 +210,11 @@ def _build_instruction() -> str:
             + safe_cover_style
         )
     return instruction
+
+
+async def _instruction_provider(ctx: ReadonlyContext) -> str:
+    # Preserve the existing news, research and feedback template injection.
+    return await inject_session_state(_build_instruction(design_slide_limit(ctx.state)), ctx)
 
 
 def build_planner_agent() -> LlmAgent:
@@ -227,7 +235,7 @@ def build_planner_agent() -> LlmAgent:
             "title + highlight, CTA hint, caption seed and per-slide key "
             "points."
         ),
-        instruction=_build_instruction(),
+        instruction=_instruction_provider,
         output_schema=CarouselPlan,
         output_key=K_PLAN,
         # Orchestrator-driven pipeline node: never LLM-transfer elsewhere.

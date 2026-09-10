@@ -4,6 +4,7 @@ import { AlignCenter, AlignLeft, AlignRight, ArrowRight, Check, Copy, Eye, Image
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { DesignBranding } from "@/components/design-branding"
+import { DesignGenerationSettings } from "@/components/design-generation-settings"
 import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { type CarouselDesign, type DesignImageType, type DesignPosition, type ElementTransform, duplicateDesign, newDesign, PREBUILT_DESIGNS, useCarouselDesigns } from "@/lib/designs"
 import "./design-editor.css"
@@ -468,6 +469,7 @@ export function DesignsRoute() {
         </div>
       </section>
       <DesignBranding key={selected.id} design={selected} onChange={updateDesign} onBusy={setPreparingLogo} />
+      <DesignGenerationSettings design={selected} onChange={updateDesign} />
       <section className="simple-control-section">
         <h2>Objects <span>{surface === "cover" ? "Cover" : "Inside slide"}</span></h2>
         <div className="simple-object-list" role="group" aria-label="Select an object">

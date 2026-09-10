@@ -30,6 +30,7 @@ from typing import Any, Optional
 from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool, ToolContext
 
+from app.design_limits import design_slide_limit
 from app.config import agent_instructions, settings
 from app.llm import resolve_model
 from app.schemas import Bundle, Verdict
@@ -173,6 +174,14 @@ async def publish_approved_carousel(tool_context: ToolContext) -> dict:
         return {
             "status": "error",
             "message": "Bundle has no ordered_artifacts; nothing to publish.",
+        }
+
+    max_slides = design_slide_limit(state)
+    if len(bundle.ordered_artifacts) > max_slides:
+        return {
+            "status": "error",
+            "retryable": False,
+            "message": f"This design allows at most {max_slides} slides. Re-plan the carousel before publishing.",
         }
 
     # Resolved BEFORE any URL is signed or any container is created: an

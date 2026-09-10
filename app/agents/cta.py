@@ -5,8 +5,8 @@ the CTA variant (``follow`` / ``comment`` / ``redirect``) from the planner's
 ``cta_hint`` plus its own judgment of the content, composes short CTA copy,
 and calls the :func:`render_cta_slide` tool. The tool renders the 1080x1350
 PNG via :func:`app.tools.image_gen.generate_cta_image`, resolves the link
-destination from :data:`app.config.settings` (``ig_handle`` /
-``substack_url`` / ``youtube_url`` - never model-invented), saves the PNG as
+destination from the selected design (``substack_url`` / ``youtube_url``)
+and run branding - never model-invented, saves the PNG as
 an artifact and writes the resulting ``CTASlide`` to ``state[K_CTA_SLIDE]``.
 
 The CTA template reference image is discovered from the "CTA slide" section of
@@ -224,10 +224,10 @@ def _display_link(url: str) -> str:
 
 
 def _resolve_link(cta_type: str, redirect_destination: str, design: CarouselDesign | None = None) -> Tuple[str, str]:
-    """Resolve (link_url, on-slide link_text) from settings for a CTA type.
+    """Resolve (link_url, on-slide link_text) from the selected design for a CTA type.
 
     - ``follow`` / ``comment`` → the configured IG handle.
-    - ``redirect`` → ``settings.substack_url`` or ``settings.youtube_url`` per
+    - ``redirect`` → ``design.substack_url`` or ``design.youtube_url`` per
       ``redirect_destination``, falling back to whichever is configured, then
       to the IG handle if neither is set.
 
@@ -244,14 +244,14 @@ def _resolve_link(cta_type: str, redirect_destination: str, design: CarouselDesi
         return handle, handle
     dest = (redirect_destination or "substack").strip().lower()
     if dest == "youtube":
-        ordered = [settings.youtube_url, settings.substack_url]
+        ordered = [design.youtube_url, design.substack_url] if design else []
     else:
-        ordered = [settings.substack_url, settings.youtube_url]
+        ordered = [design.substack_url, design.youtube_url] if design else []
     for url in ordered:
         if url.strip():
             return url.strip(), _display_link(url)
     logger.warning(
-        "Redirect CTA requested but no substack_url/youtube_url configured; "
+        "Redirect CTA requested but no Substack/YouTube link saved in this design; "
         "falling back to the IG handle."
     )
     return handle, handle
@@ -317,6 +317,11 @@ async def render_cta_slide(
         }
 
     design = get_model(tool_context.state, K_DESIGN, CarouselDesign) or CarouselDesign()
+    if kind == "redirect" and not (design.substack_url or design.youtube_url):
+        return {
+            "status": "error",
+            "message": "This design has no Substack or YouTube link. Choose a follow or comment CTA and adjust the copy.",
+        }
     link_url, link_text = _resolve_link(kind, redirect_destination, design)
     template_ref = _discover_template_ref("CTA slide")
     out_path = _run_workdir(tool_context.state) / _ARTIFACT_NAME
@@ -365,6 +370,14 @@ def build_cta_agent() -> LlmAgent:
     """
     _ensure_default_instruction_file()
     instruction = agent_instructions(AGENT_CTA) or _DEFAULT_INSTRUCTION
+    instruction += """
+
+## Design-specific destinations
+The rendering tool uses only the Substack and YouTube links saved with the
+selected design. Never invent a destination or use a link from another design.
+If a redirect is unavailable because the design has no saved links, choose
+follow or comment and update the copy to match before rendering again.
+"""
     return LlmAgent(
         name=AGENT_CTA,
         model=resolve_model(settings.utility_model),

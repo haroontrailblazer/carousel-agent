@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
 import httpx
 
 from app.config import settings
+from app.design_limits import MAX_SUPPORTED_SLIDES
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from app.services.instagram_accounts import Account
@@ -364,17 +365,17 @@ def publish_carousel(
 
     Raises:
         ValueError: When ``public_urls`` is out of Instagram's allowed range
-            (2 to ``settings.max_carousel_slides`` items), or when no usable
+            (2 to ``MAX_SUPPORTED_SLIDES`` items), or when no usable
             account was given.
         RuntimeError: When the Graph API returns an error payload, or a
             container fails or times out processing.
         PublishAborted: When ``should_continue`` said to stop. Nothing was
             posted.
     """
-    if len(public_urls) > settings.max_carousel_slides:
+    if len(public_urls) > MAX_SUPPORTED_SLIDES:
         raise ValueError(
             f"Carousel has {len(public_urls)} slides; Instagram allows at "
-            f"most {settings.max_carousel_slides}."
+            f"most {MAX_SUPPORTED_SLIDES}."
         )
     if len(public_urls) < _MIN_CAROUSEL_CHILDREN:
         raise ValueError(

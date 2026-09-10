@@ -2,6 +2,7 @@ import * as React from "react"
 import { ImagePlus, Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { type CarouselDesign } from "@/lib/designs"
 import { prepareDesignLogo } from "@/lib/design-logo"
+import { DesignLinks } from "./design-links"
 import "./design-branding.css"
 
 export function DesignBranding({ design, onChange, onBusy }: {
@@ -70,5 +71,6 @@ export function DesignBranding({ design, onChange, onBusy }: {
       onChange={event => { setHandle(event.target.value); setError("") }} onBlur={saveHandle} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur() }} /></label>
     {error && <p className="simple-branding-error" role="alert">{error}</p>}
     <p className="simple-control-help">Your logo and handle appear on this design’s slides. Leave them empty to use your connected account.</p>
+    <DesignLinks design={design} onChange={onChange} />
   </section>
 }
