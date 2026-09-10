@@ -26,11 +26,10 @@
 .studio-selected-design { display: block; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; background: var(--muted); color: var(--foreground); text-overflow: ellipsis; white-space: nowrap; }
 .studio-composer-hint kbd { display: inline-block; min-width: 17px; margin: 0 2px; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; background: var(--background); text-align: center; }
 .studio-prompt-label { margin: 24px 0 10px; color: var(--muted-foreground); font-size: 11px; }
-.studio-suggestions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.studio-suggestion { display: flex; min-width: 0; min-height: 56px; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 11px; padding: 12px; background: var(--card); text-align: left; font-size: 11px; line-height: 1.45; transition: background 150ms, border-color 150ms, transform 150ms; }
-.studio-suggestion > svg:first-child { flex-shrink: 0; color: var(--muted-foreground); }
-.studio-suggestion-arrow { flex-shrink: 0; margin-left: auto; color: var(--muted-foreground); }
-.studio-suggestion:hover { transform: translateY(-2px); border-color: var(--brand); background: var(--brand-soft); }
+.studio-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; }
+.studio-suggestion { display: inline-flex; min-width: 0; min-height: 24px; align-items: center; border: 0; border-radius: 0; padding: 2px 0; background: transparent; color: var(--muted-foreground); text-align: left; font-size: 11px; line-height: 1.5; cursor: pointer; text-underline-offset: 3px; }
+.studio-suggestion:hover { color: var(--link); text-decoration: underline; }
+.studio-suggestion:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .studio-suggestion:disabled { opacity: .5; cursor: default; transform: none; }
 .studio-review-note { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 20px; color: var(--muted-foreground); text-align: center; font-size: 10px; line-height: 1.6; }
 .studio-review-note svg { flex-shrink: 0; color: var(--phase-qa); }
@@ -60,8 +59,6 @@
 .studio-login-form form button[type="submit"] { height: 46px; }
 @media (max-width: 1100px) and (min-width: 768px) {
   .studio-create { padding-inline: 28px; }
-  .studio-suggestion { gap: 7px; padding-inline: 9px; }
-  .studio-suggestion-arrow { display: none; }
   .studio-agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
@@ -74,8 +71,6 @@
   .studio-intro h1 { font-size: clamp(36px, 9.5vw, 52px); }
   .studio-intro > img { width: 44px; height: 44px; margin-bottom: 18px; }
   .studio-description { max-width: 320px; font-size: 12px; margin-top: 16px; }
-  .studio-suggestions { grid-template-columns: 1fr; gap: 8px; }
-  .studio-suggestion { min-height: 44px; padding-block: 10px; font-size: 12px; }
   .studio-agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 10px; }
   .studio-agents-heading { flex-direction: column; gap: 5px; }
   .studio-agents { margin-top: 28px; }
@@ -95,16 +90,12 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .studio-suggestion, .studio-create .agent-composer { transition: none; }
-  .studio-suggestion:hover { transform: none; }
 }
 
 /* True black surrounds quietly raised working surfaces; no grey page wash. */
 .dark .studio-topbar { background: #000; }
 .dark .studio-create .agent-composer { border-color: #383838; }
 .dark .studio-create .agent-composer:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 10%, transparent), var(--shadow-lift); }
-.dark .studio-suggestion { background: #080808; }
-.dark .studio-suggestion:hover { background: var(--brand-soft); border-color: var(--brand); }
-.dark .studio-suggestion:hover > svg { color: var(--brand); }
 .dark .studio-agent-icon { background: #101010; color: #BFB9B4; }
 .dark .studio-sidebar nav a:hover { background: #101010; }
 .studio-sidebar nav a[aria-current="page"] { box-shadow: 0 3px 10px color-mix(in srgb, var(--brand) 10%, transparent); }
@@ -188,8 +179,5 @@
   .studio-intro--illustrated .studio-description { margin-top: 10px; font-size: 11px; line-height: 1.6; }
   .studio-create .agent-composer textarea { min-height: 64px; }
   .studio-prompt-label { margin-top: 16px; margin-bottom: 8px; }
-  .studio-suggestions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .studio-suggestion { min-height: 48px; padding: 6px; justify-content: center; text-align: center; font-size: 10px; }
-  .studio-suggestion > svg { display: none; }
   .studio-review-note { margin-top: 12px; }
 }

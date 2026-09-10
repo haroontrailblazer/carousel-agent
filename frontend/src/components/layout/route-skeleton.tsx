@@ -203,7 +203,7 @@ export function ComposerSkeleton() {
           <Skeleton className="h-[164px] rounded-[18px]" />
           <Skeleton className="mb-3 mt-6 h-3 w-28" />
           <div className="studio-suggestions">
-            {[0, 1, 2].map(i => <Skeleton key={i} className="h-11 rounded-[11px] md:h-14" />)}
+            {[0, 1, 2].map(i => <Skeleton key={i} className="h-3 w-28 my-1.5 rounded" />)}
           </div>
           <div className="mt-5 flex justify-center">
             <Skeleton className="h-3 w-80 max-w-full" />

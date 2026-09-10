@@ -3,7 +3,7 @@ import { flushSync } from "react-dom"
 import { LaunchHandoff } from "@/components/agent/launch-handoff"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router"
-import { ArrowUpRight, Layers, Newspaper, Wrench, ShieldCheck } from "lucide-react"
+import { ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { AgentComposer, type ComposerState } from "@/components/agent/agent-composer"
@@ -292,9 +292,7 @@ export function NewRunRoute() {
                 onClick={() => setValue(suggestion)}
                 className="studio-suggestion"
               >
-                {index === 0 ? <Newspaper size={17} /> : index === 1 ? <Layers size={17} /> : <Wrench size={17} />}
                 <span>{["Explore AI news", "Cover a product launch", "Spotlight a new tool"][index]}</span>
-                <ArrowUpRight size={14} className="studio-suggestion-arrow" />
               </button>
             ))}
           </div>
