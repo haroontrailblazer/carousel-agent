@@ -50,7 +50,7 @@ export function Tabs<T extends string>({
       role="tablist"
       aria-label={label}
       className={cn(
-        "inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--muted)] p-1",
+        "studio-tabs inline-flex items-center gap-1 rounded-[var(--radius-pill)] bg-[var(--muted)] p-1",
         className,
       )}
       onKeyDown={(e) => {

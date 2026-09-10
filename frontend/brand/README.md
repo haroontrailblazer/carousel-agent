@@ -30,6 +30,14 @@ The logo keeps its burnt-orange tile in either theme. Interactive colours adapt 
 
 The studio uses a coordinated set of realistic 3D-style illustrations in porcelain, glass, and orange metal. See [assets and generation prompts](3d/README.md) for originals, responsive exports, and usage details.
 
-System sans-serif for navigation, controls, and data. Georgia italic provides the editorial accent in the creation and sign-in headlines. No remote fonts are required. Use generous space around the composer, quiet borders, and restrained shadows. The agent introduction describes existing creative roles; it does not claim live availability.
+System sans-serif for navigation, controls, and data. Georgia italic provides the editorial accent in the creation and sign-in headlines. No remote fonts are required. Use generous space around the composer, quiet borders, and restrained shadows.
 
 The theme lives in `src/index.css`, with studio layouts in `src/studio.css`. Browser chrome colours in `index.html` and `src/hooks/use-theme.ts` must match the canvas tokens. Generated carousel artwork, publishing identities, and agent behaviour are independent of this application theme.
+
+## Depth and motion
+
+`src/studio-depth.css` supplies the shared surface highlights, soft shadows, and press feedback. `StudioEmblem` reuses the existing optimized illustrations in page headings, chat activity, trace agents, and the review inspector. Navigation selection uses a soft exterior shadow without a left accent line.
+
+Artwork enters once, then responds gently to pointer hover. Reduced-motion preferences disable both effects. Reading surfaces and carousel previews stay level; the design editor's canvas coordinates are unaffected. Primary controls, focus rings, task filters, and Instagram review prerequisites retain their existing behavior.
+
+Starting a carousel uses a shared-element transition from the composer to the submitted prompt, followed by the chat workspace. `LaunchHandoff` keeps the submitted text and selected design visible while creation and the first snapshot are pending. It adds no artificial network delay; errors restore the original composer and keyboard focus. Reduced-motion and browsers without View Transitions retain the same status feedback without the moving transition.

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { preload } from "react-dom"
 import { Check, ChevronLeft, ChevronRight, Copy, ImageOff, Play } from "lucide-react"
 import { toast } from "sonner"
@@ -460,7 +461,7 @@ export function CarouselViewer({
       <Card className={cn(fit ? "review-inspector" : "p-5")}>
         <section className={cn(fit ? "review-caption" : "min-h-0")}>
           <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold">Caption</h3>
+            <div className="flex items-center gap-2"><StudioEmblem name="design-stylus" small /><h3 className="text-sm font-semibold">Caption</h3></div>
             <div className="flex items-center gap-1.5">
               <MutedChip
                 style={

@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 import {
   AlignCenter,
   AlignLeft,
@@ -648,7 +649,7 @@ export function DesignsRoute() {
       <section className="designs-library">
         <div className="designs-library-heading">
           <div>
-            <h1>Designs</h1>
+            <div className="flex items-center gap-2"><StudioEmblem name="design-stylus" small /><h1>Designs</h1></div>
             <p>Named formats your agents can reuse.</p>
           </div>
           <Button

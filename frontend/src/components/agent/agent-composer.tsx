@@ -159,6 +159,7 @@ export function AgentComposer({
             aria-hidden={!composing}
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) return
               if (designCommand.onKeyDown(event)) return
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault()

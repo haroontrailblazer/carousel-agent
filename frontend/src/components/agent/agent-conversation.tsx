@@ -1,4 +1,5 @@
 import { ExternalLink } from "lucide-react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { Link } from "react-router"
 
 import {
@@ -72,7 +73,7 @@ export function AgentConversation({
     <div className="space-y-6">
       {typed ? (
         <div className="flex justify-end gap-3">
-          <div className="max-w-[82%] rounded-[16px] bg-[var(--muted)] px-4 py-3 text-sm leading-6">
+          <div className="studio-chat-user max-w-[82%] rounded-[16px] bg-[var(--muted)] px-4 py-3 text-sm leading-6">
             {typed}
           </div>
           {/* The person's actual picture, not the word "You".
@@ -100,7 +101,7 @@ export function AgentConversation({
         </p>
       )}
 
-      <div className="min-w-0 space-y-5">
+      <div className="studio-chat-response min-w-0 space-y-5">
         <PixelLoader
           key={runId}
           label={agentActivityLabel(run, events)}
@@ -136,7 +137,8 @@ export function AgentConversation({
         )}
 
         {reviewCta && (
-          <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--card)] p-4">
+          <div className="studio-review-ready flex flex-wrap items-center gap-3 rounded-[14px] border border-[var(--border)] bg-[var(--card)] p-4">
+            <StudioEmblem small />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium">Your carousel is ready</p>
               <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">

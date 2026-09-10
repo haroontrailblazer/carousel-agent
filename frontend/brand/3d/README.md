@@ -2,13 +2,13 @@
 
 Created with the built-in ImageGen tool. These are photorealistic 3D-style image assets, not interactive 3D models. Original transparent PNGs are preserved in this directory; the interface uses responsive WebP exports in `../../public/illustrations/`.
 
-- `carousel-sculpture.png`: layered carousel cards, used in the creation hero, sign-in, and visual agent cards.
-- `research-lens.png`: magnifying glass and paper cards, used for research and planning.
-- `design-stylus.png`: material swatches and stylus, used for writing and CTA roles.
+- `carousel-sculpture.png`: layered carousel cards, used in the creation hero, sign-in, task headings, chat review card, and visual trace agents.
+- `research-lens.png`: magnifying glass and paper cards, used for the newsroom, chat activity, and research/planning trace agents.
+- `design-stylus.png`: material swatches and stylus, used for settings, the design library, the review caption inspector, and writing/CTA trace agents.
 
 All three have 160px and 320px exports; the hero also has a 640px export. All seven exports total 134,330 bytes (131 KiB); the largest is 55,956 bytes. Original PNGs are outside the public directory and are not shipped in the production bundle.
 
-Illustrations are decorative with adjacent text labels. Supporting images are lazy loaded, dimensions are reserved, and reduced-motion preferences disable hover transitions. Agent cards use native keyboard-operable disclosure controls to reveal existing role descriptions.
+Illustrations are decorative with adjacent text labels. Supporting images are lazy loaded, dimensions are reserved, and reduced-motion preferences disable entrance animations and hover transitions. Existing trace controls remain keyboard operable. The creation page does not include an agent introduction section.
 
 ## Generation prompts
 
@@ -23,4 +23,3 @@ Use case: product-mockup. Asset: transparent 3D research-agent illustration for 
 ### Design stylus
 
 Use case: product-mockup. Asset: transparent 3D design-agent illustration for the Carousel Factory UI. A premium photorealistic small desktop sculpture of an orange lacquer and brushed-aluminium precision stylus laying diagonally over two fanned thick material swatch cards, one warm porcelain, one frosted apricot glass, with a small polished graphite sphere beside them. Precision bevels, convincing thickness, restrained surface texture, metal reflections, softly refracted glass edges and soft contact shadow. Three-quarter product photography view, compact square composition, entire object visible filling 85% of the frame. Genuine transparent alpha background; no floor, opaque background or baked checkerboard. No text, letters, logos, watermark or cartoon styling. Palette #C74726 burnt orange, #F79270 apricot, #F6F4F0 ivory, graphite and brushed aluminium. Must remain readable as an 80px UI illustration on both black and ivory.
-

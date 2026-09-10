@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router"
 import { ExternalLink, Newspaper, RefreshCw } from "lucide-react"
@@ -118,8 +119,9 @@ export function NewsroomRoute() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="studio-page-heading flex flex-wrap items-center justify-between gap-3">
+        <StudioEmblem name="research-lens" />
+        <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Newsroom</h1>
             {isRemembered(queue) && (

@@ -1,4 +1,5 @@
 import { ExternalLink, WifiOff } from "lucide-react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 
 import { NewChatButton } from "@/components/agent/agent-workspace"
 import { TaskActions } from "@/components/run/task-actions"
@@ -22,13 +23,15 @@ export function TaskHeader({
   const statusTone = STATUS_TOKEN[data.status]
 
   return (
-    <header className={cn(compact ? "space-y-2" : "space-y-5")}>
+    <header className={cn("studio-task-heading", compact ? "space-y-2" : "space-y-5")}>
       <div
         className={cn(
           "flex flex-wrap items-start justify-between",
           compact ? "gap-3" : "gap-5",
         )}
       >
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+        <StudioEmblem small />
         <h1
           className={cn(
             "max-w-2xl font-semibold tracking-[-0.035em]",
@@ -39,6 +42,7 @@ export function TaskHeader({
         >
           {data.title || data.news.title || data.run_id}
         </h1>
+        </div>
         <div
           className={cn(
             "flex shrink-0 items-center gap-2 [&_button]:rounded-[10px]",

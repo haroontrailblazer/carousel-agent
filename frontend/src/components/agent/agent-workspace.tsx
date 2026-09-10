@@ -22,6 +22,7 @@
  */
 
 import * as React from "react"
+import { LaunchHandoff } from "@/components/agent/launch-handoff"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "react-router"
 import { ListTree, PanelRightOpen, Pencil, Plus } from "lucide-react"
@@ -209,6 +210,7 @@ export function AgentWorkspace({
   runId,
   workspace,
   prompt,
+  launchDesignName,
   justStarted = false,
   variant = "standalone",
   onReset,
@@ -217,6 +219,7 @@ export function AgentWorkspace({
   workspace: RunWorkspace
   /** What the person typed, when this browser is the one that typed it. */
   prompt?: string
+  launchDesignName?: string
   /** This tab started this run, so Stop is live before the first response. */
   justStarted?: boolean
   variant?: "standalone" | "embedded"
@@ -227,6 +230,13 @@ export function AgentWorkspace({
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const embedded = variant === "embedded"
+  const chatPane = React.useRef<HTMLElement>(null)
+
+  React.useEffect(() => {
+    if (!justStarted || embedded) return
+    const frame = requestAnimationFrame(() => chatPane.current?.focus({ preventScroll: true }))
+    return () => cancelAnimationFrame(frame)
+  }, [runId, justStarted, embedded])
 
   const cancel = useMutation({
     mutationFn: () => post(`/api/runs/${runId}/cancel`),
@@ -388,7 +398,9 @@ export function AgentWorkspace({
   const conversation = (
     <>
       {booting ? (
-        <ChatSkeleton />
+        justStarted && prompt
+          ? <LaunchHandoff prompt={prompt} designName={launchDesignName} accepted />
+          : <ChatSkeleton />
       ) : run.isError || !run.data ? (
         <div className="rounded-[14px] border border-[var(--phase-failed)]/35 bg-[var(--phase-failed-soft)] p-4 text-sm text-[var(--phase-failed-fg)]">
           <p className="font-medium">This task could not be loaded.</p>
@@ -462,8 +474,8 @@ export function AgentWorkspace({
   }
 
   return (
-    <div className="agent-workspace-grid" data-rail={rail.open ? "open" : "closed"}>
-      <section className="agent-conversation-pane">
+    <div className="agent-workspace-grid" data-launch={justStarted ? "true" : undefined} data-rail={rail.open ? "open" : "closed"}>
+      <section ref={chatPane} tabIndex={-1} aria-label="Carousel chat" className="agent-conversation-pane outline-none">
         <header className="agent-workspace-header">
           {/* The title alone. The activity line that used to sit under it -
               "Your carousel is ready for review", "Connecting to the carousel

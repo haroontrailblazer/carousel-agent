@@ -10,7 +10,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] " +
+        "studio-card rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] " +
           "text-[var(--card-foreground)] shadow-[var(--shadow-card)]",
         glide && "glide cursor-pointer",
         className,

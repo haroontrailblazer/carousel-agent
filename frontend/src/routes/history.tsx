@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router"
 
@@ -78,7 +79,9 @@ export function HistoryRoute() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="studio-page-heading flex flex-wrap items-center justify-between gap-3">
+        <StudioEmblem />
+        <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <h1 className="text-xl font-semibold tracking-tight">Tasks</h1>
           {/* Only while the remembered list is on screen unconfirmed - not on
@@ -88,6 +91,8 @@ export function HistoryRoute() {
               refreshing…
             </span>
           )}
+        </div>
+        <p className="studio-page-description">Your ideas, from first draft to final carousel.</p>
         </div>
         <Button variant="brand" size="sm" asChild>
           <Link to="/new" viewTransition>New carousel</Link>
@@ -102,6 +107,7 @@ export function HistoryRoute() {
               key={f.value}
               type="button"
               onClick={() => setFilter(f.value)}
+              aria-pressed={filter === f.value}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] border px-3 py-1 text-xs font-medium transition-colors",
                 filter === f.value
@@ -137,7 +143,7 @@ export function HistoryRoute() {
 
       <div className="space-y-2">
         {items.map((run) => (
-          <Card key={run.run_id} glide className="p-4">
+          <Card key={run.run_id} glide className="flex flex-wrap items-start gap-3 p-4">
             <Link
               to={`/tasks/${run.run_id}`}
               viewTransition
@@ -145,9 +151,8 @@ export function HistoryRoute() {
               // anywhere in the list downloads it for all of them - the
               // module resolves once and the rest are free.
               onPointerEnter={() => void runDetailChunk().catch(() => undefined)}
-              className="block"
+              className="min-w-0 flex-1"
             >
-              <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
                     {run.title || <span className="font-mono text-sm">{run.run_id}</span>}
@@ -167,6 +172,7 @@ export function HistoryRoute() {
                     </span>
                   </div>
                 </div>
+            </Link>
 
                 {run.status === "awaiting_review" ? (
                   <Button
@@ -184,8 +190,6 @@ export function HistoryRoute() {
                     title={run.title}
                   />
                 )}
-              </div>
-            </Link>
           </Card>
         ))}
       </div>

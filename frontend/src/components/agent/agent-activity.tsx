@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 import {
   Brain,
   Check,
@@ -124,7 +125,8 @@ export function PixelLoader({
   startedAt?: string | null
 }) {
   return (
-    <div className="py-2">
+    <div className="studio-activity-status flex items-center gap-3 py-2">
+      <StudioEmblem name={variant === "Drive" ? "research-lens" : "carousel-sculpture"} small />
       <LoadingState
         label={label}
         variant={variant}
@@ -353,7 +355,7 @@ export function ThinkingPanel({
       : THINKING_DONE[view]
 
   return (
-    <section className="flex flex-col">
+    <section className="studio-thinking-panel flex flex-col">
       <div className="flex items-center gap-1">
         <button
           type="button"

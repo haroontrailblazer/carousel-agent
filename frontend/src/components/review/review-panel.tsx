@@ -1,6 +1,7 @@
 import * as React from "react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Download, Hourglass } from "lucide-react"
+import { Download } from "lucide-react"
 import { toast } from "sonner"
 
 import { ApprovalCard } from "@/components/review/approval-card"
@@ -195,7 +196,7 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
       )}
       {notAssembled && (
         <Card className="flex items-center gap-3 p-6">
-          <Hourglass className="size-5 shrink-0 text-[var(--muted-foreground)]" />
+          <StudioEmblem small />
           <div>
             <p className="font-medium">Nothing to look at yet</p>
             {/* A task that has stopped gets the past tense. This is the only

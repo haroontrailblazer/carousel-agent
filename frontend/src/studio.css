@@ -107,7 +107,7 @@
 .dark .studio-suggestion:hover > svg { color: var(--brand); }
 .dark .studio-agent-icon { background: #101010; color: #BFB9B4; }
 .dark .studio-sidebar nav a:hover { background: #101010; }
-.dark .studio-sidebar nav a[aria-current="page"] { box-shadow: inset 2px 0 0 var(--brand); }
+.studio-sidebar nav a[aria-current="page"] { box-shadow: 0 3px 10px rgb(199 71 38 / 10%); }
 .dark .studio-theme-switch:hover { border-color: var(--brand); color: var(--brand); }
 .review-connection-gate { padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--muted); }
 .review-connection-gate h3 { margin-top: 12px; font-size: 14px; font-weight: 600; }

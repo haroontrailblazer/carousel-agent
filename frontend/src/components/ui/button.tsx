@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 /** Shared action styles. Orange carries the primary action in both themes. */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium " +
+  "studio-button inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium " +
     "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] " +
     "focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] " +
     "disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 select-none",
@@ -14,11 +14,11 @@ const buttonVariants = cva(
     variants: {
       variant: {
         brand:
-          "bg-[var(--brand)] text-[var(--brand-foreground)] hover:bg-[var(--brand-hover)] font-semibold shadow-sm",
+          "studio-button--solid bg-[var(--brand)] text-[var(--brand-foreground)] hover:bg-[var(--brand-hover)] font-semibold shadow-sm",
         default:
-          "bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--muted)]",
+          "studio-button--solid bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--muted)]",
         secondary:
-          "bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90",
+          "studio-button--solid bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-90",
         destructive:
           "bg-[var(--destructive)] text-[var(--destructive-foreground)] hover:opacity-90",
         ghost: "text-[var(--foreground)] hover:bg-[var(--muted)]",

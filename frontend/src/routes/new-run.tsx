@@ -1,4 +1,6 @@
 import * as React from "react"
+import { flushSync } from "react-dom"
+import { LaunchHandoff } from "@/components/agent/launch-handoff"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router"
 import { ArrowUpRight, Layers, Newspaper, Wrench, ShieldCheck } from "lucide-react"
@@ -96,6 +98,14 @@ export function NewRunRoute() {
   const runId = params.get("run")
   const [value, setValue] = React.useState("")
   const [submittedPrompt, setSubmittedPrompt] = React.useState("")
+  const [submittedDesignName, setSubmittedDesignName] = React.useState("")
+  const [launch, setLaunch] = React.useState<{ prompt: string; designName: string } | null>(null)
+  const submitting = React.useRef(false)
+  const idleRoot = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (runId) setLaunch(null)
+  }, [runId])
   const isUrl = looksLikeUrl(value)
 
   const workspace = useRunWorkspace(runId)
@@ -124,13 +134,14 @@ export function NewRunRoute() {
       design_id?: string
       design?: ReturnType<typeof designPayload>
     }) => post<{ run_id: string; title: string }>("/api/runs", payload),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["runs"] })
-      setSubmittedPrompt(value.trim())
-      setParams({ run: data.run_id }, { replace: true })
-      toast.success("Your carousel is cooking", { description: data.title })
+      setSubmittedPrompt(variables.url ?? variables.topic ?? "")
+      setParams({ run: data.run_id }, { replace: true, viewTransition: true })
+      toast.dismiss("studio-design-selection")
     },
     onError: (error) => {
+      setLaunch(null)
       const code = error instanceof ApiError ? error.code : undefined
       if (code === "too_many_active_runs") {
         toast.error("Too many at once", {
@@ -154,30 +165,57 @@ export function NewRunRoute() {
       }
       toast.error(error instanceof Error ? error.message : "Could not start that carousel.")
     },
+    onSettled: () => { submitting.current = false },
   })
 
+  React.useEffect(() => {
+    if (!start.isError || launch || runId) return
+    const frame = requestAnimationFrame(() => idleRoot.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [start.isError, launch, runId])
+
   function submit() {
+    if (submitting.current || start.isPending) return
     const trimmed = value.trim()
     if (trimmed.length < 3) return
     const design = designs.find((item) => item.id === designId)
     if (!design) {
       toast.error("Choose a design first", {
+        id: "studio-design-required",
         description: "The agents need the cover and slide format before they start.",
       })
       return
     }
-    start.mutate({
-      ...(isUrl ? { source: "url", url: trimmed } : { source: "topic", topic: trimmed }),
-      account_id: accountId,
-      design_id: design.id,
-      design: designPayload(design),
-    })
+    submitting.current = true
+    toast.dismiss("studio-design-required")
+    toast.dismiss("studio-design-selection")
+    const begin = () => {
+      setLaunch({ prompt: trimmed, designName: design.name })
+      setSubmittedDesignName(design.name)
+      start.mutate({
+        ...(isUrl ? { source: "url", url: trimmed } : { source: "topic", topic: trimmed }),
+        account_id: accountId,
+        design_id: design.id,
+        design: designPayload(design),
+      })
+    }
+    // The request starts with the visual handoff; no artificial loading delay.
+    if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const transition = document.startViewTransition(() => flushSync(begin))
+      // A quick server response or another navigation may skip this animation.
+      void transition.ready.catch(() => {})
+      void transition.finished.catch(() => {})
+    } else {
+      begin()
+    }
   }
 
   /** Back to an empty composer. The run keeps working; Tasks still has it. */
   function reset() {
     setValue("")
     setSubmittedPrompt("")
+    setSubmittedDesignName("")
+    setLaunch(null)
     setParams({}, { replace: true })
   }
 
@@ -186,7 +224,8 @@ export function NewRunRoute() {
       <AgentWorkspace
         runId={runId}
         workspace={workspace}
-        prompt={submittedPrompt}
+        prompt={start.data?.run_id === runId ? submittedPrompt : undefined}
+        launchDesignName={start.data?.run_id === runId ? submittedDesignName : undefined}
         // The mutation keeps its result, so this is true only for the run
         // this tab actually created - not for the next chat opened from the
         // sidebar, which would otherwise inherit a stale "just started".
@@ -196,12 +235,20 @@ export function NewRunRoute() {
     )
   }
 
+  if (launch) {
+    return (
+      <div className="agent-empty-workspace">
+        <div className="studio-launch-screen"><LaunchHandoff prompt={launch.prompt} designName={launch.designName} /></div>
+      </div>
+    )
+  }
+
   // No run yet, so there are only two things this composer can be: waiting for
   // you to type, or waiting for the server to hand back a run id.
   const composerState: ComposerState = start.isPending ? "starting" : "idle"
 
   return (
-    <div className="agent-empty-workspace">
+    <div ref={idleRoot} className="agent-empty-workspace">
       <div className="studio-create">
         <div className="w-full">
           <div className="studio-intro studio-intro--illustrated">
@@ -226,7 +273,7 @@ export function NewRunRoute() {
             onDesignChange={(nextDesignId) => {
               setDesignId(nextDesignId ?? "")
               const selected = designs.find((design) => design.id === nextDesignId)
-              if (selected) toast.success("Design selected", { description: selected.name })
+              if (selected) toast.success("Design selected", { id: "studio-design-selection", description: selected.name })
             }}
           />
 

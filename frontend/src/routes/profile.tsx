@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Cable,
@@ -903,13 +904,16 @@ export function ProfileRoute() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <header className="mb-6">
+      <header className="studio-page-heading mb-6 flex items-center gap-4">
+        <StudioEmblem name="design-stylus" />
+        <div className="min-w-0">
         <h1 className="text-2xl font-semibold tracking-tight">
           Account &amp; settings
         </h1>
         <p className="mt-1.5 text-sm text-[var(--muted-foreground)]">
           Manage your profile, preferences, and connected accounts.
         </p>
+        </div>
       </header>
 
       <Tabs

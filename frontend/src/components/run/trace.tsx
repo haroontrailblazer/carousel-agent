@@ -1,4 +1,5 @@
 import * as React from "react"
+import { StudioEmblem, agentArtwork } from "@/components/layout/studio-emblem"
 import {
   Activity,
   AlertTriangle,
@@ -181,7 +182,7 @@ const ToolCallRow = React.memo(function ToolCallRow({ tool }: { tool: ToolCall }
         : heatTone(tool.ms)
 
   return (
-    <details className="group border-b border-[var(--border)] last:border-b-0">
+    <details className="studio-tool-detail group border-b border-[var(--border)] last:border-b-0">
       <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-3 py-2.5 transition-colors hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] [&::-webkit-details-marker]:hidden">
         <span
           className="grid size-7 shrink-0 place-items-center rounded-[8px]"
@@ -280,7 +281,7 @@ export function TraceSummaryBar({
   ]
 
   return (
-    <div className="grid grid-cols-2 border-y border-[var(--border)] sm:grid-cols-4">
+    <div className="studio-trace-metrics grid grid-cols-2 border-y border-[var(--border)] sm:grid-cols-4">
       {stats.map(({ key, icon: Icon, label, value, title }, index) => (
         <div
           key={key}
@@ -451,13 +452,13 @@ const AgentRunRow = React.memo(function AgentRunRow({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        "relative w-full border-b border-[var(--border)] px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--muted)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)]",
+        "studio-trace-node relative w-full border-b border-[var(--border)] px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-[var(--muted)] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)]",
         selected && "bg-[var(--card)]",
-        selected && "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[var(--brand)]",
-        failed && selected && "before:bg-[var(--destructive)]",
+        failed && selected && "text-[var(--destructive)]",
       )}
     >
       <span className="flex items-center gap-2">
+        <StudioEmblem name={agentArtwork(block.author)} small />
         <span
           aria-hidden
           className={cn("size-2 shrink-0 rounded-full", active && "animate-pip-pulse")}
@@ -695,7 +696,7 @@ export function AgentTrace({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)]">
+    <div className="studio-trace-workbench flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)]">
       <TraceSummaryBar summary={summary} live={live} />
 
       <div className="grid min-h-[30rem] md:min-h-0 md:flex-1 md:grid-cols-[17rem_minmax(0,1fr)]">

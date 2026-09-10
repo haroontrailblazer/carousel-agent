@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client"
 import { App } from "@/App"
 import { loadAuthConfig } from "@/lib/supabase"
 import "@/index.css"
+import "@/studio-depth.css"
 
 // Start fetching the Supabase configuration NOW, in parallel with React
 // mounting, rather than when the first component happens to ask for it.
