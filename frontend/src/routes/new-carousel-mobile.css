@@ -13,7 +13,7 @@
   }
   .new-carousel-workspace .studio-create-content { min-width: 0; }
   .new-carousel-workspace .studio-intro--illustrated { gap: 10px; margin-bottom: 18px; }
-  .new-carousel-workspace .studio-hero-art { width: 84px; }
+  .new-carousel-workspace .studio-hero-art { display: block; width: 84px; }
   .new-carousel-workspace .studio-eyebrow { margin-bottom: 8px; font-size: 9px; }
   .new-carousel-workspace .studio-intro h1 { font-size: clamp(30px, 8.5vw, 38px); }
   .new-carousel-workspace .studio-description { margin-top: 10px; font-size: 12px; line-height: 1.6; }
@@ -21,7 +21,7 @@
   .new-carousel-workspace .agent-composer textarea { font-size: 16px; min-height: 64px; max-height: 128px; padding: 8px; overflow-y: auto; }
   .new-carousel-workspace .studio-prompt-label { margin: 16px 0 8px; }
   .new-carousel-workspace .studio-suggestions { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .new-carousel-workspace .studio-suggestion { min-height: 56px; justify-content: center; padding: 8px 5px; text-align: center; font-size: 10px; }
+  .new-carousel-workspace .studio-suggestion { min-height: 40px; justify-content: center; padding: 4px 5px; text-align: center; font-size: 10px; }
   .new-carousel-workspace .studio-suggestion > svg { display: none; }
   .new-carousel-workspace .studio-review-note { margin-top: 14px; }
   .new-carousel-workspace [aria-label="Instagram account"] { max-height: 64px; overflow-y: auto; }
@@ -32,29 +32,30 @@
   .new-carousel-workspace .agent-composer [role="option"] { min-width: 0; }
   .new-carousel-workspace .agent-composer [role="option"] > span { flex-shrink: 1; overflow-wrap: anywhere; }
 
-  /* While typing, the composer sits above the keyboard with its menu above it.
-     Account choices stay reachable; the decorative intro returns on blur. */
+  /* Keep the intro in the scrollable page while bringing the composer above
+     the keyboard. Short viewports can scroll back to the complete intro. */
   .new-carousel-workspace[data-editing="true"] .studio-create { align-items: stretch; }
   .new-carousel-workspace[data-editing="true"] .studio-create-content { display: flex; flex-direction: column; justify-content: flex-end; }
-  .new-carousel-workspace[data-editing="true"] .studio-intro,
   .new-carousel-workspace[data-editing="true"] .studio-prompt-label,
   .new-carousel-workspace[data-editing="true"] .studio-suggestions,
   .new-carousel-workspace[data-editing="true"] .studio-review-note { display: none; }
   .new-carousel-workspace[data-editing="true"] .agent-composer { order: 2; margin-top: 12px; flex: 0 0 auto; }
   .new-carousel-workspace[data-editing="true"] .agent-composer textarea { max-height: clamp(64px, calc(var(--new-visible-height, 100svh) * .22), 128px); }
   .new-carousel-workspace[data-editing="true"] [aria-label="Instagram account"] { order: 1; flex: 0 0 auto; max-height: 64px; overflow-y: auto; margin-top: 0; }
+  .new-carousel-workspace[data-editing="true"] .studio-intro--illustrated { display: grid; grid-template-columns: minmax(0, 1fr) 56px; text-align: left; margin-bottom: 0; flex-shrink: 0; }
+  .new-carousel-workspace[data-editing="true"] .studio-hero-art { width: 56px; order: 0; }
+  .new-carousel-workspace[data-editing="true"] .studio-intro h1 { font-size: 26px; }
+  .new-carousel-workspace[data-editing="true"] .studio-description { margin-top: 6px; font-size: 11px; line-height: 1.5; }
 }
 @media (max-width: 767px) and (max-height: 700px) {
-  .new-carousel-workspace .studio-hero-art { display: none; }
-  .new-carousel-workspace .studio-intro--illustrated { margin-bottom: 14px; }
+  .new-carousel-workspace .studio-hero-art { width: 64px; order: 0; }
+  .new-carousel-workspace .studio-intro--illustrated { display: grid; grid-template-columns: minmax(0, 1fr) 64px; text-align: left; margin-bottom: 14px; }
   .new-carousel-workspace .studio-description { margin-top: 8px; }
 }
 @media (max-width: 767px) and (max-height: 500px) {
-  .new-carousel-workspace .studio-description,
+  .new-carousel-workspace .studio-create { padding-top: max(48px, env(safe-area-inset-top)); padding-bottom: max(8px, env(safe-area-inset-bottom)); }
   .new-carousel-workspace .studio-prompt-label,
   .new-carousel-workspace .studio-suggestions,
-  .new-carousel-workspace .studio-eyebrow,
   .new-carousel-workspace .studio-review-note { display: none; }
   .new-carousel-workspace .studio-intro h1 { font-size: 26px; }
-  .new-carousel-workspace .studio-suggestion { min-height: 42px; }
 }

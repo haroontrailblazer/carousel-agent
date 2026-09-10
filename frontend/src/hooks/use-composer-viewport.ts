@@ -37,12 +37,23 @@ export function useComposerViewport(rootRef: React.RefObject<HTMLDivElement | nu
       if (fieldFocused && coveredHeight > 100) keyboardSeen = true
       // Android can dismiss the keyboard while leaving the textarea focused.
       const editing = fieldFocused && (!keyboardSeen || coveredHeight > 80)
+      const wasEditing = root.dataset.editing === "true"
       root.dataset.editing = String(editing)
       root.style.setProperty("--new-visible-height", height + "px")
       root.style.setProperty("--new-visible-top", (viewport?.offsetTop ?? 0) + "px")
       const composer = root.querySelector<HTMLElement>(".agent-composer")
       const menuHeight = Math.max(40, height - (composer?.offsetHeight ?? 150) - 80)
       root.style.setProperty("--new-menu-height", menuHeight + "px")
+      if (editing && composer) {
+        // Scroll the field into view without removing the heading or artwork.
+        // Native scrollIntoView can also pan the layout viewport on iOS.
+        const bounds = root.getBoundingClientRect()
+        const field = composer.getBoundingClientRect()
+        const bottomOverflow = field.bottom - (bounds.bottom - 16)
+        if (bottomOverflow > 0) root.scrollTop += bottomOverflow
+      } else if (wasEditing) {
+        root.scrollTop = 0
+      }
     }
     function schedule() {
       if (!frame) frame = requestAnimationFrame(update)
