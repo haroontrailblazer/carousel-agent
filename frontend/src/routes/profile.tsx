@@ -1,5 +1,5 @@
 import * as React from "react"
-import { StudioEmblem } from "@/components/layout/studio-emblem"
+import { StudioArtwork } from "@/components/layout/studio-artwork"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Cable,
@@ -36,6 +36,7 @@ import { useProfile } from "@/hooks/use-profile"
 import { useTheme } from "@/hooks/use-theme"
 import { ApiError, del, get, post, postBytes } from "@/lib/api"
 import { compressAvatar } from "@/lib/image"
+import "./profile.css"
 
 type InstagramAccount = {
   id: string
@@ -106,10 +107,10 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <Card>
-      <CardHeader className="border-b border-[var(--border)]">
+    <Card className="profile-section">
+      <CardHeader className="profile-section-header">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)] bg-[var(--muted)]">
+          <span className="profile-section-icon">
             <Icon className="size-4" />
           </span>
           <div className="min-w-0">
@@ -120,7 +121,7 @@ function Section({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-5">{children}</CardContent>
+      <CardContent className="profile-section-content">{children}</CardContent>
     </Card>
   )
 }
@@ -227,95 +228,39 @@ function IdentitySection() {
   const shown = preview ?? profile.avatarUrl
 
   return (
-    <Section
-      icon={CircleUserRound}
-      title="Profile"
-      description="Manage the details people see across the workspace."
-    >
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center gap-4">
-          <UserAvatar
-            key={shown ?? "none"}
-            src={shown}
-            name={name || profile.displayName}
-            seed={profile.email}
-            className="size-16 shrink-0 text-xl"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Profile picture</p>
-            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-              JPG, PNG, or WebP. Images are resized before upload.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => void onPick(event)}
-              />
-              <Button
-                className="mt-2"
-                size="sm"
-                variant="default"
-                disabled={uploading}
-                onClick={() => fileInput.current?.click()}
-              >
-                <Upload /> {uploading ? "Working..." : "Upload"}
+    <Section icon={CircleUserRound} title="Personal details" description="A familiar face and name for your workspace.">
+      <div className="profile-identity">
+        <div className="profile-photo-row">
+          <div className="profile-photo-frame">
+            <UserAvatar key={shown ?? "none"} src={shown} name={name || profile.displayName} seed={profile.email} className="size-20 shrink-0 text-2xl" />
+          </div>
+          <div className="profile-photo-copy">
+            <h3>Profile photo</h3>
+            <p>JPG, PNG or WebP. We’ll resize it for you.</p>
+            <div className="profile-photo-actions">
+              <input ref={fileInput} type="file" accept="image/*" aria-label="Upload profile photo" className="hidden" onChange={event => void onPick(event)} />
+              <Button size="sm" variant="default" disabled={uploading} onClick={() => fileInput.current?.click()}>
+                <Upload />{uploading ? "Updating…" : shown ? "Change photo" : "Upload photo"}
               </Button>
-              {shown && (
-                <Button
-                  className="mt-2"
-                  size="sm"
-                  variant="ghost"
-                  disabled={uploading}
-                  onClick={() => void onRemove()}
-                >
-                  <Trash2 /> Remove
-                </Button>
-              )}
+              {shown && <Button size="sm" variant="ghost" disabled={uploading} onClick={() => void onRemove()}><Trash2 /> Remove</Button>}
             </div>
           </div>
         </div>
-
-        <div className="grid gap-4 border-t border-[var(--border)] pt-5 sm:grid-cols-2">
-          <div className="space-y-2">
-            <label htmlFor="display-name" className="block text-sm font-medium">
-              Display name
-            </label>
-            <Input
-              id="display-name"
-              value={name}
-              placeholder={profile.email.split("@")[0]}
-              onChange={(event) => {
-                setDirty(true)
-                setName(event.target.value)
-              }}
-            />
-            <p className="text-xs text-[var(--muted-foreground)]">
-              Shown beside your review decisions.
-            </p>
+        <div className="profile-fields">
+          <div className="profile-field">
+            <label htmlFor="display-name">Display name</label>
+            <Input id="display-name" value={name} placeholder={profile.email.split("@")[0]} onChange={event => { setDirty(true); setName(event.target.value) }} />
+            <p>Shown beside your review decisions.</p>
           </div>
-
-          <div className="space-y-2">
-            <label htmlFor="account-email" className="block text-sm font-medium">
-              Email address
-            </label>
+          <div className="profile-field">
+            <label htmlFor="account-email">Email address</label>
             <Input id="account-email" value={profile.email} disabled readOnly />
-            <p className="text-xs text-[var(--muted-foreground)]">
-              Managed by your sign-in provider.
-            </p>
+            <p>Managed by your sign-in provider.</p>
           </div>
         </div>
-
-        <div className="flex justify-end border-t border-[var(--border)] pt-5">
-          <Button
-            variant="brand"
-            onClick={() => void onSaveName()}
-            disabled={busy || !dirty}
-          >
-            {busy ? "Saving..." : "Save changes"}
-          </Button>
+        <div className="profile-save-row">
+          <span>{dirty ? "You have unsaved changes" : "Your details are shared across the workspace."}</span>
+          <Button variant="brand" disabled={busy || !dirty} onClick={() => void onSaveName()}><Check />{busy ? "Saving…" : "Save changes"}</Button>
         </div>
       </div>
     </Section>
@@ -330,49 +275,18 @@ function AppearanceSection() {
     { value: true, label: "Dark", icon: Moon },
   ]
   return (
-    <Section
-      icon={Palette}
-      title="Appearance"
-      description="Choose the theme used on this device."
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        {options.map(({ value, label, icon: Icon }) => {
-          const active = dark === value
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setDark(value)}
-              aria-pressed={active}
-              className={
-                "flex items-center gap-3 rounded-[var(--radius-md)] border p-4 text-left transition-colors " +
-                (active
-                  ? "border-[var(--foreground)] bg-[var(--muted)]"
-                  : "border-[var(--border)] hover:bg-[var(--muted)]")
-              }
-            >
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--background)]">
-                <Icon className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">{label}</span>
-                <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
-                  {value ? "Pitch-black canvas, soft contrast" : "Bright, paper-like interface"}
-                </span>
-              </span>
-              <span
-                className={
-                  "grid size-4 shrink-0 place-items-center rounded-full border " +
-                  (active
-                    ? "border-[var(--foreground)]"
-                    : "border-[var(--muted-foreground)]")
-                }
-              >
-                {active && <span className="size-2 rounded-full bg-[var(--foreground)]" />}
-              </span>
-            </button>
-          )
-        })}
+    <Section icon={Palette} title="Appearance" description="Choose the canvas you feel at home in. Saved on this device.">
+      <div className="profile-theme-options">
+        {options.map(({ value, label, icon: Icon }) => (
+          <button key={label} type="button" onClick={() => setDark(value)} aria-pressed={dark === value} className="profile-theme-option" data-appearance={value ? "dark" : "light"}>
+            <span className="profile-theme-preview" aria-hidden="true">
+              <span className="profile-preview-sidebar"><img src="/illustrations/carousel-sculpture-160.webp" alt="" /><i /><i /><i /></span>
+              <span className="profile-preview-main"><span className="profile-preview-title" /><span className="profile-preview-line" /><span className="profile-preview-composer"><i /></span><span className="profile-preview-cards"><i /><i /><i /></span></span>
+            </span>
+            <span className="profile-theme-label"><Icon /><strong>{label}</strong><span className="profile-theme-check" aria-hidden="true">{dark === value && <Check />}</span></span>
+            <span className="profile-theme-caption">{value ? "Pitch black. A quieter workspace." : "Warm ivory. Room for fresh ideas."}</span>
+          </button>
+        ))}
       </div>
     </Section>
   )
@@ -455,7 +369,7 @@ function TelegramSection() {
     <Section
       icon={Radio}
       title="Telegram"
-      description="Connect multiple bots. Every carousel, review request, and publish confirmation is automatically sent to all their chats."
+      description="Receive carousels, review requests, and publishing updates in your Telegram chats."
     >
       {unknown && (
         <div className="space-y-3">
@@ -469,7 +383,7 @@ function TelegramSection() {
       {!unknown && bots.length > 0 && (
         <ul className="mb-4 space-y-2">
           {bots.map((bot) => (
-            <li key={bot.bot_id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2">
+            <li key={bot.bot_id} className="profile-connected-account">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">@{bot.bot_username || bot.bot_id}</p>
                 <p className="text-xs text-[var(--muted-foreground)]">Chat {bot.chat_id} · {bot.token_masked}</p>
@@ -499,7 +413,7 @@ function TelegramSection() {
 
       {unknown ? null : (
         <div className="space-y-3">
-          <ol className="space-y-1.5 text-sm text-[var(--muted-foreground)]">
+          <ol className="profile-connection-steps">
             <li>
               1. Message{" "}
               <a
@@ -516,9 +430,11 @@ function TelegramSection() {
             <li>3. Send your new bot a message, so it knows where to reply.</li>
           </ol>
 
-          <div className="flex flex-wrap gap-2">
+          <label className="profile-input-label" htmlFor="telegram-bot-token">Bot token</label>
+          <div className="profile-token-actions">
             <Input
               type="password"
+              id="telegram-bot-token"
               aria-label="Telegram bot token"
               value={token}
               onChange={(event) => setToken(event.target.value)}
@@ -716,7 +632,7 @@ function InstagramSection() {
     <Section
       icon={Instagram}
       title="Instagram"
-      description="Optional. Connect each Instagram account with its own access token. Without one, finished carousels are sent to Telegram."
+      description="Connect your Instagram accounts to publish approved carousels."
     >
       {unknown && (
         <div className="space-y-3">
@@ -745,8 +661,9 @@ function InstagramSection() {
           {accounts.map((account) => (
             <li
               key={account.id}
-              className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2"
+              className="profile-connected-account"
             >
+              <span className="profile-connection-avatar" aria-hidden="true"><Instagram />
               <img
                 src={`/api/settings/instagram/${account.id}/avatar`}
                 alt=""
@@ -755,9 +672,9 @@ function InstagramSection() {
                 className="size-8 shrink-0 rounded-full object-cover"
                 // No stored picture is an ordinary state, not a broken image.
                 onError={(event) => {
-                  event.currentTarget.style.visibility = "hidden"
+                  event.currentTarget.style.display = "none"
                 }}
-              />
+              /></span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="truncate text-sm font-medium">
@@ -811,7 +728,9 @@ function InstagramSection() {
             You can connect multiple accounts and choose one before starting a carousel.
             Publishing to that account always requires your approval.
           </p>
-          <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border)] p-3">
+          <div className="profile-token-form">
+            <details className="profile-setup-help">
+              <summary>Where do I find my access token?</summary>
             <p className="text-sm text-[var(--muted-foreground)]">
               In the{" "}
               <a
@@ -827,6 +746,8 @@ function InstagramSection() {
               handle, name and picture are read from the token, so there is
               nothing else to fill in.
             </p>
+            </details>
+            <label className="profile-input-label" htmlFor="instagram-access-token">Access token</label>
 
             <Input
               type="password"
@@ -837,13 +758,14 @@ function InstagramSection() {
               spellCheck={false}
               className="w-full font-mono"
               aria-label="Instagram access token"
+              id="instagram-access-token"
             />
 
-            <div className="flex flex-wrap gap-2">
+            <div className="profile-token-actions">
               <Input
                 value={pastedId}
                 onChange={(event) => setPastedId(event.target.value)}
-                placeholder="Instagram user id (optional)"
+                placeholder="Optional user ID"
                 autoComplete="off"
                 spellCheck={false}
                 inputMode="numeric"
@@ -876,6 +798,7 @@ function InstagramSection() {
 }
 
 export function ProfileRoute() {
+  const { profile } = useProfile()
   type SettingsView = "account" | "appearance" | "connections"
   const [view, setView] = React.useState<SettingsView>(() => {
     const params = new URLSearchParams(window.location.search)
@@ -903,42 +826,22 @@ export function ProfileRoute() {
   ]
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <header className="studio-page-heading mb-6 flex items-center gap-4">
-        <StudioEmblem name="design-stylus" />
-        <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Account &amp; settings
-        </h1>
-        <p className="mt-1.5 text-sm text-[var(--muted-foreground)]">
-          Manage your profile, preferences, and connected accounts.
-        </p>
-        </div>
+    <div className="profile-page">
+      <header className="profile-page-heading">
+        <div><p className="profile-eyebrow">Your workspace</p><h1>Profile &amp; settings</h1><p>A little more you. Everywhere you create.</p></div>
+        <StudioArtwork name="design-stylus" sizes="96px" />
       </header>
-
-      <Tabs
-        items={views}
-        value={view}
-        onChange={setView}
-        label="Settings views"
-        className="mb-6 w-full justify-between [&_[role=tab]]:px-3 [&_[role=tab]]:text-xs sm:w-auto sm:[&_[role=tab]]:px-4 sm:[&_[role=tab]]:text-sm"
-      />
-
-      <TabPanel value="account" selected={view === "account"}>
-        <IdentitySection />
-      </TabPanel>
-
-      <TabPanel value="appearance" selected={view === "appearance"}>
-        <AppearanceSection />
-      </TabPanel>
-
-      <TabPanel
-        value="connections"
-        selected={view === "connections"}
-        className="space-y-5"
-      >
-          <InstagramSection />
-          <TelegramSection />
+      <div className="profile-overview">
+        <UserAvatar key={profile.avatarUrl ?? "none"} src={profile.avatarUrl} name={profile.displayName} seed={profile.email} className="profile-overview-avatar" />
+        <div><span className="profile-overview-label">Your profile</span><h2>{profile.displayName}</h2><p>{profile.email}</p></div>
+        <span className="profile-overview-note"><CircleUserRound /> Your studio account</span>
+      </div>
+      <Tabs items={views} value={view} onChange={setView} label="Settings views" className="profile-tabs" />
+      <TabPanel value="account" selected={view === "account"}><IdentitySection /></TabPanel>
+      <TabPanel value="appearance" selected={view === "appearance"}><AppearanceSection /></TabPanel>
+      <TabPanel value="connections" selected={view === "connections"} className="profile-connections">
+        <InstagramSection />
+        <TelegramSection />
       </TabPanel>
     </div>
   )

@@ -300,24 +300,15 @@ export function TaskSkeleton() {
   )
 }
 
-/** Profile: a title over the three cards, at the heights they really are. */
-const PROFILE_CARDS = ["h-52", "h-36", "h-60"]
-
+/** Profile: overview, view navigation, and the active settings section. */
 export function ProfileSkeleton() {
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
+    <div className="mx-auto max-w-[880px] space-y-5">
       <LoadingAnnounce />
-      <Skeleton className="h-7 w-24" />
-      {PROFILE_CARDS.map((height) => (
-        <div
-          key={height}
-          className="space-y-3 rounded-[var(--radius)] border border-[var(--border)] p-5"
-        >
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-3 w-56 max-w-full" />
-          <Skeleton className={`rounded-[var(--radius-md)] ${height}`} />
-        </div>
-      ))}
+      <div className="flex h-24 items-center justify-between gap-4" aria-hidden><div className="flex-1 space-y-3"><Skeleton className="h-3 w-28" /><Skeleton className="h-8 w-56 max-w-full" /><Skeleton className="h-3 w-64 max-w-full" /></div><Skeleton className="size-20 shrink-0 rounded-2xl" /></div>
+      <Skeleton className="h-[118px] rounded-2xl" />
+      <div className="flex gap-4" aria-hidden>{[0,1,2].map(i => <Skeleton key={i} className="h-10 w-28" />)}</div>
+      <Skeleton className="h-[360px] rounded-2xl" />
     </div>
   )
 }
