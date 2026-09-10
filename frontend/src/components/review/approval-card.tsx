@@ -14,6 +14,8 @@ import {
 } from "@/lib/pipeline"
 import type { RunDetail } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import type { InstagramConnection } from "@/hooks/use-instagram-connection"
+import { InstagramReviewGate } from "@/components/review/instagram-review-gate"
 
 /**
  * The decision surface.
@@ -41,6 +43,7 @@ import { cn } from "@/lib/utils"
  */
 export function ApprovalCard({
   run,
+  instagramConnection,
   coverChoiceNeeded,
   onApprove,
   onReject,
@@ -50,6 +53,7 @@ export function ApprovalCard({
   embedded = false,
 }: {
   run: RunDetail
+  instagramConnection: InstagramConnection
   /** True when the task has both covers and none has been picked yet. */
   coverChoiceNeeded: boolean
   onApprove: () => void
@@ -64,6 +68,7 @@ export function ApprovalCard({
   const [rejecting, setRejecting] = React.useState(false)
   const [feedback, setFeedback] = React.useState("")
   const [picked, setPicked] = React.useState<string[]>([])
+  const feedbackId = React.useId()
   const publishing = run.delivery_target === "instagram"
   const needsReconnect = publishing && !run.publish_configured
 
@@ -228,6 +233,10 @@ export function ApprovalCard({
   }
 
   // --- state 1: waiting for a human --------------------------------------
+  if (instagramConnection.status !== "connected") {
+    return <Card className={panelClass}><InstagramReviewGate connection={instagramConnection} /></Card>
+  }
+
   return (
     <Card className={panelClass}>
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -319,7 +328,7 @@ export function ApprovalCard({
 
       {rejecting && (
         <div className="space-y-3">
-          <p className="text-sm font-medium">What exactly is not good?</p>
+          <label htmlFor={feedbackId} className="block text-sm font-medium">What would you like changed?</label>
           <div className="flex flex-wrap gap-1.5">
             {REJECT_CATEGORIES.map((category) => {
               const on = picked.includes(category.key)
@@ -327,6 +336,7 @@ export function ApprovalCard({
                 <button
                   key={category.key}
                   type="button"
+                  aria-pressed={on}
                   onClick={() =>
                     setPicked((p) =>
                       on ? p.filter((k) => k !== category.key) : [...p, category.key],
@@ -350,6 +360,8 @@ export function ApprovalCard({
           </div>
 
           <Textarea
+            id={feedbackId}
+            aria-required="true"
             rows={3}
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}

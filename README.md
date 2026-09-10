@@ -15,7 +15,12 @@ CTA agent renders the closing slide, and a Stitch & Verify agent assembles and
 QA-checks the bundle.
 
 Every QA-passed run stops at **Needs review** and waits for a human decision.
-Instagram is optional. With no connected account, **Approve and send** sends
+Instagram is optional for creation and Telegram delivery. The console shows
+approval, rejection, and chat feedback controls only while a usable Instagram
+account is connected in **Profile → Instagram**. Without a connection, previews
+and downloads remain available. This is a UI requirement; it does not change
+the delivery target saved when the run started. For Telegram-targeted runs,
+**Approve and send** sends
 every finished carousel file and the full caption to all connected Telegram
 bots’ chats, then completes the run. **Reject** requests changes. Files are
 sent as documents to preserve their original quality. Telegram must be connected

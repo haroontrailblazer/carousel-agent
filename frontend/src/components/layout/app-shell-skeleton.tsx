@@ -48,27 +48,27 @@ export function AppShellSkeleton({
   const full = isFullHeightRoute(pathname)
   return (
     <div className="min-h-dvh bg-[var(--background)]">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[17rem] border-r border-[var(--border)] bg-[var(--card)] md:block">
-        <div className="studio-sidebar flex h-full flex-col gap-1 p-4">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-[var(--border)] bg-[var(--card)] md:block">
+        <div className="studio-sidebar flex h-full flex-col p-3">
           {/* The brand row is real. It needs nothing from the network and it
               is the part that makes the wait read as this app rather than as
               a generic loading screen. */}
-          <div className="mb-5 flex items-center gap-2.5 border-b border-[var(--border)] px-1 pb-6 pt-3">
-            <BrandLogo className="size-10" />
+          <div className="mb-3 flex shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-2 pb-3 pt-1">
+            <BrandLogo className="size-8" />
             <span className="min-w-0">
-              <span className="block truncate text-[15px] font-semibold leading-tight tracking-[-0.04em]">
+              <span className="block truncate text-[13px] font-semibold leading-tight tracking-[-0.03em]">
                 Carousel Factory
               </span>
-              <span className="mt-1 block truncate text-[9px] font-medium tracking-[0.14em] text-[var(--muted-foreground)]">
+              <span className="mt-0.5 block truncate text-[8px] font-medium tracking-[0.12em] text-[var(--muted-foreground)]">
                 THE CAROUSEL STUDIO
               </span>
             </span>
           </div>
 
-          <Skeleton className="mb-2 h-4 w-20" />
-          <div className="flex flex-col gap-1">
+          <Skeleton className="mb-1 ml-2.5 h-5 w-20" />
+          <div className="flex flex-col gap-0.5">
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-[42px]" />
+              <Skeleton key={i} className="h-[34px] rounded-[8px]" />
             ))}
           </div>
 
@@ -78,7 +78,7 @@ export function AppShellSkeleton({
         </div>
       </aside>
 
-      <div className="md:pl-[17rem]">
+      <div className="md:pl-64">
         {/* The same two wrappers `AppShell` picks between, so the screen does
             not change container the moment it mounts. */}
         <main

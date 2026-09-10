@@ -51,6 +51,7 @@ export function AgentComposer({
   target = null,
   onTargetChange,
   designs = [],
+  selectedDesignId,
   onDesignChange,
 }: {
   value: string
@@ -65,6 +66,8 @@ export function AgentComposer({
   onTargetChange?: (target: string | null) => void
   /** Saved formats available to `/design <name>` when starting a new run. */
   designs?: readonly { id: string; name: string }[]
+  /** Persist the selected format visually after the slash menu closes. */
+  selectedDesignId?: string
   onDesignChange?: (designId: string | null) => void
 }) {
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
@@ -73,6 +76,7 @@ export function AgentComposer({
   // first message of a chat?
   const working = state === "running" || state === "starting"
   const composing = state === "idle"
+  const selectedDesign = designs.find((design) => design.id === selectedDesignId)
 
   /**
    * The chat is still a skeleton, so the bar offers nothing.
@@ -217,7 +221,13 @@ export function AgentComposer({
           <span className="flex-1" />
         )}
 
-        {composing && <span className="studio-composer-hint">Type <kbd>/</kbd> to choose a design</span>}
+        {composing && (
+          <span className="studio-composer-hint" aria-live="polite">
+            {selectedDesign
+              ? <span className="studio-selected-design" title={selectedDesign.name}>Design: {selectedDesign.name}</span>
+              : <>Type <kbd>/</kbd> to choose a design</>}
+          </span>
+        )}
         <div className="ml-auto shrink-0">
           {working ? (
             // Stop is live from the first frame, including while the run is

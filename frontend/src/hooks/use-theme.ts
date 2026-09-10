@@ -5,7 +5,7 @@ const STORAGE_KEY = "carousel-theme"
 /** --background for each theme. Mirrors index.css and the boot script in
  *  index.html; all three have to agree or the browser chrome and the page
  *  disagree by a shade. */
-const BAR_COLOUR = { dark: "#191A1C", light: "#F6F4F0" } as const
+const BAR_COLOUR = { dark: "#000000", light: "#F6F4F0" } as const
 
 /**
  * Repaint the phone's browser chrome and the page's own frame.

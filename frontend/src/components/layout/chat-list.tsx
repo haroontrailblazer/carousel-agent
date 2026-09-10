@@ -86,7 +86,7 @@ function ChatRow({
 
   if (editing) {
     return (
-      <div className="relative z-10 flex h-9 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--muted)] px-2.5">
+      <div className="relative z-10 flex h-10 items-center gap-2 rounded-[8px] bg-[var(--muted)] px-2.5 md:h-8">
         <Dot tone={tone} label={label} live={isLive(run.status)} />
         <InlineEdit
           value={run.title ?? ""}
@@ -94,7 +94,7 @@ function ChatRow({
           label={`Rename ${chatTitle(run)}`}
           onCommit={commit}
           onCancel={onDone}
-          className="text-sm font-medium text-[var(--foreground)]"
+          className="text-xs font-medium text-[var(--foreground)]"
         />
         <button
           type="button"
@@ -109,7 +109,7 @@ function ChatRow({
   }
 
   return (
-    <div className="group/row relative z-10 flex h-9 items-center rounded-[var(--radius-md)]">
+    <div className="group/row relative z-10 flex h-10 items-center rounded-[8px] md:h-8">
       <Link
         data-glide-row
         to={chatPath(run.run_id)}
@@ -118,7 +118,7 @@ function ChatRow({
         onPointerEnter={() => void newRunChunk().catch(() => undefined)}
         title={chatTitle(run)}
         className={cn(
-          "flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)]",
+          "flex h-full min-w-0 flex-1 items-center gap-2 rounded-[8px]",
           // The rename control sits ON this row, so the label has to stop
           // before it. Reserved at every width rather than only where the
           // pencil is always visible: on a desktop it appears on hover, and
@@ -126,7 +126,7 @@ function ChatRow({
           // the pointer - and truncate a name at the exact moment someone is
           // reading it to decide whether to rename it.
           "pl-2.5 pr-9",
-          "text-sm font-medium transition-colors",
+          "text-xs font-medium transition-colors",
           active
             ? "bg-[var(--muted)] text-[var(--foreground)]"
             : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
@@ -211,16 +211,16 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div className="mt-3 flex min-h-0 flex-1 flex-col">
+    <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-[var(--border)] pt-2">
       {/* The header and the search field occupy the same row. The field grows
           out of the search control rather than pushing the label aside, so
           nothing below it moves when it opens. */}
-      <div className="relative mx-1 mb-1 h-8 shrink-0">
+      <div className="relative mb-1 h-8 shrink-0">
         <div
           aria-hidden={searchOpen}
           className={cn(
-            "absolute inset-0 flex items-center px-1.5",
-            "text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]",
+            "absolute inset-0 flex items-center px-2.5",
+            "text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--muted-foreground)]",
             "transition-[opacity,transform] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
             searchOpen
               ? "pointer-events-none -translate-x-1 opacity-0"
@@ -289,11 +289,11 @@ export function ChatList({ onNavigate }: { onNavigate?: () => void }) {
         {runs.isLoading && !runs.data ? (
           <div className="space-y-1">
             {[0, 1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-9" />
+              <Skeleton key={i} className="h-10 md:h-8" />
             ))}
           </div>
         ) : visible.length === 0 ? (
-          <p className="px-2.5 py-2 text-[13px] text-[var(--muted-foreground)]">
+          <p className="px-2.5 py-1.5 text-xs text-[var(--muted-foreground)]">
             {query ? "No chats found" : "No chats yet"}
           </p>
         ) : (

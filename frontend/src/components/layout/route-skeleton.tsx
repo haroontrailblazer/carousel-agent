@@ -191,13 +191,15 @@ export function ComposerSkeleton() {
       <div className="studio-topbar" aria-hidden><Skeleton className="h-4 w-32" /><Skeleton className="size-8 rounded-full" /></div>
       <div className="studio-create">
         <div className="w-full">
-          <div className="studio-intro" aria-hidden>
-            <Skeleton className="mb-5 size-14 rounded-2xl" />
-            <Skeleton className="mb-4 h-3 w-44" />
-            <Skeleton className="mb-3 h-11 w-64 max-w-full" />
-            <Skeleton className="h-11 w-80 max-w-full" />
-            <Skeleton className="mb-2 mt-5 h-3 w-80 max-w-full" />
-            <Skeleton className="h-3 w-52 max-w-full" />
+          <div className="studio-intro studio-intro--illustrated" aria-hidden>
+            <div className="studio-intro-copy">
+              <Skeleton className="mb-4 h-3 w-44" />
+              <Skeleton className="mb-3 h-11 w-64 max-w-full" />
+              <Skeleton className="h-11 w-80 max-w-full" />
+              <Skeleton className="mb-2 mt-5 h-3 w-80 max-w-full" />
+              <Skeleton className="h-3 w-52 max-w-full" />
+            </div>
+            <div className="studio-hero-art"><Skeleton className="aspect-square w-full rounded-[32px]" /></div>
           </div>
           <Skeleton className="h-[164px] rounded-[18px]" />
           <Skeleton className="mb-3 mt-6 h-3 w-28" />
@@ -206,12 +208,6 @@ export function ComposerSkeleton() {
           </div>
           <div className="mt-5 flex justify-center">
             <Skeleton className="h-3 w-80 max-w-full" />
-          </div>
-          <div className="studio-agents">
-            <Skeleton className="mb-5 h-4 w-40" />
-            <div className="studio-agent-grid">
-              {[0, 1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 rounded-[10px]" />)}
-            </div>
           </div>
         </div>
       </div>

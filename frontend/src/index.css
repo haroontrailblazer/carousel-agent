@@ -61,16 +61,16 @@
 }
 
 .dark {
-  --background: #191A1C;
+  --background: #000000;
   --foreground: #F4F1EB;
-  --card: #222427;
-  --popover: #222427;
-  --muted: #2B2D31;
-  --muted-foreground: #ABABA9;
-  --border: #3B3D40;
-  --input: #3B3D40;
+  --card: #0C0C0C;
+  --popover: #141414;
+  --muted: #191919;
+  --muted-foreground: #A6A6A6;
+  --border: #292929;
+  --input: #383838;
   --ring: #F79270;
-  --sidebar: #1E1F21;
+  --sidebar: #000000;
   --brand: #F79270;
   --brand-foreground: #271B16;
   --brand-hover: #FFA98D;
@@ -78,7 +78,7 @@
   --brand-soft-fg: #FFAC90;
   --secondary: #263B33;
   --secondary-foreground: #96CDB0;
-  --accent: #2B2D31;
+  --accent: #191919;
   --link: #FFAC90;
   --destructive: #F394A0;
   --destructive-foreground: #29191C;
@@ -103,8 +103,8 @@
   --phase-failed: #F394A0;
   --phase-failed-soft: #402830;
   --phase-failed-fg: #F5A8B2;
-  --shadow-card: 0 2px 8px rgb(0 0 0 / 12%);
-  --shadow-lift: 0 12px 36px -12px rgb(0 0 0 / 40%);
+  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 3%);
+  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 4%), 0 16px 48px rgb(0 0 0 / 60%);
 }
 
 @theme inline {

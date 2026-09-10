@@ -30,13 +30,13 @@ const NAV = [
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex min-w-0 items-center gap-2.5">
-      <BrandLogo className="size-10" />
+      <BrandLogo className="size-8" />
       {!compact && (
         <span className="min-w-0">
-          <span className="block truncate text-[15px] font-semibold leading-tight tracking-[-0.04em]">
+          <span className="block truncate text-[13px] font-semibold leading-tight tracking-[-0.03em]">
             Carousel Factory
           </span>
-          <span className="mt-1 block truncate text-[9px] font-medium tracking-[0.14em] text-[var(--muted-foreground)]">
+          <span className="mt-0.5 block truncate text-[8px] font-medium tracking-[0.12em] text-[var(--muted-foreground)]">
             THE CAROUSEL STUDIO
           </span>
         </span>
@@ -150,12 +150,12 @@ export function SidebarContent({
 
 
   return (
-    <div className="studio-sidebar flex h-full flex-col gap-1 p-4">
+    <div className="studio-sidebar flex h-full flex-col p-3">
       {/* Brand row, ruled off from the navigation below it - the same rule
           the footer uses above the theme switch. On the phone the drawer's
           close control lives on this row rather than on a row of its own,
           so the mark and the name occupy the space that row was wasting. */}
-      <div className="mb-5 flex items-center gap-2 border-b border-[var(--border)] px-1 pb-6 pt-3">
+      <div className="mb-3 flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-2 pb-3 pt-1">
         <span className="flex min-w-0 flex-1">
           <BrandMark />
         </span>
@@ -172,13 +172,14 @@ export function SidebarContent({
         )}
       </div>
 
-      <p className="mb-2 px-2.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--muted-foreground)]">Workspace</p>
-      <nav aria-label="Main navigation" className="mb-4 flex shrink-0 flex-col gap-1">
+      <p className="mb-1 px-2.5 text-[10px] font-semibold uppercase leading-5 tracking-[0.1em] text-[var(--muted-foreground)]">Workspace</p>
+      <nav aria-label="Main navigation" className="flex shrink-0 flex-col gap-0.5">
         {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
+            aria-current={to === "/new" && !composingNew ? false : "page"}
             // Hand the swap to the browser's View Transitions API: it
             // cross-fades the old screen into the new one on the compositor,
             // and does nothing at all where it is unsupported.
@@ -191,14 +192,14 @@ export function SidebarContent({
             onFocus={() => prefetch(to)}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-[13px] font-medium transition-colors",
+                "flex items-center gap-2.5 rounded-[8px] px-2.5 py-1.5 text-xs font-medium leading-5 transition-colors",
                 (to === "/new" ? composingNew : isActive)
                   ? "bg-[var(--brand-soft)] text-[var(--brand-soft-fg)]"
                   : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
               )
             }
           >
-            <Icon className="size-4 shrink-0" />
+            <Icon className="size-3.5 shrink-0" />
             <span className="truncate">{label}</span>
             {to === "/tasks" && <TaskDots />}
             {to === "/newsroom" && <QueueDot />}

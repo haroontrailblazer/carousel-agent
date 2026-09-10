@@ -33,6 +33,8 @@ import { AgentConversation } from "@/components/agent/agent-conversation"
 import { ChatSkeleton } from "@/components/layout/route-skeleton"
 import { Skeleton } from "@/components/ui/skeleton"
 import { InlineEdit } from "@/components/ui/inline-edit"
+import { InstagramReviewGate } from "@/components/review/instagram-review-gate"
+import { useInstagramConnection } from "@/hooks/use-instagram-connection"
 import { useRenameRun } from "@/hooks/use-rename-run"
 import { ChatScrollContext, useChatTail } from "@/hooks/use-chat-tail"
 import { useRailPanel } from "@/hooks/use-rail-panel"
@@ -266,6 +268,7 @@ export function AgentWorkspace({
   // be a second copy of the same expression, which is how two things that are
   // meant to agree start not agreeing.
   const state = composerStateFor(workspace, booting, justStarted)
+  const instagramConnection = useInstagramConnection(state === "review")
 
   /**
    * What happens to a message typed after the agents have stopped.
@@ -353,6 +356,7 @@ export function AgentWorkspace({
     const text = followUp.trim()
     if (text.length < 3 || rework.isPending || startAnother.isPending) return
     if (state === "review") {
+      if (instagramConnection.status !== "connected") return
       rework.mutate({ feedback: text, to: target })
       return
     }
@@ -364,7 +368,7 @@ export function AgentWorkspace({
       return
     }
     startAnother.mutate({ text, design })
-  }, [designId, designs, followUp, target, state, rework, startAnother])
+  }, [designId, designs, followUp, target, state, rework, startAnother, instagramConnection.status])
 
 
   // Gated on `booting`, so the skeleton gets the whole width and the rail
@@ -415,7 +419,9 @@ export function AgentWorkspace({
     </>
   )
 
-  const composer = (
+  const composer = state === "review" && instagramConnection.status !== "connected" ? (
+    <InstagramReviewGate connection={instagramConnection} compact />
+  ) : (
     <AgentComposer
       value={followUp}
       onChange={setFollowUp}

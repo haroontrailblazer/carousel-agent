@@ -6,8 +6,7 @@ import { toast } from "sonner"
 
 import { AgentComposer, type ComposerState } from "@/components/agent/agent-composer"
 import { AgentWorkspace } from "@/components/agent/agent-workspace"
-import { BrandLogo } from "@/components/layout/brand-logo"
-import { StudioAgents } from "@/components/agent/studio-agents"
+import { StudioArtwork } from "@/components/layout/studio-artwork"
 import { useTheme } from "@/hooks/use-theme"
 import { useRunWorkspace } from "@/hooks/use-run-workspace"
 import { ApiError, get, post } from "@/lib/api"
@@ -206,9 +205,9 @@ export function NewRunRoute() {
   return (
     <div className="agent-empty-workspace">
       <header className="studio-topbar">
-        <span><span className="text-[var(--muted-foreground)]">Workspace</span><span aria-hidden="true" className="mx-3 opacity-35">/</span>Create</span>
+        <span><span className="hidden sm:inline"><span className="text-[var(--muted-foreground)]">Workspace</span><span aria-hidden="true" className="mx-3 opacity-35">/</span></span>Create</span>
         <div className="flex items-center gap-4">
-          <Link to="/designs" className="studio-template-link">Design library <ArrowUpRight size={14} /></Link>
+          <Link to="/designs" className="studio-template-link"><span className="hidden sm:inline">Design library</span><span className="sm:hidden">Designs</span><ArrowUpRight size={14} /></Link>
           <button type="button" onClick={toggle} className="studio-theme-switch" aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
             {dark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -216,11 +215,15 @@ export function NewRunRoute() {
       </header>
       <div className="studio-create">
         <div className="w-full">
-          <div className="studio-intro">
-            <BrandLogo className="mb-5 size-14" />
-            <p className="studio-eyebrow">Ideas in. Carousels out.</p>
-            <h1>A good story.<br /><span>A great carousel.</span></h1>
-            <p className="studio-description">Your idea, a team of agents, and a little creative direction.<br className="hidden sm:block" /> Let’s make something worth swiping.</p>
+          <div className="studio-intro studio-intro--illustrated">
+            <div className="studio-intro-copy">
+              <p className="studio-eyebrow">Ideas in. Carousels out.</p>
+              <h1>A good story.<br /><span>A great carousel.</span></h1>
+              <p className="studio-description">Your idea, a team of agents, and a little creative direction. Let’s make something worth swiping.</p>
+            </div>
+            <div className="studio-hero-art" aria-hidden="true">
+              <StudioArtwork name="carousel-sculpture" priority sizes="(max-width: 767px) 160px, (max-width: 1100px) 210px, 340px" />
+            </div>
           </div>
 
           {/* Design selection intentionally lives only in the slash-command menu. */}
@@ -230,6 +233,7 @@ export function NewRunRoute() {
             onSubmit={submit}
             state={composerState}
             designs={designs}
+            selectedDesignId={designId}
             onDesignChange={(nextDesignId) => {
               setDesignId(nextDesignId ?? "")
               const selected = designs.find((design) => design.id === nextDesignId)
@@ -262,7 +266,6 @@ export function NewRunRoute() {
           />
 
           <p className="studio-review-note"><ShieldCheck size={14} /> You have the final say. Every carousel waits for your review.</p>
-          <StudioAgents />
         </div>
       </div>
     </div>

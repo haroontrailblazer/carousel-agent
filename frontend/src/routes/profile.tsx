@@ -356,7 +356,7 @@ function AppearanceSection() {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">{label}</span>
                 <span className="mt-0.5 block text-xs text-[var(--muted-foreground)]">
-                  {value ? "Low-light interface" : "Bright, paper-like interface"}
+                  {value ? "Pitch-black canvas, soft contrast" : "Bright, paper-like interface"}
                 </span>
               </span>
               <span

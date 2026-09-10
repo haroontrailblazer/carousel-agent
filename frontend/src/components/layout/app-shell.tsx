@@ -67,13 +67,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-[var(--background)]">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[17rem] border-r border-[var(--border)] bg-[var(--card)] md:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-[var(--border)] bg-[var(--card)] md:block">
         <SidebarContent />
       </aside>
 
       <SidebarDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <div className="md:pl-[17rem]">
+      <div className="md:pl-64">
         {/* No top bar on small screens - just the control that opens the
             drawer, floating over the page. The bar was spending 56px of a
             phone's height restating the app's name and mark, which the drawer

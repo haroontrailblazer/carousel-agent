@@ -11,6 +11,7 @@ import { ApiError, downloadFile, get, post } from "@/lib/api"
 import { isStopped, PHASE_LABELS } from "@/lib/pipeline"
 import { cn } from "@/lib/utils"
 import type { CoverChoice, RunArtifacts, RunDetail } from "@/lib/types"
+import { useInstagramConnection } from "@/hooks/use-instagram-connection"
 
 /**
  * The review surface: the decision card plus the carousel it is about.
@@ -33,6 +34,7 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
   const runId = run.run_id
   const queryClient = useQueryClient()
   const [coverChoice, setCoverChoice] = React.useState<CoverChoice>(null)
+  const instagramConnection = useInstagramConnection(run.pending_review || run.phase === "review")
 
   const artifacts = useQuery({
     queryKey: ["artifacts", runId],
@@ -76,8 +78,10 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
   })
 
   const decide = useMutation({
-    mutationFn: (payload: { status: string; feedback: string }) =>
-      post(`/api/runs/${runId}/verdict`, { ...payload, cover: coverChoice }),
+    mutationFn: (payload: { status: string; feedback: string }) => {
+      if (instagramConnection.status !== "connected") throw new Error("Connect Instagram before reviewing this carousel.")
+      return post(`/api/runs/${runId}/verdict`, { ...payload, cover: coverChoice })
+    },
     onSuccess: (_data, variables) => {
       toast.success(
         variables.status === "approved"
@@ -138,6 +142,7 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
     <>
       <ApprovalCard
         run={run}
+        instagramConnection={instagramConnection}
         coverChoiceNeeded={coverChoiceNeeded}
         busy={decide.isPending}
         onApprove={() => decide.mutate({ status: "approved", feedback: "" })}

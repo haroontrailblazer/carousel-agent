@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from "react-router"
 
 import { Button } from "@/components/ui/button"
 import { BrandLogo } from "@/components/layout/brand-logo"
+import { StudioArtwork } from "@/components/layout/studio-artwork"
 import { Input, Label } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
 import { loadAuthConfig } from "@/lib/supabase"
@@ -97,6 +98,7 @@ export function LoginRoute() {
         <div className="studio-login-headline">
           <p className="studio-eyebrow">Your agent-powered studio</p>
           <h2>From the first<br />idea to the<br /><em>final swipe.</em></h2>
+          <StudioArtwork name="carousel-sculpture" className="studio-login-art" sizes="(max-width: 767px) 0px, 240px" />
           <p>A creative team for every story. Research, copy, design, and quality checks — brought together in one workspace.</p>
         </div>
         <p className="studio-login-footer">Made by agents. Directed by you.</p>
