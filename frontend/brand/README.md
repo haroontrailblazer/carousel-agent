@@ -19,12 +19,12 @@ Use the mark at 24px or larger in the interface. The favicon may use 16px. Leave
 | Navigation | Sand `#EFECE6` | Pitch black `#000000` |
 | Text | Ink `#252420` | Warm white `#F4F1EB` |
 | Secondary text | Stone `#706A62` | Silver `#A6A6A6` |
-| Primary action | Burnt orange `#C74726` | Apricot `#F79270` |
-| Action text | White `#FFFFFF` | Dark brown `#271B16` |
-| Selected surface | Pale peach `#FBE7DE` | Dark clay `#3D2B26` |
+| Primary action | Logo orange `#C74726` | Logo orange `#C74726` |
+| Action text | White `#FFFFFF` | White `#FFFFFF` |
+| Selected surface | 9% logo orange on ivory | 10% logo orange on black |
 | Divider | `#DEDAD2` | `#292929` |
 
-The logo keeps its burnt-orange tile in either theme. Interactive colours adapt to the canvas. Status colours are separate: blue for generation, green for checks and completion, amber for review, and red for failures. Always pair semantic text with its matching soft-surface token.
+The logo tile, primary button fills, accent text, links, and focus rings use exactly #C74726 in both themes. The --logo-orange token is the shared UI source. Button hover and press feedback use depth instead of a different orange or a white sheen. Soft backgrounds and shadows derive from this same orange. Untouched starter designs and palette actions match the logo; saved custom design colors remain editable. Status colours are separate: blue for generation, green for checks and completion, amber for review, and red for failures. Always pair semantic text with its matching soft-surface token.
 
 ## Typography and interface
 

@@ -43,6 +43,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.observability import init_observability, shutdown_observability
 from app.schemas import NewsItem
+from app.news_media import feed_thumbnail
 from app.services import db
 from app.state import K_NEWS_ITEM, K_PHASE, K_RUN_ID, PHASE_DONE, PHASE_REVIEW
 
@@ -226,6 +227,7 @@ def _entry_payload(
         source_name=source_name,
         source_url=link,
         media_urls=media,
+        thumbnail_url=feed_thumbnail(entry),
         published_at=published,
         tags=tags,
     )

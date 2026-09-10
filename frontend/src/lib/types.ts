@@ -191,6 +191,8 @@ export type QueueItem = {
   source_name: string
   source_url: string
   created_at: string | null
+  thumbnail_url?: string
+  published_at?: string | null
 }
 
 /**

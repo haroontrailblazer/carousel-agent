@@ -400,7 +400,7 @@ const PREVIOUS_PREBUILT_DESIGNS: CarouselDesign[] = ORIGINAL_DESIGNS.map(origina
   return design
 })
 
-export const PREBUILT_DESIGNS: CarouselDesign[] = PREVIOUS_PREBUILT_DESIGNS.map(design => ({
+const PREVIOUS_COVER_DESIGNS: CarouselDesign[] = PREVIOUS_PREBUILT_DESIGNS.map(design => ({
   ...design,
   cover: coverLayout({
     ...design.cover, textColor: "#F6F4F0",
@@ -412,8 +412,23 @@ export const PREBUILT_DESIGNS: CarouselDesign[] = PREVIOUS_PREBUILT_DESIGNS.map(
   }),
 }))
 
+// Retain former presets above to migrate only untouched starter designs.
+export const PREBUILT_DESIGNS: CarouselDesign[] = PREVIOUS_COVER_DESIGNS.map(design => ({
+  ...design,
+  cover: {
+    ...design.cover,
+    highlightTextColor: design.cover.highlightTextColor === "#F79270" ? "#C74726" : design.cover.highlightTextColor,
+    accentColor: design.cover.accentColor === "#F79270" ? "#C74726" : design.cover.accentColor,
+  },
+  inside: {
+    ...design.inside,
+    highlightTextColor: design.inside.highlightTextColor === "#F79270" ? "#C74726" : design.inside.highlightTextColor,
+    accentColor: design.inside.accentColor === "#F79270" ? "#C74726" : design.inside.accentColor,
+  },
+}))
+
 function refreshUntouchedPreset(design: CarouselDesign): CarouselDesign {
-  const previous = [...ORIGINAL_DESIGNS, ...PREVIOUS_PREBUILT_DESIGNS].filter(item => item.id === design.id)
+  const previous = [...ORIGINAL_DESIGNS, ...PREVIOUS_PREBUILT_DESIGNS, ...PREVIOUS_COVER_DESIGNS].filter(item => item.id === design.id)
   if (!previous.some(item => JSON.stringify(designPayload(design)) === JSON.stringify(designPayload(normalizeDesign(item))))) return design
   return cloneDesign(PREBUILT_DESIGNS.find(item => item.id === design.id)!)
 }

@@ -251,7 +251,7 @@ export function AgentComposer({
             <button
               type="submit"
               disabled={loading || value.trim().length < 3}
-              className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[var(--brand-foreground)] transition-all hover:-translate-y-px hover:opacity-85 disabled:translate-y-0 disabled:opacity-25"
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--brand)] text-[var(--brand-foreground)] transition-all hover:-translate-y-px hover:shadow-md disabled:translate-y-0 disabled:opacity-25"
               title={
                 loading
                   ? "Loading this task…"

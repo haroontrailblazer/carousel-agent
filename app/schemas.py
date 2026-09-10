@@ -176,6 +176,7 @@ class NewsItem(BaseModel):
     source_name: str = ""
     source_url: str = ""
     media_urls: list[str] = Field(default_factory=list)
+    thumbnail_url: str = ""
     published_at: Optional[datetime] = None
     tags: list[str] = Field(default_factory=list)
 

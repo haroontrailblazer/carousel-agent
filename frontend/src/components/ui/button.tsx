@@ -14,7 +14,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         brand:
-          "studio-button--solid bg-[var(--brand)] text-[var(--brand-foreground)] hover:bg-[var(--brand-hover)] font-semibold shadow-sm",
+          "studio-button--solid studio-button--brand bg-[var(--brand)] text-[var(--brand-foreground)] hover:bg-[var(--brand-hover)] font-semibold shadow-sm",
         default:
           "studio-button--solid bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] hover:bg-[var(--muted)]",
         secondary:

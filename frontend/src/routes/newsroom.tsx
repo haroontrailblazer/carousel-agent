@@ -2,16 +2,38 @@ import * as React from "react"
 import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router"
-import { ExternalLink, Newspaper, RefreshCw } from "lucide-react"
+import { ArrowUpRight, Image as ImageIcon, Loader2, Newspaper, RefreshCw, Sparkles, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { SkeletonRows } from "@/components/ui/skeleton"
-import { MutedChip } from "@/components/ui/chip"
-import { ApiError, post } from "@/lib/api"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ApiError, del, post } from "@/lib/api"
 import { relativeTime } from "@/lib/format"
-import { isRemembered, queueQuery } from "@/lib/queries"
+import { isRemembered, queueQuery, rememberQueue } from "@/lib/queries"
+import type { QueueItem, QueueResponse } from "@/lib/types"
+import "./newsroom.css"
+
+function sourceUrl(value?: string): string | undefined {
+  try {
+    const url = new URL(value || "")
+    return ["http:", "https:"].includes(url.protocol) ? url.href : undefined
+  } catch { return undefined }
+}
+
+function StoryThumbnail({ item }: { item: QueueItem }) {
+  const [failedUrl, setFailedUrl] = React.useState<string | null>(null)
+  const url = sourceUrl(item.thumbnail_url)
+  return <div className="news-story-image">
+    {url && url !== failedUrl
+      ? <img src={url} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedUrl(url)} />
+      : <div className="news-story-fallback">
+          <img src="/illustrations/research-lens-320.webp" alt="" />
+          <span><ImageIcon /> No preview available</span>
+        </div>}
+    <span className="news-story-source">{item.source_name || "News source"}</span>
+  </div>
+}
 
 /**
  * The Newsroom: stories the scheduler has fetched, waiting for someone to
@@ -115,10 +137,34 @@ export function NewsroomRoute() {
     },
   })
 
+  const remove = useMutation({
+    mutationFn: (newsId: string) => del<{ result: string }>("/api/queue/" + encodeURIComponent(newsId)),
+    onSuccess: async (_data, newsId) => {
+      await queryClient.cancelQueries({ queryKey: ["queue"] })
+      queryClient.setQueryData<QueueResponse>(["queue"], current => {
+        if (!current) return current
+        const next = { ...current, items: current.items.filter(item => item.id !== newsId) }
+        rememberQueue(next)
+        return next
+      })
+      void queryClient.invalidateQueries({ queryKey: ["queue"] })
+      void queryClient.invalidateQueries({ queryKey: ["pulse"] })
+      toast.success("Story deleted", { description: "It won't return on the next feed check." })
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === "queue_item_gone") {
+        void queryClient.invalidateQueries({ queryKey: ["queue"] })
+      }
+      toast.error("Could not delete this story", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      })
+    },
+  })
+
   const items = queue.data?.items ?? []
 
   return (
-    <div className="space-y-5">
+    <div className="newsroom space-y-5">
       <div className="studio-page-heading flex flex-wrap items-center justify-between gap-3">
         <StudioEmblem name="research-lens" />
         <div className="min-w-0 flex-1">
@@ -131,7 +177,7 @@ export function NewsroomRoute() {
             )}
           </div>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Stories fetched from your feeds, waiting to be made into carousels.
+            Fresh stories. Your next carousel starts here.
           </p>
         </div>
         <Button
@@ -145,14 +191,21 @@ export function NewsroomRoute() {
         </Button>
       </div>
 
-      {queue.isLoading && <SkeletonRows rows={4} className="[&>*]:h-24" />}
+      {queue.isLoading && <div className="news-story-grid" role="status" aria-label="Loading stories">
+        {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-96" />)}
+      </div>}
+      {queue.isError && <Card className="p-5" role="alert">
+        <p className="font-medium">Couldn't refresh your stories</p>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">Check your connection and try again.</p>
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => void queue.refetch()}>Try again</Button>
+      </Card>}
 
-      {!queue.isLoading && items.length === 0 && (
+      {!queue.isLoading && !queue.isError && items.length === 0 && (
         <Card className="p-10 text-center">
           <Newspaper className="mx-auto size-6 text-[var(--muted-foreground)]" />
           <p className="mt-3 font-medium">The newsroom is empty</p>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Stories arrive automatically from your RSS feeds every hour. You can
+            Stories arrive automatically from your RSS feeds. You can
             also check right now, or write your own topic.
           </p>
           <div className="mt-4 flex justify-center gap-2">
@@ -166,50 +219,36 @@ export function NewsroomRoute() {
         </Card>
       )}
 
-      <div className="space-y-2">
-        {items.map((item) => {
-          const busy = claiming === item.id
-          return (
-            <Card key={item.id} className="p-4">
-              <div className="flex flex-wrap items-start gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium leading-snug">{item.title}</p>
-                  {item.summary && (
-                    <p className="mt-1 line-clamp-2 text-sm text-[var(--muted-foreground)]">
-                      {item.summary}
-                    </p>
-                  )}
-                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                    <MutedChip>{item.source_name || "unknown source"}</MutedChip>
-                    <span className="text-xs text-[var(--muted-foreground)]">
-                      {relativeTime(item.created_at)}
-                    </span>
-                    {item.source_url && (
-                      <a
-                        href={item.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-[var(--link)] hover:underline"
-                      >
-                        read it <ExternalLink className="size-3" />
-                      </a>
-                    )}
-                  </div>
+      {items.length > 0 && <>
+        <div className="newsroom-section-label"><span>Ready to create</span><span>{items.length} {items.length === 1 ? "story" : "stories"}</span></div>
+        <div className="news-story-grid">
+          {items.map(item => {
+            const busy = claiming === item.id
+            const deleting = remove.isPending && remove.variables === item.id
+            const href = sourceUrl(item.source_url)
+            return <article key={item.id} className="news-story-card" aria-label={item.title} aria-busy={busy || deleting}>
+              <StoryThumbnail item={item} />
+              <div className="news-story-body">
+                <div className="news-story-meta"><span>{relativeTime(item.published_at || item.created_at)}</span><span>From your feeds</span></div>
+                <h2 className="news-story-title">{href
+                  ? <a href={href} target="_blank" rel="noreferrer" title="Read original article">{item.title}<ArrowUpRight aria-hidden="true" /></a>
+                  : item.title}</h2>
+                <p className="news-story-description">{item.summary || "Open the original story for the details, or turn this headline into your next carousel."}</p>
+                <div className="news-story-actions">
+                  <Button variant="brand" size="sm" onClick={() => start.mutate(item.id)} disabled={start.isPending || remove.isPending}>
+                    {busy ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                    {busy ? "Creating…" : "Create carousel"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="news-story-delete" onClick={() => remove.mutate(item.id)} disabled={start.isPending || remove.isPending}>
+                    {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                    {deleting ? "Deleting…" : "Delete"}
+                  </Button>
                 </div>
-
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={() => start.mutate(item.id)}
-                  disabled={busy || start.isPending}
-                >
-                  {busy ? "Sendingâ€¦" : "Use this"}
-                </Button>
               </div>
-            </Card>
-          )
-        })}
-      </div>
+            </article>
+          })}
+        </div>
+      </>}
     </div>
   )
 }

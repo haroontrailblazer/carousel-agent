@@ -24,7 +24,7 @@ const TRANSFORM_KEYS: Record<MoveableElementKind, "titleTransform" | "imageTrans
 }
 const PALETTES = [
   { name: "Studio light", background: "#F6F4F0", textColor: "#252420", highlightTextColor: "#C74726", accentColor: "#C74726" },
-  { name: "Studio black", background: "#000000", textColor: "#F6F4F0", highlightTextColor: "#F79270", accentColor: "#F79270" },
+  { name: "Studio black", background: "#000000", textColor: "#F6F4F0", highlightTextColor: "#C74726", accentColor: "#C74726" },
 ]
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 const round = (value: number) => Math.round(value * 10) / 10
@@ -458,7 +458,7 @@ export function DesignsRoute() {
         }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur() }} /></Field>
         <div className="simple-palette-list" role="group" aria-label="Apply palette to both slides">
           {PALETTES.map(({ name, ...colors }) => <button key={name} type="button" aria-pressed={selected.inside.background.toLowerCase() === colors.background.toLowerCase() && selected.inside.textColor.toLowerCase() === colors.textColor.toLowerCase()}
-            onClick={() => updateDesign(d => ({ ...d, cover: { ...d.cover, ...colors, textColor: "#F6F4F0", highlightTextColor: colors.highlightTextColor === "#252420" ? "#F6F4F0" : "#F79270" }, inside: { ...d.inside, ...colors } }))}>
+            onClick={() => updateDesign(d => ({ ...d, cover: { ...d.cover, ...colors, textColor: "#F6F4F0", highlightTextColor: colors.highlightTextColor === "#252420" ? "#F6F4F0" : "#C74726" }, inside: { ...d.inside, ...colors } }))}>
             <span aria-hidden="true" style={{ background: colors.background, color: colors.highlightTextColor, borderColor: colors.textColor + "33" }}>Aa</span>{name}
           </button>)}
         </div>

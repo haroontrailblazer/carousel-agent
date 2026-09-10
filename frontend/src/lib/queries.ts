@@ -86,6 +86,11 @@ export function runsQuery() {
   }
 }
 
+/** Keep deleted/claimed stories out of remembered lists after a reload. */
+export function rememberQueue(data: QueueResponse): void {
+  writeSnapshot("queue", data)
+}
+
 /** Stories waiting in the newsroom, plus whether a feed check is running. */
 export function queueQuery() {
   return {

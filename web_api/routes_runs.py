@@ -1019,6 +1019,19 @@ async def list_queue(
     }
 
 
+@router.delete("/queue/{news_id}")
+async def delete_queue_item(
+    news_id: str, _identity: Identity = Depends(current_identity),
+) -> dict:
+    """Delete unused story content from the shared newsroom."""
+    if not await db.delete_queued_news(news_id):
+        raise HTTPException(409, {
+            "code": "queue_item_gone",
+            "message": "This story is no longer available to delete. Refresh the newsroom.",
+        })
+    return {"result": "deleted", "news_id": news_id}
+
+
 @router.post("/queue", status_code=status.HTTP_201_CREATED)
 async def enqueue(
     payload: EnqueueRequest, _identity: Identity = Depends(current_identity)

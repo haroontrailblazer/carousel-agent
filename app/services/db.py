@@ -27,6 +27,7 @@ from typing import Any, Optional
 import asyncpg
 
 from app.config import settings
+from app.news_media import news_thumbnail
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ STATUS_QUEUED = "queued"
 STATUS_PROCESSING = "processing"
 STATUS_DONE = "done"
 STATUS_FAILED = "failed"
+STATUS_DELETED = "deleted"
 
 # Explicit timeouts (seconds) for every network interaction with Postgres.
 _ACQUIRE_TIMEOUT_S = 15.0
@@ -235,6 +237,17 @@ async def enqueue_news(item: dict) -> dict:
     existing = await pool.fetchrow(
         "SELECT id FROM news_queue WHERE url_hash = $1", h
     )
+    # Enrich older queued stories when a later feed check provides an image.
+    # Deleted markers and stories already in use must never be repopulated.
+    thumbnail = news_thumbnail(payload)
+    if existing and thumbnail:
+        await pool.execute(
+            """UPDATE news_queue
+               SET payload = jsonb_set(payload, '{thumbnail_url}', to_jsonb($2::text))
+               WHERE id = $1 AND status = $3
+                 AND COALESCE(payload->>'thumbnail_url', '') = ''""",
+            existing["id"], thumbnail, STATUS_QUEUED,
+        )
     return {
         "id": existing["id"] if existing else str(payload["id"]),
         "url_hash": h,
@@ -307,10 +320,33 @@ async def list_queued_news(limit: int = 50) -> list[dict]:
                 "summary": payload.get("summary", ""),
                 "source_name": payload.get("source_name", ""),
                 "source_url": payload.get("source_url", ""),
+                "thumbnail_url": news_thumbnail(payload),
+                "published_at": payload.get("published_at"),
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             }
         )
     return items
+
+
+async def delete_queued_news(news_id: str) -> bool:
+    """Erase a queued story, retaining its URL hash to prevent RSS re-import.
+
+    The conditional update races safely with claims: only queued, unused
+    stories can be erased. Existing runs and their source content are kept.
+    No schema migration is required; status is an unconstrained text column.
+    """
+    pool = await get_pool()
+    deleted = await pool.fetchval(
+        """
+        UPDATE news_queue
+        SET payload = '{}'::jsonb, status = $2
+        WHERE id = $1 AND status = $3
+          AND NOT EXISTS (SELECT 1 FROM runs WHERE news_id = $1)
+        RETURNING id
+        """,
+        str(news_id), STATUS_DELETED, STATUS_QUEUED,
+    )
+    return deleted is not None
 
 
 async def next_queued_news_by_id(news_id: str) -> Optional[dict]:
@@ -1459,7 +1495,7 @@ async def news_payload(news_id: str) -> Optional[dict]:
     """
     pool = await get_pool()
     row = await pool.fetchrow(
-        "SELECT id, payload FROM news_queue WHERE id = $1", str(news_id)
+        "SELECT id, payload FROM news_queue WHERE id = $1 AND status <> $2", str(news_id), STATUS_DELETED
     )
     if row is None:
         return None

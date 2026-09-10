@@ -7,6 +7,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Exact tile fill from public/logo.svg, shared by both themes. */
+  --logo-orange: #C74726;
   --radius: 1rem;
   --radius-pill: .75rem;
   --background: #F6F4F0;
@@ -19,20 +21,20 @@
   --muted-foreground: #706A62;
   --border: #DEDAD2;
   --input: #DEDAD2;
-  --ring: #C74726;
+  --ring: var(--logo-orange);
   --sidebar: #EFECE6;
-  --brand: #C74726;
+  --brand: var(--logo-orange);
   --brand-foreground: #FFFFFF;
-  --brand-hover: #AC381C;
-  --brand-soft: #FBE7DE;
-  --brand-soft-fg: #A9361D;
+  --brand-hover: var(--logo-orange);
+  --brand-soft: color-mix(in srgb, var(--logo-orange) 9%, var(--background));
+  --brand-soft-fg: var(--logo-orange);
   --primary: var(--brand);
   --primary-foreground: var(--brand-foreground);
   --secondary: #E1ECE6;
   --secondary-foreground: #285D4B;
   --accent: #EDEAE4;
   --accent-foreground: var(--foreground);
-  --link: #A9361D;
+  --link: var(--logo-orange);
   --destructive: #B52D3F;
   --destructive-foreground: #FFFFFF;
   --phase-generate: #4C6BB2;
@@ -69,17 +71,17 @@
   --muted-foreground: #A6A6A6;
   --border: #292929;
   --input: #383838;
-  --ring: #F79270;
+  --ring: var(--logo-orange);
   --sidebar: #000000;
-  --brand: #F79270;
-  --brand-foreground: #271B16;
-  --brand-hover: #FFA98D;
-  --brand-soft: #3D2B26;
-  --brand-soft-fg: #FFAC90;
+  --brand: var(--logo-orange);
+  --brand-foreground: #FFFFFF;
+  --brand-hover: var(--logo-orange);
+  --brand-soft: color-mix(in srgb, var(--logo-orange) 10%, var(--background));
+  --brand-soft-fg: var(--logo-orange);
   --secondary: #263B33;
   --secondary-foreground: #96CDB0;
   --accent: #191919;
-  --link: #FFAC90;
+  --link: var(--logo-orange);
   --destructive: #F394A0;
   --destructive-foreground: #29191C;
   --phase-generate: #9CB7F1;
