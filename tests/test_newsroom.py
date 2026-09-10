@@ -7,7 +7,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from app.news_media import feed_thumbnail, news_thumbnail, safe_image_url
 from app.services import db
+from app.schemas import CarouselDesign
+from app.runs.service import StartedRun
 from fetcher.fetch_news import _entry_payload
+from web_api import routes_runs
 from web_api.routes_runs import router
 from web_api.deps import current_identity
 from web_api.auth import Identity
@@ -73,3 +76,58 @@ def test_deleted_payloads_are_unavailable_to_reruns():
     with patch.object(db, "get_pool", AsyncMock(return_value=pool)):
         assert asyncio.run(db.news_payload("deleted")) is None
     assert pool.fetchrow.await_args.args[-1] == db.STATUS_DELETED
+
+
+def test_newsroom_requires_design_before_claiming_story_or_starting_agents():
+    with (
+        patch.object(db, "next_queued_news_by_id", AsyncMock()) as claim,
+        patch.object(routes_runs, "start_run", AsyncMock()) as start,
+    ):
+        response = client().post("/api/runs", json={"source": "queue", "news_id": "story"})
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "design_required"
+    claim.assert_not_awaited()
+    start.assert_not_awaited()
+
+
+def test_unavailable_design_does_not_claim_newsroom_story():
+    with (
+        patch.object(db, "get_carousel_design", AsyncMock(return_value=None)) as lookup,
+        patch.object(db, "next_queued_news_by_id", AsyncMock()) as claim,
+        patch.object(routes_runs, "start_run", AsyncMock()) as start,
+    ):
+        response = client().post("/api/runs", json={
+            "source": "queue", "news_id": "story", "design_id": "deleted-design",
+        })
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "design_not_found"
+    lookup.assert_awaited_once_with("reader@example.com", "deleted-design")
+    claim.assert_not_awaited()
+    start.assert_not_awaited()
+
+
+@pytest.mark.parametrize("send_contract", [True, False], ids=["picker-contract", "saved-design-id"])
+def test_newsroom_freezes_selected_design_branding_cta_and_slide_limit(send_contract):
+    design = CarouselDesign(
+        id="newsroom-test", name="My newsroom style", max_slides=6,
+        handle_text="@testbrand", cta={"background": "#102030"},
+    ).model_dump(mode="json")
+    story = {"id": "story", "title": "A new story"}
+    payload = {"source": "queue", "news_id": "story", "design_id": design["id"]}
+    if send_contract:
+        payload["design"] = design
+    with (
+        patch.object(db, "get_carousel_design", AsyncMock(return_value=design)),
+        patch.object(db, "upsert_carousel_design", AsyncMock()) as save,
+        patch.object(db, "next_queued_news_by_id", AsyncMock(return_value=story)) as claim,
+        patch.object(routes_runs, "start_run", AsyncMock(return_value=StartedRun("run-test", "story", "A new story"))) as start,
+    ):
+        response = client().post("/api/runs", json=payload)
+    assert response.status_code == 202
+    claim.assert_awaited_once_with("story")
+    assert start.await_args.kwargs["news"] == story
+    assert start.await_args.kwargs["design"] == design
+    if send_contract:
+        save.assert_awaited_once_with("reader@example.com", design)
+    else:
+        save.assert_not_awaited()

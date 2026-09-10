@@ -7,8 +7,10 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { NewsroomDesignDialog } from "@/components/newsroom-design-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ApiError, del, post } from "@/lib/api"
+import { type CarouselDesign, designPayload } from "@/lib/designs"
 import { relativeTime } from "@/lib/format"
 import { isRemembered, queueQuery, rememberQueue } from "@/lib/queries"
 import type { QueueItem, QueueResponse } from "@/lib/types"
@@ -51,6 +53,9 @@ function StoryThumbnail({ item }: { item: QueueItem }) {
 export function NewsroomRoute() {
   const queryClient = useQueryClient()
   const [claiming, setClaiming] = React.useState<string | null>(null)
+  const [selectedStory, setSelectedStory] = React.useState<QueueItem | null>(null)
+  const createTrigger = React.useRef<HTMLButtonElement | null>(null)
+  const submitting = React.useRef(false)
 
   const queue = useQuery({
     // Options live in lib/queries.ts: this list is remembered between visits
@@ -90,17 +95,21 @@ export function NewsroomRoute() {
   })
 
   const start = useMutation({
-    mutationFn: (newsId: string) =>
+    mutationFn: ({ newsId, design }: { newsId: string; design: CarouselDesign }) =>
       post<{ run_id: string; title: string }>("/api/runs", {
         source: "queue",
         news_id: newsId,
+        design_id: design.id,
+        design: designPayload(design),
       }),
-    onMutate: (newsId) => setClaiming(newsId),
-    onSettled: () => setClaiming(null),
+    onMutate: ({ newsId }) => setClaiming(newsId),
+    onSettled: () => { setClaiming(null); submitting.current = false },
     onSuccess: (data) => {
+      setSelectedStory(null)
       // Both lists change: the story leaves the queue, and a task appears.
       void queryClient.invalidateQueries({ queryKey: ["queue"] })
       void queryClient.invalidateQueries({ queryKey: ["runs"] })
+      void queryClient.invalidateQueries({ queryKey: ["pulse"] })
       toast.success("Your carousel is cooking", {
         description: data.title,
         duration: 6000,
@@ -127,6 +136,7 @@ export function NewsroomRoute() {
         return
       }
       if (code === "queue_item_gone") {
+        setSelectedStory(null)
         void queryClient.invalidateQueries({ queryKey: ["queue"] })
         toast.info("Already taken", {
           description: "Someone picked that story first.",
@@ -235,7 +245,7 @@ export function NewsroomRoute() {
                   : item.title}</h2>
                 <p className="news-story-description">{item.summary || "Open the original story for the details, or turn this headline into your next carousel."}</p>
                 <div className="news-story-actions">
-                  <Button variant="brand" size="sm" onClick={() => start.mutate(item.id)} disabled={start.isPending || remove.isPending}>
+                  <Button variant="brand" size="sm" onClick={event => { createTrigger.current = event.currentTarget; setSelectedStory(item) }} disabled={start.isPending || remove.isPending}>
                     {busy ? <Loader2 className="animate-spin" /> : <Sparkles />}
                     {busy ? "Creating…" : "Create carousel"}
                   </Button>
@@ -249,6 +259,18 @@ export function NewsroomRoute() {
           })}
         </div>
       </>}
+      {selectedStory && <NewsroomDesignDialog
+        key={selectedStory.id}
+        title={selectedStory.title}
+        busy={start.isPending}
+        onClose={() => { if (!submitting.current) setSelectedStory(null) }}
+        onReturnFocus={() => createTrigger.current?.focus()}
+        onCreate={design => {
+          if (submitting.current) return
+          submitting.current = true
+          start.mutate({ newsId: selectedStory.id, design })
+        }}
+      />}
     </div>
   )
 }

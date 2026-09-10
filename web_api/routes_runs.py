@@ -304,6 +304,11 @@ async def create_run(
     if payload.source == "queue":
         if not payload.news_id:
             raise HTTPException(400, {"code": "no_news_id", "message": "Pick an item."})
+        if resolved_design is None:
+            raise HTTPException(400, {
+                "code": "design_required",
+                "message": "Choose a design before creating a carousel from this story.",
+            })
         item = await db.next_queued_news_by_id(payload.news_id)
         if item is None:
             raise HTTPException(
