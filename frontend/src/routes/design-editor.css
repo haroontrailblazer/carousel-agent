@@ -79,11 +79,6 @@
 .simple-placement summary, .simple-design-options summary { cursor: pointer; color: var(--muted-foreground); font-size: 11px; padding-block: 6px; }
 .simple-placement[open] > * + * { margin-top: 12px; }.simple-geometry { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.simple-placement-actions { display: flex; gap: 6px; }
 .simple-design-options { margin-top: 16px; }.simple-design-options button { margin-top: 8px; color: var(--destructive); }
-.simple-logo-upload { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.simple-logo-upload-preview { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 8px; background: var(--background); padding: 4px; }
-.simple-logo-upload-preview img { width: 100%; height: 100%; object-fit: contain; }.simple-logo-upload-preview > svg { width: 15px; height: 15px; color: var(--muted-foreground); }
-.simple-logo-upload > div:nth-child(2) { min-width: 0; flex: 1; }.simple-logo-upload small { display: block; margin-top: 5px; color: var(--muted-foreground); font-size: 9px; }
-.simple-logo-upload > button { display: grid; place-items: center; width: 26px; height: 30px; flex: 0 0 auto; border-radius: 5px; }.simple-logo-upload > button:hover { background: var(--muted); }
 .simple-branding-error { color: var(--destructive); font-size: 11px; line-height: 1.5; }
 .simple-design-editor button:focus-visible, .simple-design-editor input:focus-visible, .simple-design-editor select:focus-visible, .simple-design-editor summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 @media (min-width: 768px) and (max-width: 1100px) { .simple-design-editor { grid-template-columns: minmax(0, 1fr) 244px; }.simple-editor-header, .simple-editor-library { padding-inline: 16px; }.simple-editor-workspace { padding-inline: 14px; }.simple-editor-controls { padding-inline: 14px; }.simple-save-state { display: none; } }

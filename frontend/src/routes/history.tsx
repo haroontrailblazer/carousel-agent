@@ -5,15 +5,16 @@ import { Link } from "react-router"
 
 import { TaskActions } from "@/components/run/task-actions"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Chip, MutedChip } from "@/components/ui/chip"
-import { SkeletonRows } from "@/components/ui/skeleton"
+import { Chip } from "@/components/ui/chip"
+import { Skeleton } from "@/components/ui/skeleton"
 import { relativeTime } from "@/lib/format"
 import { isRemembered, runsQuery } from "@/lib/queries"
 import { PHASE_LABELS, STATUS_LABELS, STATUS_TOKEN } from "@/lib/pipeline"
 import { runDetailChunk } from "@/lib/route-chunks"
 import type { RunStatus } from "@/lib/types"
-import { cn } from "@/lib/utils"
+import { ArrowRight, ArrowUpRight, Layers, Plus, Search } from "lucide-react"
+import { StudioArtwork } from "@/components/layout/studio-artwork"
+import "./tasks.css"
 
 const FILTERS: { label: string; value: RunStatus | "all" }[] = [
   { label: "All", value: "all" },
@@ -22,6 +23,7 @@ const FILTERS: { label: string; value: RunStatus | "all" }[] = [
   { label: "Published", value: "done" },
   { label: "Interrupted", value: "interrupted" },
   { label: "Failed", value: "failed" },
+  { label: "Cancelled", value: "cancelled" },
 ]
 
 /**
@@ -59,140 +61,87 @@ export function useRuns() {
 
 export function HistoryRoute() {
   const [filter, setFilter] = React.useState<RunStatus | "all">("all")
+  const [search, setSearch] = React.useState("")
   const runs = useRuns()
-
   const all = runs.data?.items ?? []
-  const items = React.useMemo(
-    () => (filter === "all" ? all : all.filter((r) => r.status === filter)),
-    [all, filter],
-  )
-
-  // Counts come from the same data, so each chip can show its own tally
-  // without a single extra request.
+  const items = React.useMemo(() => {
+    const term = search.trim().toLowerCase()
+    return all.filter(run => (filter === "all" || run.status === filter)
+      && (!term || [run.title, run.run_id, run.source].some(value => value?.toLowerCase().includes(term))))
+  }, [all, filter, search])
   const counts = React.useMemo(() => {
     const map: Record<string, number> = { all: all.length }
     for (const run of all) map[run.status] = (map[run.status] ?? 0) + 1
     return map
   }, [all])
-
   const firstLoad = runs.isLoading && !runs.data
 
   return (
-    <div className="space-y-5">
-      <div className="studio-page-heading flex flex-wrap items-center justify-between gap-3">
+    <div className="tasks-page">
+      <header className="studio-page-heading tasks-heading">
         <StudioEmblem />
-        <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">Tasks</h1>
-          {/* Only while the remembered list is on screen unconfirmed - not on
-              every background poll, which would be a permanent flicker. */}
-          {isRemembered(runs) && (
-            <span className="text-xs text-[var(--muted-foreground)]">
-              refreshing…
-            </span>
-          )}
+        <div className="tasks-heading-copy">
+          <div className="flex items-baseline gap-2">
+            <h1>Tasks</h1>
+            {isRemembered(runs) && <span className="text-xs text-[var(--muted-foreground)]">refreshing…</span>}
+          </div>
+          <p>Your ideas, from first draft to final carousel.</p>
         </div>
-        <p className="studio-page-description">Your ideas, from first draft to final carousel.</p>
+        <Button variant="brand" size="sm" asChild><Link to="/new" viewTransition><Plus /> New carousel</Link></Button>
+      </header>
+
+      <section className="tasks-browser" aria-label="Browse tasks">
+        <div className="tasks-toolbar">
+          <div><strong>Your carousels</strong><span>{all.length} {all.length === 1 ? "task" : "tasks"}</span></div>
+          <label className="tasks-search"><Search aria-hidden="true" />
+            <input type="search" aria-label="Search tasks" placeholder="Search tasks…" value={search} onChange={event => setSearch(event.target.value)} />
+          </label>
         </div>
-        <Button variant="brand" size="sm" asChild>
-          <Link to="/new" viewTransition>New carousel</Link>
-        </Button>
-      </div>
+        <div className="tasks-filters" role="group" aria-label="Filter tasks by status">
+          {FILTERS.map(f => <button key={f.value} type="button" onClick={() => setFilter(f.value)} aria-pressed={filter === f.value}>
+            {f.label}<span>{counts[f.value] ?? 0}</span>
+          </button>)}
+        </div>
+      </section>
 
-      <div className="flex flex-wrap gap-1.5">
-        {FILTERS.map((f) => {
-          const count = counts[f.value] ?? 0
-          return (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFilter(f.value)}
-              aria-pressed={filter === f.value}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] border px-3 py-1 text-xs font-medium transition-colors",
-                filter === f.value
-                  ? "border-transparent bg-[var(--foreground)] text-[var(--background)]"
-                  : "border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]",
-                !count && f.value !== "all" && "opacity-45",
-              )}
-            >
-              {f.label}
-              {count > 0 && <span className="opacity-70">{count}</span>}
-            </button>
-          )
-        })}
-      </div>
-
-      {firstLoad && <SkeletonRows rows={4} />}
-
-      {!firstLoad && items.length === 0 && (
-        <Card className="p-10 text-center">
-          <p className="font-medium">Nothing here yet</p>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            {filter === "all"
-              ? "Start a task and it will show up here."
-              : "No tasks match that filter."}
-          </p>
-          {filter === "all" && (
-            <Button variant="brand" className="mt-4" asChild>
-              <Link to="/new" viewTransition>Make one</Link>
-            </Button>
-          )}
-        </Card>
+      {runs.isError && <div className="tasks-error" role="alert"><span>Couldn’t refresh your tasks. Try again to get the latest updates.</span><Button variant="secondary" size="sm" onClick={() => void runs.refetch()}>Try again</Button></div>}
+      {firstLoad && <div className="tasks-grid" role="status" aria-label="Loading tasks">{[0,1,2,3].map(i => <Skeleton key={i} className="task-card-skeleton" />)}</div>}
+      {!firstLoad && !runs.isError && items.length === 0 && (
+        <div className="tasks-empty">
+          <StudioArtwork name="carousel-sculpture" sizes="96px" />
+          <h2>{search || filter !== "all" ? "No matching tasks" : "Your next idea starts here"}</h2>
+          <p>{search || filter !== "all" ? "Try another search or choose a different status." : "Create a carousel and follow its progress here."}</p>
+          {search || filter !== "all"
+            ? <Button variant="secondary" size="sm" onClick={() => { setSearch(""); setFilter("all") }}>Clear filters</Button>
+            : <Button variant="brand" size="sm" asChild><Link to="/new" viewTransition>Create a carousel <ArrowRight /></Link></Button>}
+        </div>
       )}
-
-      <div className="space-y-2">
-        {items.map((run) => (
-          <Card key={run.run_id} glide className="flex flex-wrap items-start gap-3 p-4">
-            <Link
-              to={`/tasks/${run.run_id}`}
-              viewTransition
-              // Every row leads to the same screen, so the first hover
-              // anywhere in the list downloads it for all of them - the
-              // module resolves once and the rest are free.
-              onPointerEnter={() => void runDetailChunk().catch(() => undefined)}
-              className="min-w-0 flex-1"
-            >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">
-                    {run.title || <span className="font-mono text-sm">{run.run_id}</span>}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Chip
-                      tone={STATUS_TOKEN[run.status]}
-                      dot
-                      pulse={run.status === "running"}
-                    >
-                      {STATUS_LABELS[run.status]}
-                    </Chip>
-                    <MutedChip>{PHASE_LABELS[run.phase] ?? run.phase}</MutedChip>
-                    {run.source && <MutedChip>{run.source}</MutedChip>}
-                    <span className="text-xs text-[var(--muted-foreground)]">
-                      {relativeTime(run.created_at)}
-                    </span>
-                  </div>
-                </div>
+      {items.length > 0 && <div className="tasks-grid" aria-label="Your tasks">
+        {items.map(run => (
+          <article key={run.run_id} className="task-card" aria-label={run.title || run.run_id} data-status={run.status}>
+            <div className="task-card-top">
+              <Chip tone={STATUS_TOKEN[run.status]} dot pulse={run.status === "running"}>{STATUS_LABELS[run.status]}</Chip>
+              <time dateTime={run.created_at ?? undefined} title={run.created_at ?? undefined}>{relativeTime(run.created_at)}</time>
+            </div>
+            <Link to={'/tasks/' + run.run_id} viewTransition className="task-card-main"
+              onPointerEnter={() => void runDetailChunk().catch(() => undefined)}>
+              <div className="task-card-art" aria-hidden="true"><StudioArtwork name={run.phase === "generate" ? "research-lens" : run.phase === "rework" ? "design-stylus" : "carousel-sculpture"} sizes="64px" /></div>
+              <div className="task-card-copy"><h2>{run.title || "Untitled carousel"}</h2>
+                <p><Layers aria-hidden="true" />{PHASE_LABELS[run.phase] ?? run.phase}</p>
+              </div>
             </Link>
-
-                {run.status === "awaiting_review" ? (
-                  <Button
-                    variant="brand"
-                    size="sm"
-                    asChild
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Link to={`/tasks/${run.run_id}?tab=review`} viewTransition>Review</Link>
-                  </Button>
-                ) : (
-                  <TaskActions
-                    runId={run.run_id}
-                    status={run.status}
-                    title={run.title}
-                  />
-                )}
-          </Card>
+            <div className="task-card-meta"><span>{run.source === "queue" ? "From newsroom" : run.source === "manual" ? "From your brief" : run.source || "Carousel"}</span>{run.review_round > 0 && <span>Review round {run.review_round}</span>}</div>
+            <footer className="task-card-footer">
+              <Link to={'/tasks/' + run.run_id} viewTransition className="task-open-link">Open task <ArrowUpRight aria-hidden="true" /></Link>
+              <div className="task-card-actions">
+                {run.status === "awaiting_review"
+                  ? <Button variant="brand" size="sm" asChild><Link to={'/tasks/' + run.run_id + '?tab=review'} viewTransition>Review carousel <ArrowRight /></Link></Button>
+                  : <TaskActions runId={run.run_id} status={run.status} title={run.title} />}
+              </div>
+            </footer>
+          </article>
         ))}
-      </div>
+      </div>}
     </div>
   )
 }

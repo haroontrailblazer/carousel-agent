@@ -246,15 +246,22 @@ const CHIP_WIDTHS = ["w-14", "w-20", "w-16", "w-[4.5rem]", "w-15"]
 
 export function TasksSkeleton() {
   return (
-    <ListSkeleton
-      controls={
-        <div className="flex flex-wrap gap-1.5">
+    <div className="space-y-5">
+      <LoadingAnnounce />
+      <div className="flex min-h-24 items-center gap-3" aria-hidden>
+        <Skeleton className="size-16 shrink-0 rounded-2xl" />
+        <div className="flex-1 space-y-3"><Skeleton className="h-7 w-24" /><Skeleton className="h-3 w-60 max-w-full" /></div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3" aria-hidden><Skeleton className="h-4 w-36" /><Skeleton className="h-10 w-60 max-w-full rounded-xl" /></div>
+        <div className="flex gap-1.5 overflow-hidden" aria-hidden>
           {CHIP_WIDTHS.map((width) => (
             <Skeleton key={width} className={`h-[1.65rem] rounded-[var(--radius-pill)] ${width}`} />
           ))}
         </div>
-      }
-    />
+      <div className="grid grid-cols-1 min-[1101px]:grid-cols-2 gap-4" aria-hidden>
+        {[0,1,2,3].map(i => <Skeleton key={i} className="h-[238px] rounded-2xl" />)}
+      </div>
+    </div>
   )
 }
 

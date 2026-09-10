@@ -1,8 +1,8 @@
 import * as React from "react"
-import { Upload, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { ImagePlus, Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { type CarouselDesign } from "@/lib/designs"
 import { prepareDesignLogo } from "@/lib/design-logo"
+import "./design-branding.css"
 
 export function DesignBranding({ design, onChange, onBusy }: {
   design: CarouselDesign
@@ -54,17 +54,21 @@ export function DesignBranding({ design, onChange, onBusy }: {
   }
 
   return <section className="simple-control-section simple-design-branding">
-    <h2>Your branding</h2>
-    <label className="design-field"><span>Handle</span><input aria-label="Design handle" value={handle} placeholder="@yourbrand" maxLength={31} autoCapitalize="none" autoCorrect="off" spellCheck={false}
-      onChange={event => { setHandle(event.target.value); setError("") }} onBlur={saveHandle} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur() }} /></label>
-    <div className="simple-logo-upload">
-      <div className="simple-logo-upload-preview">{design.logoDataUrl ? <img src={design.logoDataUrl} alt="Logo for this design" /> : <Upload aria-hidden="true" />}</div>
-      <div><Button size="sm" variant="secondary" disabled={working} onClick={() => input.current?.click()}><Upload className="size-3" />{working ? "Preparing…" : design.logoDataUrl ? "Replace logo" : "Upload logo"}</Button>
-        <small>PNG, JPG or WebP · up to 5 MB</small></div>
-      {design.logoDataUrl && <button type="button" aria-label="Remove design logo" disabled={working} onClick={() => onChange(current => ({ ...current, logoDataUrl: "" }))}><X className="size-3.5" /></button>}
+    <h2>Your branding <span>For this design</span></h2>
+    <div className="branding-logo" aria-busy={working}>
+      <button className="branding-logo-picker" type="button" disabled={working} onClick={() => input.current?.click()} aria-label={design.logoDataUrl ? "Replace logo" : "Upload logo"}>
+        <span className="branding-logo-preview">{design.logoDataUrl ? <img src={design.logoDataUrl} alt="Logo for this design" /> : <img src="/illustrations/carousel-sculpture-160.webp" alt="" />}</span>
+        <span className="branding-logo-copy"><strong>{working ? "Preparing logo…" : design.logoDataUrl ? "Replace logo" : "Upload your logo"}</strong><span>{design.logoDataUrl ? "Choose a different image" : "Give every slide your signature"}</span></span>
+        <span className="branding-logo-action" aria-hidden="true">{working ? <Loader2 className="animate-spin" /> : design.logoDataUrl ? <RefreshCw /> : <ImagePlus />}</span>
+      </button>
+      <div className="branding-logo-details"><span>PNG, JPG or WebP · Max 5 MB</span>
+        {design.logoDataUrl && <button type="button" aria-label="Remove design logo" disabled={working} onClick={() => onChange(current => ({ ...current, logoDataUrl: "" }))}><Trash2 aria-hidden="true" /> Remove</button>}
+      </div>
       <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload design logo" className="sr-only" tabIndex={-1} onChange={pickLogo} disabled={working} />
     </div>
+    <label className="design-field branding-handle"><span>Instagram handle</span><input aria-label="Design handle" value={handle} placeholder="@yourbrand" maxLength={31} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+      onChange={event => { setHandle(event.target.value); setError("") }} onBlur={saveHandle} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur() }} /></label>
     {error && <p className="simple-branding-error" role="alert">{error}</p>}
-    <p className="simple-control-help">Saved for this design. Blank fields use your connected account’s branding.</p>
+    <p className="simple-control-help">Your logo and handle appear on this design’s slides. Leave them empty to use your connected account.</p>
   </section>
 }
