@@ -119,11 +119,18 @@ def _build_session_service() -> BaseSessionService:
 
 
 def _build_artifact_service() -> BaseArtifactService:
-    """Build the artifact service: Supabase S3-backed, else in-memory."""
-    if settings.s3_endpoint and settings.s3_access_key and settings.s3_secret_key:
+    """Prefer native Supabase Storage; retain existing S3 installations."""
+    native = bool(settings.supabase_storage_key)
+    legacy = settings.s3_endpoint and settings.s3_access_key and settings.s3_secret_key
+    if native or legacy:
         try:
             return SupabaseArtifactService()
         except Exception as exc:
+            if native:
+                raise RuntimeError(
+                    "Native Supabase Storage configuration is invalid; check "
+                    "SUPABASE_URL and the server-only Storage key."
+                ) from exc
             logger.warning(
                 "SupabaseArtifactService unavailable (%s); falling back to "
                 "InMemoryArtifactService.",
@@ -131,8 +138,8 @@ def _build_artifact_service() -> BaseArtifactService:
             )
     else:
         logger.warning(
-            "Supabase S3 settings missing (SUPABASE_S3_ENDPOINT / "
-            "SUPABASE_S3_ACCESS_KEY / SUPABASE_S3_SECRET_KEY); using "
+            "Supabase Storage settings missing (SUPABASE_URL and "
+            "SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY); using "
             "InMemoryArtifactService - artifacts stay local to this process, "
             "so slides vanish on exit and none can be signed for publishing."
         )

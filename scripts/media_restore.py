@@ -24,10 +24,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-import boto3  # noqa: E402
-from botocore.config import Config  # noqa: E402
-
 from app.config import settings  # noqa: E402
+from scripts.media_backup import _client  # noqa: E402
 
 
 def main() -> int:
@@ -46,21 +44,10 @@ def main() -> int:
         print(f"No mirror at {root}", file=sys.stderr)
         return 2
 
-    client = boto3.client(
-        "s3",
-        endpoint_url=settings.s3_endpoint,
-        region_name=settings.s3_region or "us-east-1",
-        aws_access_key_id=settings.s3_access_key,
-        aws_secret_access_key=settings.s3_secret_key,
-        config=Config(
-            retries={"max_attempts": 5, "mode": "standard"},
-            read_timeout=300,
-            connect_timeout=30,
-        ),
-    )
+    client = _client()
 
     files = sorted(p for p in root.rglob("*") if p.is_file())
-    print(f"{len(files)} files -> {bucket} at {settings.s3_endpoint}")
+    print(f"{len(files)} files -> {bucket} at {settings.supabase_url}")
     if args.dry_run:
         for path in files[:20]:
             print("  would upload", path.relative_to(root).as_posix())

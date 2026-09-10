@@ -99,6 +99,14 @@ except Exception:  # pragma: no cover - env dependent
 #: that leaks out of a screenshot should stop working the same hour.
 ARTIFACT_URL_TTL_S = 3600
 
+# The web console needs these fields, not the full research text, image data,
+# saved design logos and intermediate agent state in the same session row.
+_CONSOLE_STATE_KEYS = (
+    K_ACCOUNT_ID, K_REVIEW_NOTICE_FAILED, K_BODY_SLIDES, K_BUNDLE, K_COVER,
+    K_CTA_SLIDE, K_NEWS_ITEM, K_PLAN, K_PHASE, K_PUBLISH_RESULT, K_QA_REPORT,
+    K_REVIEW_ROUND, K_REWORK_ROUND, K_TOKEN_USAGE, K_VERDICT,
+)
+
 #: Heartbeat interval for the SSE stream. Render's proxy closes idle
 #: connections, and this pipeline routinely produces no events for minutes at a
 #: time while an image model works, so a silent stream is normal and must be
@@ -184,11 +192,15 @@ async def _session_state(run_id: str) -> dict:
     try:
         pool = await db.get_pool()
         row = await pool.fetchrow(
-            "SELECT state FROM public.sessions "
+            "SELECT (SELECT jsonb_object_agg(key, value) FROM jsonb_each("
+            "CASE WHEN jsonb_typeof(state) = 'string' THEN (state #>> '{}')::jsonb "
+            "ELSE COALESCE(state, '{}'::jsonb) END) "
+            "WHERE key = ANY($4::text[])) AS state FROM public.sessions "
             "WHERE app_name = $1 AND user_id = $2 AND id = $3",
             settings.app_name,
             PIPELINE_USER_ID,
             run_id,
+            list(_CONSOLE_STATE_KEYS),
         )
         if row is not None:
             state = row["state"]

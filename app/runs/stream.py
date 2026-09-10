@@ -169,7 +169,7 @@ async def _lifecycle_frames(run_id: str, limit: int) -> list[dict]:
     console opens a failed task's trace tab to show.
     """
     try:
-        rows = await db.load_run_events(run_id, after=0, limit=limit)
+        rows = await db.load_run_events(run_id, after=0, limit=limit, lifecycle_only=True)
     except Exception as exc:
         logger.warning("Could not read run_events for %s: %s", run_id, exc)
         return []

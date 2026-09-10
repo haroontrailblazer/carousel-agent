@@ -126,11 +126,17 @@ first use.
 ### 5. Artifact bucket (Supabase Storage)
 
 Create a **private** bucket named after `MEDIA_BUCKET` (default
-`carousel-media`) in Supabase Dashboard → Storage. Then enable the
-S3-compatible protocol (Project Settings → Storage → S3 access keys) and copy
-the endpoint, region, access key and secret into the `SUPABASE_S3_*` vars.
-The artifact service stores every cover video and slide PNG there and signs
-time-limited public URLs for review mails and Instagram publishing.
+`carousel-media`) in Supabase Dashboard → Storage. Native Storage uses
+`SUPABASE_URL` and one **server-only** key: `SUPABASE_SECRET_KEY` (preferred)
+or `SUPABASE_SERVICE_ROLE_KEY` (legacy JWT). No separate S3 setup is needed.
+The browser uses `SUPABASE_ANON_KEY` for Auth; background uploads cannot use
+an anonymous identity. `DATABASE_URL` remains the server's Postgres connection.
+Never put a server key or management personal access token in `VITE_*` variables.
+
+Existing `SUPABASE_S3_*` deployments continue working until a native key is
+configured. Keep `MEDIA_BUCKET` unchanged to preserve existing artifact paths.
+Media stays private; external publishers receive expiring signed download URLs.
+See [database and egress notes](db/egress.md) for validation and rollout steps.
 
 ### 6. Gmail OAuth (first run is interactive)
 

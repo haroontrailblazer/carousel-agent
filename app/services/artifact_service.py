@@ -1,8 +1,8 @@
 """Supabase Storage artifact service for the Carousel Factory.
 
 ``SupabaseArtifactService`` implements the full ``BaseArtifactService`` ABC of
-the installed google-adk (2.7.0) on top of Supabase Storage's S3-compatible
-API via boto3.
+the installed google-adk (2.7.0) on top of Supabase's native Storage API.
+Existing installations without a native server key retain the boto3 transport.
 
 Object key layout mirrors the shipped ``GcsArtifactService`` exactly:
 
@@ -14,10 +14,10 @@ Object key layout mirrors the shipped ``GcsArtifactService`` exactly:
 Versions are monotonically increasing integers starting at 0; every save
 creates a new object keyed by the next version (``max(existing) + 1``).
 
-boto3 is synchronous, so every network call runs inside ``asyncio.to_thread``
-from the async interface methods. Connection credentials come exclusively from
-``app.config.settings`` (``s3_endpoint`` / ``s3_region`` / ``s3_access_key`` /
-``s3_secret_key`` / ``media_bucket``) unless explicitly overridden.
+Storage calls run inside ``asyncio.to_thread`` from the async interface.
+Credentials come from ``app.config.settings``; the native transport needs
+``supabase_url`` / ``supabase_storage_key`` / ``media_bucket``. Explicit S3
+constructor arguments retain the legacy transport for compatible deployments.
 
 Unlike GCS (which stores each ADK marker as its own metadata entry), all
 per-object ADK metadata is packed into a single JSON document under the
@@ -31,6 +31,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
+import time
+from collections import OrderedDict
 from typing import Any, Optional, Union
 
 import boto3
@@ -138,7 +141,7 @@ def _public_metadata(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 class SupabaseArtifactService(BaseArtifactService):
-    """ADK artifact service backed by Supabase Storage's S3-compatible API.
+    """ADK artifact service backed by Supabase Storage.
 
     Implements the exact google-adk 2.7.0 ``BaseArtifactService`` surface
     (``save_artifact`` / ``load_artifact`` / ``list_artifact_keys`` /
@@ -158,7 +161,7 @@ class SupabaseArtifactService(BaseArtifactService):
         connect_timeout: float = 10.0,
         read_timeout: float = 120.0,
     ) -> None:
-        """Initialize the service and its boto3 S3 client.
+        """Initialize native Storage, or the legacy boto3 client.
 
         All arguments default to values from ``app.config.settings``.
 
@@ -180,6 +183,16 @@ class SupabaseArtifactService(BaseArtifactService):
                 in-memory artifact service for local `adk web` runs.
         """
         self.bucket_name: str = bucket_name or settings.media_bucket
+        self._signed_urls = OrderedDict()
+        self._sign_lock = threading.Lock()
+        # Explicit S3 constructor arguments retain the legacy/testing path.
+        if settings.supabase_storage_key and not any((endpoint_url, access_key, secret_key)):
+            from app.services.supabase_storage import SupabaseStorageClient
+            self._client = SupabaseStorageClient(
+                settings.supabase_url, settings.supabase_storage_key,
+                connect_timeout=connect_timeout, read_timeout=read_timeout,
+            )
+            return
         self._endpoint_url: str = endpoint_url or settings.s3_endpoint
         self._region_name: str = region_name or settings.s3_region
         resolved_access_key = access_key or settings.s3_access_key
@@ -398,12 +411,25 @@ class SupabaseArtifactService(BaseArtifactService):
                 )
             version = max(versions)
         key = self._object_key(app_name, user_id, filename, version, session_id)
-        # Signing itself is pure local computation (no network call).
-        return self._client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": self.bucket_name, "Key": key},
+        # Reusing a version's URL lets the browser/CDN reuse its download.
+        # Renew early, and keep publishing and preview lifetimes separate.
+        cache_key = (key, expires_in)
+        with self._sign_lock:
+            now = time.monotonic()
+            cached = self._signed_urls.get(cache_key)
+            if cached and cached[0] > now:
+                self._signed_urls.move_to_end(cache_key)
+                return cached[1]
+        # Native signing performs HTTP: keep unrelated carousel files parallel.
+        url = self._client.generate_presigned_url(
+            "get_object", Params={"Bucket": self.bucket_name, "Key": key},
             ExpiresIn=expires_in,
         )
+        with self._sign_lock:
+            self._signed_urls[cache_key] = (now + max(0, expires_in * 0.9), url)
+            while len(self._signed_urls) > 2048:
+                self._signed_urls.popitem(last=False)
+            return url
 
     async def public_url_async(
         self,
@@ -528,6 +554,7 @@ class SupabaseArtifactService(BaseArtifactService):
         put_kwargs: dict[str, Any] = {
             "Bucket": self.bucket_name,
             "Key": key,
+            "CacheControl": "private, max-age=3600",
         }
 
         if artifact.inline_data:
@@ -702,8 +729,16 @@ class SupabaseArtifactService(BaseArtifactService):
                 for key in batch:
                     try:
                         self._client.delete_object(Bucket=self.bucket_name, Key=key)
-                    except Exception:
-                        logger.debug("Could not delete %s (already gone?).", key)
+                    except ClientError as exc:
+                        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                        code = exc.response.get("Error", {}).get("Code")
+                        if status != 404 and code not in ("404", "NoSuchKey", "NotFound"):
+                            raise
+        with self._sign_lock:
+            removed = set(keys)
+            for cache_key in list(self._signed_urls):
+                if cache_key[0] in removed:
+                    del self._signed_urls[cache_key]
         return len(keys)
 
     def _delete_artifact(

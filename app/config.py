@@ -96,6 +96,11 @@ class Settings:
     database_url: str = os.getenv("DATABASE_URL", "")  # postgresql+asyncpg://...
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     media_bucket: str = os.getenv("MEDIA_BUCKET", "carousel-media")
+    # Native Storage uses a server credential. Never expose this through
+    # /api/auth/config; browsers continue to receive only the anon key.
+    supabase_storage_key: str = os.getenv("SUPABASE_SECRET_KEY", "").strip() or os.getenv(
+        "SUPABASE_SERVICE_ROLE_KEY", ""
+    ).strip()
     # S3-compatible credentials for the artifact service adapter.
     #
     # The endpoint is DERIVED from supabase_url (see _s3_endpoint); the keys
@@ -164,8 +169,8 @@ class Settings:
 
     # --- web console + auth ---
     # The anon key is PUBLIC by design - it ships inside the browser bundle, so
-    # it is served to the SPA by /api/auth/config. There is no service key here:
-    # nothing in this codebase ever used one.
+    # it is served to the SPA by /api/auth/config. The Storage key above is
+    # server-only and is never part of that response.
     supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
     # Supabase signs JWTs two ways depending on project age: a shared HS256
     # secret (legacy) or asymmetric keys published as JWKS (current). Set this

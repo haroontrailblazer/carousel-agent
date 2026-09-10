@@ -14,6 +14,9 @@ the same data and the same media, and change nothing in the application.
 | `migrations/005_transfer_baseline.sql` | **Every table, in one file.** Apply this to an empty database and you have the whole structure. |
 | `migrations/006_instagram_accounts.sql` | `instagram_accounts` + `runs.account_id`. Apply after `005`. |
 | `migrations/007_carousel_designs.sql` | User-owned carousel design contracts. Apply after `005`. |
+| `migrations/008_read_indexes.sql` | Indexes for task history, trace ordering and email lookup. |
+| `migrations/009_enforce_access_policies.sql` | Restrictive browser-role policies and private media protection. Apply with `scripts/db_enforce_policies.py --apply`. |
+| `../scripts/db_enforce_policies.py` | Rehearse policy changes with rollback, or apply after verifying role denials and unchanged row counts. |
 | `../scripts/db_export.py` | Dump every table to JSONL. |
 | `../scripts/db_import.py` | Load a dump into a target. |
 | `../scripts/db_verify_baseline.py` | Check `005` against a live database. |
@@ -90,7 +93,7 @@ psql "$NEW_DATABASE_URL" -f db/migrations/005_transfer_baseline.sql
 .venv/Scripts/python.exe scripts/db_verify_baseline.py --dsn "$NEW_DATABASE_URL"
 ```
 
-Then update `.env`: `DATABASE_URL`, the four `SUPABASE_S3_*` values,
+Then update `.env`: `DATABASE_URL`, the server-only native Storage key,
 `SUPABASE_URL` / `SUPABASE_ANON_KEY` if the project changed, and keep
 `SECRETS_KEY` and `MEDIA_BUCKET` exactly as they were.
 

@@ -102,12 +102,8 @@ services:
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false          # public by design; ships in the browser bundle
-      - key: SUPABASE_S3_REGION
-        value: us-west-1
-      - key: SUPABASE_S3_ACCESS_KEY
-        sync: false
-      - key: SUPABASE_S3_SECRET_KEY
-        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false          # server-only native Storage key; no S3 setup
       - key: MEDIA_BUCKET
         value: corousel-media
 

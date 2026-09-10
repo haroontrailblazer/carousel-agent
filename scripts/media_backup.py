@@ -38,7 +38,11 @@ from app.config import settings  # noqa: E402
 
 
 def _client():
-    """An S3 client pointed at Supabase Storage's S3-compatible endpoint."""
+    """Use the same native/legacy Storage selection as the application."""
+    if settings.supabase_storage_key:
+        from app.services.supabase_storage import SupabaseStorageClient
+        return SupabaseStorageClient(settings.supabase_url, settings.supabase_storage_key,
+                                     connect_timeout=30, read_timeout=300)
     if not settings.s3_endpoint:
         raise SystemExit(
             "SUPABASE_S3_ENDPOINT is not set - nothing to back up. Check .env."

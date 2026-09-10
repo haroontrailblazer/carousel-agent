@@ -28,6 +28,7 @@ import asyncpg
 
 from app.config import settings
 from app.news_media import news_thumbnail
+from app.services.read_cache import RevisionCache
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,7 @@ _PENDING_REVIEW_BACKOFF_S = float(os.getenv("PENDING_REVIEW_BACKOFF_S", "1.5"))
 
 _pool: Optional[asyncpg.Pool] = None
 _pool_lock = asyncio.Lock()
+_transcript_cache = RevisionCache()
 
 
 def _dsn() -> str:
@@ -1173,7 +1175,7 @@ async def append_run_event(
 
 
 async def load_run_events(
-    run_id: str, after: int = 0, limit: int = 2000
+    run_id: str, after: int = 0, limit: int = 2000, *, lifecycle_only: bool = False
 ) -> list[dict]:
     """Replay a run's timeline from a cursor, oldest first.
 
@@ -1182,11 +1184,13 @@ async def load_run_events(
     nothing and duplicate nothing.
     """
     pool = await get_pool()
+    lifecycle_filter = "AND kind IN ('terminal', 'error') AND btrim(COALESCE(author, '')) = ''" if lifecycle_only else ""
     rows = await pool.fetch(
-        """
+        f"""
         SELECT seq, kind, author, text, data, created_at
         FROM run_events
         WHERE run_id = $1 AND seq > $2
+        {lifecycle_filter}
         ORDER BY seq ASC
         LIMIT $3
         """,
@@ -1368,6 +1372,30 @@ async def load_adk_events(
         ``after + 1``.
     """
     pool = await get_pool()
+    offset = max(0, int(after))
+    page_size = max(1, min(int(limit), 5000))
+    args = (app_name, user_id, session_id, offset, page_size)
+
+    async def revision():
+        # A compact fingerprint detects inserts, deletes, updates and late
+        # events without transferring the transcript on every trace poll.
+        # Fingerprint exactly this page, using MVCC row revisions (xmin).
+        return await pool.fetchval(
+            """SELECT md5(COALESCE(string_agg(id || ':' || revision, ','
+                        ORDER BY timestamp, id), ''))
+               FROM (SELECT id, timestamp, xmin::text AS revision FROM public.events
+                     WHERE app_name=$1 AND user_id=$2 AND session_id=$3
+                     ORDER BY timestamp ASC, id ASC OFFSET $4 LIMIT $5) page""",
+            *args,
+        )
+
+    async def fetch():
+        return await _load_adk_event_page(pool, args)
+
+    return await _transcript_cache.read((pool, *args), revision, fetch)
+
+
+async def _load_adk_event_page(pool, args) -> list[dict]:
     rows = await pool.fetch(
         """
         SELECT id, timestamp, event_data
@@ -1376,14 +1404,10 @@ async def load_adk_events(
         ORDER BY timestamp ASC, id ASC
         OFFSET $4 LIMIT $5
         """,
-        app_name,
-        user_id,
-        session_id,
-        max(0, int(after)),
-        max(1, min(int(limit), 5000)),
+        *args,
     )
     out: list[dict] = []
-    for index, row in enumerate(rows, start=max(0, int(after)) + 1):
+    for index, row in enumerate(rows, start=args[3] + 1):
         data = row["event_data"]
         if isinstance(data, str):
             try:
