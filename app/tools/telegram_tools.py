@@ -24,6 +24,9 @@ import ipaddress
 import json
 import logging
 import mimetypes
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Optional
@@ -43,8 +46,17 @@ _TIMEOUT = httpx.Timeout(60.0, connect=15.0)
 MEDIA_GROUP_LIMIT = 10  # media per sendMediaGroup call
 MESSAGE_LIMIT = 4096  # characters per sendMessage
 
+# Keep each completed carousel together when multiple runs finish at once.
+_LOCK_GUARD = threading.Lock()
+_DELIVERY_LOCKS: dict[str, threading.Lock] = {}
 
-def _api_base() -> str:
+
+def _delivery_lock(bot_id: str):
+    with _LOCK_GUARD:
+        return _DELIVERY_LOCKS.setdefault(bot_id, threading.Lock())
+
+
+def _api_base(creds: Optional[dict] = None) -> str:
     """Bot API base URL, or a RuntimeError naming what to configure.
 
     Credentials come from ``app.services.telegram_config`` and nowhere else -
@@ -52,7 +64,7 @@ def _api_base() -> str:
     page, and the token is stored encrypted rather than sitting in plaintext
     in a file.
     """
-    token = telegram_config.credentials()["bot_token"]
+    token = (creds if creds is not None else telegram_config.credentials())["bot_token"]
     if not token:
         raise RuntimeError(
             "No Telegram bot is connected - cannot send the review message. "
@@ -61,9 +73,9 @@ def _api_base() -> str:
     return f"https://api.telegram.org/bot{token}"
 
 
-def _chat_id() -> str:
+def _chat_id(creds: Optional[dict] = None) -> str:
     """Destination chat; fail loudly if none configured."""
-    chat_id = telegram_config.credentials()["chat_id"]
+    chat_id = (creds if creds is not None else telegram_config.credentials())["chat_id"]
     if not chat_id:
         raise RuntimeError(
             "No Telegram chat is connected - cannot send the review message. "
@@ -226,7 +238,7 @@ def _send_album(client: httpx.Client, chat_id: str, paths: list[Path]) -> int:
     return len(usable)
 
 
-def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
+def _send_review_message(run_id: str, bundle: dict, round_no: int, *, creds: dict) -> dict:
     """Send the reviewers a carousel preview with Approve/Reject buttons.
 
     Args:
@@ -244,7 +256,7 @@ def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
         RuntimeError: if the bot token or chat id is missing, or the API
             rejects the call.
     """
-    chat_id = _chat_id()
+    chat_id = _chat_id(creds)
     cover = bundle.get("cover") or {}
     news_title = (
         bundle.get("news_title") or cover.get("title") or "Untitled carousel"
@@ -253,7 +265,7 @@ def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
     review_url = _console_review_url(run_id)
     previews = _preview_paths(bundle)
 
-    with httpx.Client(base_url=_api_base(), timeout=_TIMEOUT) as client:
+    with httpx.Client(base_url=_api_base(creds), timeout=_TIMEOUT) as client:
         # Album first so the slides sit above the decision prompt in the chat,
         # which is how the review mail read.
         sent_previews = _send_album(client, chat_id, previews)
@@ -322,7 +334,59 @@ def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
     return {"message_id": message_id, "previews_sent": sent_previews}
 
 
-def send_confirmation_message(run_id: str, ig_permalink: str) -> dict:
+def _send_completed_carousel(
+    run_id: str, title: str, caption: str, artifact_paths: list[str],
+    *, creds: dict, should_continue=None,
+) -> dict:
+    """Send every final file at original quality, followed by its full caption.
+
+    Documents preserve PNG/video bytes and avoid the photo album's ten-item
+    cap. There are no approval or publishing controls on a completed delivery.
+    """
+    chat_id = _chat_id(creds)
+    paths = [Path(path) for path in artifact_paths]
+    if not paths or any(not path.is_file() for path in paths):
+        raise ValueError("All finished carousel files must exist before delivery.")
+    message_ids: list[str] = []
+
+    def check_cancelled() -> None:
+        if should_continue is not None and not should_continue():
+            raise RuntimeError("Stopped before Telegram delivery completed.")
+
+    def before_send() -> None:
+        check_cancelled()
+        if message_ids:
+            # https://core.telegram.org/bots/faq#my-bot-is-hitting-limits-how-do-i-avoid-this
+            # One message/second per chat; groups allow 20/minute.
+            time.sleep(3.1 if chat_id.startswith("-") else 1.1)
+        check_cancelled()
+
+    with _delivery_lock(creds.get("bot_id") or chat_id), httpx.Client(base_url=_api_base(creds), timeout=_TIMEOUT) as client:
+        for path in paths:
+            before_send()
+            with path.open("rb") as handle:
+                result = _request(
+                    client, "sendDocument", data={"chat_id": chat_id},
+                    files={"document": (
+                        path.name, handle,
+                        mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+                    )},
+                )
+            message_ids.append(str(result.get("message_id", "")))
+        text = f"Carousel complete\n{title}\n\n{caption}\n\nRun {run_id}"
+        # Telegram counts UTF-16 code units; 2000 Unicode characters also
+        # fits when a caption consists entirely of supplementary characters.
+        for start in range(0, len(text), 2000):
+            before_send()
+            result = _request(client, "sendMessage", data={
+                "chat_id": chat_id, "text": text[start:start + 2000],
+                "disable_web_page_preview": "true",
+            })
+            message_ids.append(str(result.get("message_id", "")))
+    return {"message_ids": message_ids, "files_sent": len(paths)}
+
+
+def _send_confirmation_message(run_id: str, ig_permalink: str, *, creds: dict) -> dict:
     """Tell the reviewers the carousel was published to Instagram.
 
     Args:
@@ -332,21 +396,76 @@ def send_confirmation_message(run_id: str, ig_permalink: str) -> dict:
     Returns:
         ``{"message_id": <telegram message id>}``.
     """
-    chat_id = _chat_id()
+    chat_id = _chat_id(creds)
     text = f"Published to Instagram\n{ig_permalink}\n\nRun {run_id}"
     data: dict[str, Any] = {"chat_id": chat_id, "text": text[:MESSAGE_LIMIT]}
     if _buttons_supported(ig_permalink):
         data["reply_markup"] = json.dumps(
             {"inline_keyboard": [[{"text": "VIEW ON INSTAGRAM", "url": ig_permalink}]]}
         )
-    with httpx.Client(base_url=_api_base(), timeout=_TIMEOUT) as client:
+    with httpx.Client(base_url=_api_base(creds), timeout=_TIMEOUT) as client:
         result = _request(client, "sendMessage", data=data)
     return {"message_id": str(result.get("message_id", ""))}
+
+
+class TelegramBroadcastError(RuntimeError):
+    """All destinations were attempted, but some did not receive the message."""
+
+    def __init__(self, deliveries: list[dict]):
+        self.deliveries = deliveries
+        failed = [item["bot_username"] or item["bot_id"] for item in deliveries if item["status"] == "error"]
+        super().__init__("Telegram delivery failed for: " + ", ".join(failed))
+
+
+def _broadcast(send, *args, **kwargs) -> dict:
+    """One deterministic fan-out, no models or per-bot agent invocations."""
+    bots = telegram_config.all_credentials()
+    if not bots:
+        raise RuntimeError("Connect a Telegram bot from Profile → Telegram before sending.")
+
+    def deliver(bot):
+        identity = {"bot_id": bot.get("bot_id", ""), "bot_username": bot.get("bot_username", "")}
+        try:
+            return {**identity, "status": "sent", **send(*args, creds=bot, **kwargs)}
+        except Exception as exc:
+            # HTTP exceptions may contain the token-bearing request URL. Never
+            # return or log that credential in a per-destination failure.
+            logger.warning("Telegram delivery failed for bot %s (%s).", identity["bot_id"], type(exc).__name__)
+            return {**identity, "status": "error", "error": type(exc).__name__}
+
+    with ThreadPoolExecutor(max_workers=min(4, len(bots))) as executor:
+        deliveries = list(executor.map(deliver, bots))
+    if any(item["status"] == "error" for item in deliveries):
+        raise TelegramBroadcastError(deliveries)
+    # Keep single-message fields for existing agent tools, plus every receipt.
+    receipt = {key: value for key, value in deliveries[0].items()
+               if key not in {"status", "bot_id", "bot_username"}}
+    return {**receipt, "bots_sent": len(deliveries), "deliveries": deliveries}
+
+
+def send_review_message(run_id: str, bundle: dict, round_no: int) -> dict:
+    """Send the same carousel review to every connected bot in one action."""
+    return _broadcast(_send_review_message, run_id, bundle, round_no)
+
+
+def send_completed_carousel(
+    run_id: str, title: str, caption: str, artifact_paths: list[str],
+    *, should_continue=None,
+) -> dict:
+    """Replicate the existing files and caption to every bot without regeneration."""
+    return _broadcast(_send_completed_carousel, run_id, title, caption, artifact_paths,
+                      should_continue=should_continue)
+
+
+def send_confirmation_message(run_id: str, ig_permalink: str) -> dict:
+    """Broadcast the one published result to every connected bot."""
+    return _broadcast(_send_confirmation_message, run_id, ig_permalink)
 
 
 __all__ = [
     "MEDIA_GROUP_LIMIT",
     "MESSAGE_LIMIT",
     "send_confirmation_message",
+    "send_completed_carousel",
     "send_review_message",
 ]

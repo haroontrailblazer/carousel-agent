@@ -1,12 +1,13 @@
 import * as React from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Hourglass } from "lucide-react"
+import { Download, Hourglass } from "lucide-react"
 import { toast } from "sonner"
 
 import { ApprovalCard } from "@/components/review/approval-card"
 import { CarouselViewer } from "@/components/review/carousel-viewer"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { ApiError, get, post } from "@/lib/api"
+import { ApiError, downloadFile, get, post } from "@/lib/api"
 import { isStopped, PHASE_LABELS } from "@/lib/pipeline"
 import { cn } from "@/lib/utils"
 import type { CoverChoice, Meta, RunArtifacts, RunDetail } from "@/lib/types"
@@ -109,6 +110,22 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
   const coverChoiceNeeded =
     !!cover && !!cover.video?.url && !!cover.poster?.url && !coverChoice
 
+  const selectedCover = coverChoice ?? (
+    cover?.video?.url && !cover.poster?.url ? "video"
+      : cover?.poster?.url && !cover.video?.url ? "image" : null
+  )
+  const download = useMutation({
+    mutationFn: async () => {
+      if (!selectedCover) throw new Error("Choose a video or image cover first.")
+      await downloadFile(
+        `/api/runs/${encodeURIComponent(runId)}/download?cover=${selectedCover}`,
+        `carousel-${runId}.zip`,
+      )
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not download this carousel."),
+  })
+  const downloadReady = !!artifacts.data?.complete && !!selectedCover && run.status !== "running"
+
   const stopped = isStopped(run.status)
 
   // A 404 here is the normal early state, not a failure: the carousel is only
@@ -118,17 +135,36 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
     (artifacts.error instanceof ApiError ? artifacts.error.status === 404 : false)
 
   const approval = (
-    <ApprovalCard
-      run={run}
-      publishConfigured={meta.data?.publish_configured ?? true}
-      coverChoiceNeeded={coverChoiceNeeded}
-      busy={decide.isPending}
-      onApprove={() => decide.mutate({ status: "approved", feedback: "" })}
-      onReject={(feedback) => decide.mutate({ status: "rejected", feedback })}
-      onResend={() => resend.mutate()}
-      resending={resend.isPending}
-      embedded={!!artifacts.data}
-    />
+    <>
+      <ApprovalCard
+        run={run}
+        publishConfigured={meta.data?.publish_configured ?? true}
+        coverChoiceNeeded={coverChoiceNeeded}
+        busy={decide.isPending}
+        onApprove={() => decide.mutate({ status: "approved", feedback: "" })}
+        onReject={(feedback) => decide.mutate({ status: "rejected", feedback })}
+        onResend={() => resend.mutate()}
+        resending={resend.isPending}
+        embedded={!!artifacts.data}
+      />
+      {artifacts.data && (
+        <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
+          <Button
+            variant="secondary"
+            className="w-full"
+            disabled={!downloadReady || download.isPending}
+            onClick={() => download.mutate()}
+          >
+            <Download /> {download.isPending ? "Preparing download…" : "Download carousel"}
+          </Button>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {coverChoiceNeeded ? "Choose a video or image cover first."
+              : !artifacts.data.complete || run.status === "running" ? "Available when the carousel finishes."
+                : "ZIP includes your selected cover, all slides, and the CTA."}
+          </p>
+        </div>
+      )}
+    </>
   )
 
   return (

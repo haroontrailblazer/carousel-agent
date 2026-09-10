@@ -18,7 +18,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Optional
+import re
+import tempfile
+from pathlib import PurePosixPath
+from zipfile import ZIP_STORED, ZipFile
+from typing import Any, AsyncIterator, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
@@ -114,10 +118,10 @@ class StartRunRequest(BaseModel):
     topic: str = ""
     url: str = ""
     news_id: str = ""
-    #: Which connected Instagram account to generate and publish for. Empty
-    #: selects the default. Chosen BEFORE the run because the account's handle
+    #: Which connected Instagram account to generate and publish for. Omitted
+    #: selects the default; empty explicitly selects Telegram only. Chosen BEFORE the run because the account's handle
     #: and profile picture are composited into the slide artwork.
-    account_id: str = ""
+    account_id: Optional[str] = None
     #: The named render contract chosen before the agents start. Optional for
     #: older API/CLI callers; the service supplies the original editorial
     #: system as a safe backwards-compatible default.
@@ -410,6 +414,7 @@ async def get_run(
         "qa": {"passed": qa.get("passed"), "issues": qa.get("issues", [])},
         "verdict": verdict or None,
         "publish": {
+            "status": publish.get("status"),
             "media_id": publish.get("media_id"),
             "permalink": publish.get("permalink"),
             "error": publish.get("message") if publish.get("status") == "error" else None,
@@ -519,6 +524,71 @@ async def run_artifacts(
                 "link_url": cta.get("link_url", "")},
         "ordered": bundle.get("ordered_artifacts", []),
     }
+
+
+@router.get("/runs/{run_id}/download")
+async def download_carousel(
+    run_id: str,
+    cover: Literal["video", "image"] = Query(...),
+    _identity: Identity = Depends(current_identity),
+) -> StreamingResponse:
+    """Download the selected cover, body slides, and CTA without changing the run."""
+    state = await _session_state(run_id)
+    bundle = state.get(K_BUNDLE) or {}
+    if not bundle:
+        raise HTTPException(404, {"code": "no_bundle", "message": "The carousel is not ready to download yet."})
+    if state.get(K_PHASE) in {PHASE_GENERATE, PHASE_QA, PHASE_REWORK}:
+        raise HTTPException(409, {"code": "still_generating", "message": "Wait for the carousel to finish before downloading."})
+    selected = (bundle.get("cover") or {}).get(
+        "video_artifact" if cover == "video" else "poster_artifact"
+    )
+    if not selected:
+        raise HTTPException(409, {"code": "cover_unavailable", "message": "That cover is not available. Choose the other cover."})
+    slides = bundle.get("slides") or []
+    cta = (bundle.get("cta") or {}).get("artifact")
+    if not slides or not cta or any(not slide.get("artifact") for slide in slides):
+        raise HTTPException(409, {"code": "incomplete_bundle", "message": "The carousel is missing a slide or CTA."})
+
+    files = [("cover", selected)]
+    files.extend((f"slide-{index:02d}", slide["artifact"]) for index, slide in enumerate(slides, 1))
+    files.append(("cta", cta))
+    service = runtime.artifact_service()
+    versions = await service.latest_versions_async(settings.app_name, PIPELINE_USER_ID, run_id)
+    archive = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
+    try:
+        # PNG/MP4 are already compressed. Preserve their bytes without paying
+        # for another compression pass, and spool larger exports to disk.
+        with ZipFile(archive, "w", compression=ZIP_STORED) as zipped:
+            for number, (label, filename) in enumerate(files, 1):
+                part = await service.load_artifact(
+                    app_name=settings.app_name, user_id=PIPELINE_USER_ID,
+                    session_id=run_id, filename=filename, version=versions.get(filename),
+                )
+                if part is None or part.inline_data is None or not part.inline_data.data:
+                    raise HTTPException(404, {"code": "missing_artifact", "message": f"Could not load {label}. Refresh and try again."})
+                extension = PurePosixPath(filename).suffix.lower()
+                if not re.fullmatch(r"\.[a-z0-9]{1,10}", extension):
+                    extension = ".bin"
+                await asyncio.to_thread(zipped.writestr, f"{number:02d}-{label}{extension}", part.inline_data.data)
+        size = archive.tell()
+        archive.seek(0)
+    except BaseException:
+        archive.close()
+        raise
+
+    def chunks():
+        try:
+            while chunk := archive.read(1024 * 1024):
+                yield chunk
+        finally:
+            archive.close()
+
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "_", run_id)[:80]
+    return StreamingResponse(chunks(), media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="carousel-{safe_id}.zip"',
+        "Content-Length": str(size),
+        "Cache-Control": "private, no-store",
+    })
 
 
 # ---------------------------------------------------------------------------

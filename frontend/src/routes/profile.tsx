@@ -3,8 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Cable,
   Check,
-  ChevronDown,
-  ChevronRight,
   CircleUserRound,
   ExternalLink,
   Instagram,
@@ -74,7 +72,16 @@ type InstagramConnectResponse = InstagramStatus & {
   expiry: "confirmed" | "assumed"
 }
 
+type TelegramBot = {
+  bot_id: string
+  bot_username: string
+  chat_id: string
+  token_masked: string
+  connected: boolean
+}
+
 type TelegramStatus = {
+  bots: TelegramBot[]
   connected: boolean
   /** False when SECRETS_KEY is absent - nothing can be stored safely. */
   secrets_ready: boolean
@@ -423,9 +430,9 @@ function TelegramSection() {
   })
 
   const disconnect = useMutation({
-    mutationFn: () => del<TelegramStatus>("/api/settings/telegram"),
+    mutationFn: (botId: string) => del<TelegramStatus>(`/api/settings/telegram/${encodeURIComponent(botId)}`),
     onSuccess: () => {
-      toast.success("Telegram disconnected")
+      toast.success("Bot disconnected")
       refresh()
     },
     onError: (error) =>
@@ -438,7 +445,7 @@ function TelegramSection() {
   // telling a connected user to go and make a bot. Hold the space instead.
   const unknown = status.isLoading && !data
   const connected = !!data?.connected
-  const fromConsole = data?.source === "console"
+  const bots = data?.bots ?? []
   // Say so BEFORE someone types a bearer token into a form that will refuse
   // it - the server will not store a credential it cannot encrypt.
   const secretsMissing = data ? !data.secrets_ready : false
@@ -447,7 +454,7 @@ function TelegramSection() {
     <Section
       icon={Radio}
       title="Telegram"
-      description="Send review-ready carousels to your Telegram chat."
+      description="Connect multiple bots. Every carousel, review request, and publish confirmation is automatically sent to all their chats."
     >
       {unknown && (
         <div className="space-y-3">
@@ -458,14 +465,21 @@ function TelegramSection() {
         </div>
       )}
 
-      {!unknown && connected && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Chip tone="done" dot>
-            Connected
-          </Chip>
-          {data?.bot_username && <MutedChip>@{data.bot_username}</MutedChip>}
-          {data?.chat_id && <MutedChip>chat {data.chat_id}</MutedChip>}
-        </div>
+      {!unknown && bots.length > 0 && (
+        <ul className="mb-4 space-y-2">
+          {bots.map((bot) => (
+            <li key={bot.bot_id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border)] px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">@{bot.bot_username || bot.bot_id}</p>
+                <p className="text-xs text-[var(--muted-foreground)]">Chat {bot.chat_id} · {bot.token_masked}</p>
+              </div>
+              <Chip tone={bot.connected ? "done" : "failed"}>{bot.connected ? "Connected" : "Reconnect needed"}</Chip>
+              <Button size="sm" variant="ghost" disabled={disconnect.isPending} onClick={() => disconnect.mutate(bot.bot_id)}>
+                <Unplug /> Disconnect
+              </Button>
+            </li>
+          ))}
+        </ul>
       )}
 
       {secretsMissing && (
@@ -482,21 +496,7 @@ function TelegramSection() {
         </p>
       )}
 
-      {unknown ? null : connected && fromConsole ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="font-mono text-xs text-[var(--muted-foreground)]">
-            {data?.token_masked}
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={disconnect.isPending}
-            onClick={() => disconnect.mutate()}
-          >
-            <Unplug /> {disconnect.isPending ? "Disconnecting..." : "Disconnect"}
-          </Button>
-        </div>
-      ) : (
+      {unknown ? null : (
         <div className="space-y-3">
           <ol className="space-y-1.5 text-sm text-[var(--muted-foreground)]">
             <li>
@@ -517,6 +517,8 @@ function TelegramSection() {
 
           <div className="flex flex-wrap gap-2">
             <Input
+              type="password"
+              aria-label="Telegram bot token"
               value={token}
               onChange={(event) => setToken(event.target.value)}
               placeholder="123456789:AA..."
@@ -529,7 +531,7 @@ function TelegramSection() {
               disabled={!token.trim() || connect.isPending || secretsMissing}
               onClick={() => connect.mutate()}
             >
-              <Send /> {connect.isPending ? "Connecting..." : "Connect"}
+              <Send /> {connect.isPending ? "Connecting..." : connected ? "Add another bot" : "Connect bot"}
             </Button>
           </div>
 
@@ -707,21 +709,13 @@ function InstagramSection() {
   const data = status.data
   const unknown = status.isLoading && !data
   const accounts = data?.accounts ?? []
-  const canConnect = !!data?.app_configured && !!data?.public_base_url_set
   const secretsMissing = data ? !data.secrets_ready : false
-
-  // Open by default when the OAuth button cannot be used, or when there is
-  // nothing connected yet - those are the two cases pasting exists for. `null`
-  // means nobody has touched the toggle, so the default still applies; the
-  // moment it is clicked, the choice sticks.
-  const [pasteOpen, setPasteOpen] = React.useState<boolean | null>(null)
-  const showPaste = pasteOpen ?? (!canConnect || accounts.length === 0)
 
   return (
     <Section
       icon={Instagram}
       title="Instagram"
-      description="Connect the accounts you use to publish carousels."
+      description="Optional. Connect each Instagram account with its own access token. Without one, finished carousels are sent to Telegram."
     >
       {unknown && (
         <div className="space-y-3">
@@ -742,20 +736,6 @@ function InstagramSection() {
           SECRETS_KEY is not set on the server, so an access token cannot be
           stored encrypted - and it will not be stored any other way. Generate
           a key and put it in .env, then reload.
-        </p>
-      )}
-
-      {!unknown && !canConnect && (
-        <p
-          className="mb-4 rounded-[var(--radius-md)] px-3 py-2 text-sm"
-          style={{
-            background: "var(--phase-review-soft)",
-            color: "var(--phase-review-fg)",
-          }}
-        >
-          {!data?.app_configured
-            ? "This console has no Meta app credentials, so the Connect button cannot open Instagram's login page. Set IG_APP_ID and IG_APP_SECRET on the server and restart - or paste an access token below, which needs neither."
-            : "PUBLIC_BASE_URL is not set, so there is no redirect URI to hand Instagram. Set it to this service's public URL and allowlist the callback in the Meta app - or paste an access token below, which needs neither."}
         </p>
       )}
 
@@ -825,107 +805,69 @@ function InstagramSection() {
 
       {!unknown && (
         <div className="space-y-4">
-          {accounts.length === 0 && (
-            <ol className="space-y-1.5 text-sm text-[var(--muted-foreground)]">
-              <li>
-                1. Make sure the Instagram account is a Professional one
-                (Business or Creator) - a free switch in the Instagram app.
-              </li>
-              <li>
-                2. Press Connect. You sign in on Instagram's own page; this
-                console never sees the password.
-              </li>
-              <li>3. Approve the permissions Instagram asks about.</li>
-            </ol>
-          )}
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Add a separate token for each Professional (Business or Creator) account.
+            You can connect multiple accounts and choose one before starting a carousel.
+            Publishing to that account always requires your approval.
+          </p>
+          <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border)] p-3">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              In the{" "}
+              <a
+                className="text-[var(--link)] hover:underline"
+                href="https://developers.facebook.com/apps/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Meta app dashboard <ExternalLink className="inline size-3" />
+              </a>
+              , open Instagram → API setup with Instagram login, and press
+              Generate token on the account you want. Paste it here. The
+              handle, name and picture are read from the token, so there is
+              nothing else to fill in.
+            </p>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="brand"
-              disabled={!canConnect || secretsMissing}
-              onClick={() => {
-                // A full navigation, not fetch: this is an OAuth redirect.
-                window.location.href = "/api/settings/instagram/authorize"
-              }}
-            >
-              <Instagram />{" "}
-              {accounts.length === 0 ? "Connect Instagram" : "Connect another"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setPasteOpen(!showPaste)}
-            >
-              {showPaste ? <ChevronDown /> : <ChevronRight />}
-              Paste an access token
-            </Button>
-          </div>
+            <Input
+              type="password"
+              value={pastedToken}
+              onChange={(event) => setPastedToken(event.target.value)}
+              placeholder="IGAAWwgws..."
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full font-mono"
+              aria-label="Instagram access token"
+            />
 
-          {/*
-            The second door, and the only one open on a console with no Meta
-            app or no public URL: pasting a token generated in the Meta
-            dashboard. The account is still identified by asking Instagram, so
-            a wrong token is refused here rather than at publish time.
-          */}
-          {showPaste && (
-            <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--border)] p-3">
-              <p className="text-sm text-[var(--muted-foreground)]">
-                In the{" "}
-                <a
-                  className="text-[var(--link)] hover:underline"
-                  href="https://developers.facebook.com/apps/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Meta app dashboard <ExternalLink className="inline size-3" />
-                </a>
-                , open Instagram → API setup with Instagram login, and press
-                Generate token on the account you want. Paste it here. The
-                handle, name and picture are read from the token, so there is
-                nothing else to fill in.
-              </p>
-
+            <div className="flex flex-wrap gap-2">
               <Input
-                value={pastedToken}
-                onChange={(event) => setPastedToken(event.target.value)}
-                placeholder="IGAAWwgws..."
+                value={pastedId}
+                onChange={(event) => setPastedId(event.target.value)}
+                placeholder="Instagram user id (optional)"
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full font-mono"
-                aria-label="Instagram access token"
+                inputMode="numeric"
+                className="min-w-0 flex-1 font-mono"
+                aria-label="Instagram user id"
               />
-
-              <div className="flex flex-wrap gap-2">
-                <Input
-                  value={pastedId}
-                  onChange={(event) => setPastedId(event.target.value)}
-                  placeholder="Instagram user id (optional)"
-                  autoComplete="off"
-                  spellCheck={false}
-                  inputMode="numeric"
-                  className="min-w-0 flex-1 font-mono"
-                  aria-label="Instagram user id"
-                />
-                <Button
-                  variant="brand"
-                  disabled={
-                    !pastedToken.trim() || paste.isPending || secretsMissing
-                  }
-                  onClick={() => paste.mutate()}
-                >
-                  <KeyRound />{" "}
-                  {paste.isPending ? "Connecting..." : "Connect account"}
-                </Button>
-              </div>
-
-              <p className="text-xs text-[var(--muted-foreground)]">
-                The id is only needed for a token generated through Facebook
-                login, which cannot say which account it is for. With an
-                Instagram login token it acts as a check: if the token turns
-                out to belong to a different account, nothing is saved.
-              </p>
+              <Button
+                variant="brand"
+                disabled={
+                  !pastedToken.trim() || paste.isPending || secretsMissing
+                }
+                onClick={() => paste.mutate()}
+              >
+                <KeyRound />{" "}
+                {paste.isPending ? "Connecting..." : "Connect account"}
+              </Button>
             </div>
-          )}
+
+            <p className="text-xs text-[var(--muted-foreground)]">
+              The id is only needed for a token generated through Facebook
+              login, which cannot say which account it is for. With an
+              Instagram login token it acts as a check: if the token turns
+              out to belong to a different account, nothing is saved.
+            </p>
+          </div>
         </div>
       )}
     </Section>

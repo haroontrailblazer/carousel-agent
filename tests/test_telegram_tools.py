@@ -207,7 +207,7 @@ class SendReviewMessageTests(unittest.TestCase):
             )
 
         with patch.object(tg, "settings", _settings()), patch.object(
-            tg.telegram_config, "credentials", lambda: _creds()
+            tg.telegram_config, "all_credentials", lambda: [_creds()]
         ), patch.object(tg.httpx, "Client", fake_client):
             return tg.send_review_message("run-abc", bundle, round_no)
 
@@ -266,7 +266,7 @@ class SendReviewMessageTests(unittest.TestCase):
         transport = httpx.MockTransport(handler)
         real_client = httpx.Client
         with patch.object(tg, "settings", _settings()), patch.object(
-            tg.telegram_config, "credentials", lambda: _creds()
+            tg.telegram_config, "all_credentials", lambda: [_creds()]
         ), patch.object(
             tg.httpx,
             "Client",
@@ -312,7 +312,7 @@ class ButtonFallbackTests(unittest.TestCase):
         real_client = httpx.Client
         stub = SimpleNamespace(public_base_url=base_url)
         with patch.object(tg, "settings", stub), patch.object(
-            tg.telegram_config, "credentials", lambda: _creds()
+            tg.telegram_config, "all_credentials", lambda: [_creds()]
         ), patch.object(
             tg.httpx,
             "Client",

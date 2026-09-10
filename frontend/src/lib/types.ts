@@ -60,7 +60,7 @@ export type RunDetail = RunSummary & {
   slide_count: number
   qa: { passed: boolean | null; issues: QAIssue[] }
   verdict: { status: string; feedback: string; reviewer?: string } | null
-  publish: { media_id: string | null; permalink: string | null; error: string | null }
+  publish: { status?: string | null; media_id: string | null; permalink: string | null; error: string | null }
   token_usage: Record<string, number>
   last_seq: number
   /**
@@ -226,8 +226,8 @@ export type Meta = {
   reject_question: string
   max_slides: number
   /** False when no connected Instagram account can publish right now - none
-   *  connected, or every one of them needs reconnecting. Approving will still
-   *  record the verdict, but publishing will fail loudly. */
+   *  connected, or every one of them needs reconnecting.
+   *  Account-free runs finish by delivering to Telegram. */
   publish_configured: boolean
   /** The connected accounts a run can be created for, default first. */
   accounts: InstagramAccountSummary[]

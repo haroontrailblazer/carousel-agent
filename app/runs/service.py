@@ -283,7 +283,7 @@ async def start_run(
     url: str = "",
     news: Optional[dict] = None,
     requested_by: str = "",
-    account_id: str = "",
+    account_id: Optional[str] = None,
     design: Optional[dict] = None,
 ) -> StartedRun:
     """Create a run, seed its session, and start driving it in the background.
@@ -299,26 +299,21 @@ async def start_run(
         news: A ready NewsItem payload, for ``source="queue"``/``"schedule"``.
         requested_by: Email of the person who asked, for the audit trail.
         account_id: The connected Instagram account to generate and publish
-            for. Empty selects the default account. Resolved BEFORE anything
+            for. Omitted selects the default; empty means Telegram only. Resolved BEFORE anything
             is created, because the account's handle and profile picture are
             composited into every slide as it is generated.
 
     Raises:
-        RunRefused: cap exceeded, no usable Instagram account, or the input
+        RunRefused: cap exceeded, an explicitly selected account is unusable, or the input
             could not be turned into a run.
     """
-    account = instagram_accounts.resolve(account_id)
-    if account is None:
+    account = instagram_accounts.resolve(account_id or "") if account_id != "" else None
+    if account_id and account is None:
         raise RunRefused(
             "no_account",
-            "Connect an Instagram account from Profile -> Instagram before "
-            "creating a carousel. The account's handle and profile picture "
-            "are part of the artwork, so a run cannot be generated without "
-            "one."
-            if not account_id
-            else f"Instagram account {account_id} is not connected.",
+            f"Instagram account {account_id} is not connected.",
         )
-    if account.needs_reconnect:
+    if account is not None and account.needs_reconnect:
         raise RunRefused(
             "account_needs_reconnect",
             f"The connection to {account.handle} has expired. Reconnect it "
@@ -369,7 +364,7 @@ async def start_run(
         chosen_design = CarouselDesign.model_validate(design or {})
         state: dict[str, Any] = {
             K_RUN_ID: run_id,
-            K_ACCOUNT_ID: account.id,
+            K_ACCOUNT_ID: account.id if account else "",
             K_DESIGN: chosen_design.model_dump(mode="json"),
         }
         if news is not None:
@@ -391,7 +386,8 @@ async def start_run(
         # On the ROW as well as in session state: resume and startup recovery
         # rebuild a run from the database and have to know which brand to
         # render before the session is read.
-        await db.set_run_account(run_id, account.id)
+        if account is not None:
+            await db.set_run_account(run_id, account.id)
         await db.set_run_status(run_id, db.RUN_STATUS_RUNNING)
 
         first_message = (
@@ -508,22 +504,17 @@ async def _bind_brand_identity(run_id: str) -> None:
     startup recovery rebuild a run from the database and have to restore the
     brand before the first slide is re-rendered.
 
-    Binds nothing when the run names no usable account. That is deliberate:
-    ``brand_identity.require_handle`` then refuses at the first slide, which
-    is a loud, local failure - whereas quietly falling back to some other
-    account would stamp the wrong brand onto artwork nobody re-checks.
+    Account-free runs bind an explicit unbranded identity. A missing named
+    account still fails rather than borrowing another account's branding.
     """
+    brand_identity.set_current(None)
     try:
         account_id = await db.get_run_account_id(run_id)
     except Exception as exc:  # noqa: BLE001 - a read failure must not kill the run
         logger.warning("Could not read the account for run %s: %s", run_id, exc)
         return
     if not account_id:
-        logger.warning(
-            "Run %s names no Instagram account; brand furniture will refuse "
-            "to render.",
-            run_id,
-        )
+        brand_identity.set_current(brand_identity.BrandIdentity(handle="", favicon_png=b""))
         return
 
     account = instagram_accounts.get(account_id)

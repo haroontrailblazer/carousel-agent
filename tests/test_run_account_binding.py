@@ -62,13 +62,15 @@ class BindTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(identity.favicon_png, b"picture-bytes")
         self.assertEqual(identity.account_id, "acc-1")
 
-    async def test_a_run_with_no_account_binds_nothing(self) -> None:
-        """Rendering then fails loudly rather than stamping someone else."""
+    async def test_a_run_with_no_account_binds_an_unbranded_identity(self) -> None:
+        """Telegram-only artwork renders without borrowing another brand."""
         with patch.object(
             service_mod.db, "get_run_account_id", AsyncMock(return_value="")
         ):
             await service_mod._bind_brand_identity(RUN_ID)
-        self.assertIsNone(brand_identity.current())
+        self.assertTrue(brand_identity.current().unbranded)
+        self.assertEqual(brand_identity.require_handle(), "")
+        self.assertIsNone(brand_identity.require_favicon(32).getbbox())
 
     async def test_a_missing_profile_picture_still_binds_the_handle(self) -> None:
         with patch.object(

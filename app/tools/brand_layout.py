@@ -803,6 +803,10 @@ def apply_body_brand_rail(
     if slide_no is not None:
         _clear_slide_number_zone(result, background)
         draw_slide_number(result, slide_no, fill=text)
+    identity = brand_identity.current()
+    if identity is not None and identity.unbranded:
+        _draw_swipe_arrow(result, text)
+        return result
     if design is None:
         favicon_top = round(RAIL_CENTER_Y - BODY_FAVICON_SIZE / 2)
         favicon = _favicon_from_source(BODY_FAVICON_SIZE)
@@ -877,6 +881,9 @@ def apply_cta_brand_rail(
     """Add only the official favicon and handle to the unnumbered CTA rail."""
     result = image.convert("RGB")
     text = _prepare_rail(result, design)
+    identity = brand_identity.current()
+    if identity is not None and identity.unbranded:
+        return result
     if design is None:
         favicon_top = round(RAIL_CENTER_Y - CTA_FAVICON_SIZE / 2)
         favicon = _favicon_from_source(CTA_FAVICON_SIZE)

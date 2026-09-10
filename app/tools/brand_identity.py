@@ -17,8 +17,8 @@ when the run starts is visible in the worker thread that renders the slides.
 **Why there is no global fallback.** Falling back to a default account would
 publish one brand's carousel under another brand's handle and logo - a
 mistake nobody would notice until it was live. ``require_handle`` raises
-instead. A run that has no account should never have started; refusing here
-turns a silent mis-branding into a loud, local failure.
+instead when no identity was bound. Telegram-only runs bind an explicit empty
+identity, which renders without an Instagram handle or profile picture.
 """
 
 from __future__ import annotations
@@ -49,6 +49,10 @@ class BrandIdentity:
     handle: str
     favicon_png: bytes
     account_id: str = ""
+
+    @property
+    def unbranded(self) -> bool:
+        return not self.account_id and not self.handle
 
     @property
     def at_handle(self) -> str:
@@ -105,6 +109,8 @@ def require_handle() -> str:
             fallback - see the module docstring.
     """
     identity = _current.get()
+    if identity is not None and identity.unbranded:
+        return ""  # Explicit Telegram-only identity: omit Instagram branding.
     if identity is None or not identity.at_handle:
         raise NoBrandIdentity(
             "No Instagram account is set for this run, so the brand rail has "
@@ -127,6 +133,9 @@ def require_favicon(size: int) -> Image.Image:
             "No Instagram account is set for this run, so the brand rail has "
             "no profile picture to draw."
         )
+
+    if identity.unbranded:
+        return Image.new("RGBA", (size, size), (0, 0, 0, 0))
 
     if identity.favicon_png:
         try:

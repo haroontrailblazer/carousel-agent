@@ -81,6 +81,17 @@ export function ApprovalCard({
     ? "rounded-none border-0 bg-transparent p-0 shadow-none"
     : "p-5"
 
+  if (run.publish.status === "delivered") {
+    return (
+      <Card className={panelClass}>
+        <p className="font-medium">Sent to Telegram</p>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Your finished carousel files and caption have been delivered. This task is complete.
+        </p>
+      </Card>
+    )
+  }
+
   // --- state 2: already decided ------------------------------------------
   if (!run.pending_review && run.verdict) {
     const approved = run.verdict.status === "approved"

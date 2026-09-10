@@ -53,8 +53,7 @@ function looksLikeUrl(value: string): boolean {
  * slide as it is generated. Choosing afterwards would mean re-rendering the
  * carousel or shipping one brand's artwork under another's name.
  *
- * Hidden entirely when only one account is connected - a picker with one
- * option is a decision nobody is being asked to make.
+ * Telegram delivery is always available, including with connected accounts.
  */
 function AccountPicker({
   accounts,
@@ -68,7 +67,6 @@ function AccountPicker({
   disabled: boolean
 }) {
   const usable = accounts.filter((account) => !account.needs_reconnect)
-  if (usable.length < 2) return null
 
   return (
     <div
@@ -76,8 +74,19 @@ function AccountPicker({
       aria-label="Publish to"
     >
       <span className="text-[11px] text-[var(--muted-foreground)]">
-        Posting as
+        Deliver to
       </span>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={!value}
+        onClick={() => onChange("")}
+        className={"rounded-[10px] border px-2.5 py-1.5 text-xs " + (!value
+          ? "border-[var(--foreground)] bg-[var(--muted)]"
+          : "border-[var(--border)] text-[var(--muted-foreground)]")}
+      >
+        Telegram only
+      </button>
       {usable.map((account) => {
         const selected = account.id === value
         return (
@@ -135,9 +144,8 @@ export function NewRunRoute() {
     () => meta.data?.accounts ?? [],
     [meta.data?.accounts],
   )
-  // Empty means "whichever is default", which is what the server does with an
-  // empty account_id - so there is no wrong state while /meta is in flight.
-  const [accountId, setAccountId] = React.useState("")
+  // Omitted chooses the server default; an explicit empty id is Telegram only.
+  const [accountId, setAccountId] = React.useState<string | undefined>(undefined)
   const [designs] = useCarouselDesigns()
   const [designId, setDesignId] = React.useState(() => designs.length === 1 ? designs[0].id : "")
 
@@ -179,7 +187,7 @@ export function NewRunRoute() {
       if (code === "no_account" || code === "account_needs_reconnect") {
         toast.error("No Instagram account", {
           description:
-            "Connect one from Profile -> Instagram. Its handle and picture are part of the artwork, so a carousel cannot be generated without one.",
+            "Reconnect the selected account from Profile → Instagram, or choose Telegram only.",
         })
         return
       }
@@ -312,13 +320,13 @@ export function NewRunRoute() {
 
           <AccountPicker
             accounts={accounts}
-            value={accountId || (accounts.find((a) => a.is_default)?.id ?? "")}
+            value={accountId ?? (accounts.find((a) => a.is_default && !a.needs_reconnect)?.id ?? "")}
             onChange={setAccountId}
             disabled={start.isPending}
           />
 
           <p className="mt-5 text-center text-[11px] leading-5 text-[var(--muted-foreground)]">
-            Carousel Factory can make mistakes. Every carousel pauses for human review before publishing.
+            Instagram publishing requires your approval. Telegram-only carousels finish with the files and caption sent to your chat.
           </p>
         </div>
       </main>

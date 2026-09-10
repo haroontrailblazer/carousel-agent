@@ -15,12 +15,10 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from io import BytesIO
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator
-from starlette.responses import RedirectResponse
 
 from app.config import settings
 from app.services import (
@@ -61,6 +59,12 @@ def _mask(token: str) -> str:
 def _status() -> dict:
     creds = telegram_config.credentials()
     return {
+        "bots": [
+            {key: value for key, value in bot.items() if key != "bot_token"}
+            | {"token_masked": _mask(bot["bot_token"]),
+               "connected": bool(bot["bot_token"] and bot["chat_id"])}
+            for bot in telegram_config.all_credentials()
+        ],
         "secrets_ready": secret_box.configured(),
         "connected": telegram_config.configured(),
         "source": telegram_config.source(),
@@ -74,7 +78,7 @@ def _status() -> dict:
 
 @router.get("/settings/telegram")
 async def telegram_status(_identity: Identity = Depends(current_identity)) -> dict:
-    """Whether a bot is connected, and which one."""
+    """All connected Telegram bots, with tokens masked."""
     return _status()
 
 
@@ -127,6 +131,7 @@ async def telegram_connect(
     try:
         await telegram_config.save(
             bot_token=token,
+            bot_id=str(bot.get("id") or ""),
             chat_id=chat_id,
             bot_username=str(bot.get("username") or ""),
             connected_by=identity.email,
@@ -152,9 +157,19 @@ async def telegram_connect(
 async def telegram_disconnect(
     identity: Identity = Depends(current_identity),
 ) -> dict:
-    """Forget the stored bot. Any .env fallback takes over again."""
+    """Disconnect all bots (legacy endpoint)."""
     await telegram_config.clear()
     logger.info("Telegram credentials cleared by %s.", identity.email)
+    return {"result": "disconnected", **_status()}
+
+
+@router.delete("/settings/telegram/{bot_id}")
+async def telegram_disconnect_bot(
+    bot_id: str, identity: Identity = Depends(current_identity),
+) -> dict:
+    """Disconnect one bot without changing any other destination."""
+    await telegram_config.clear(bot_id)
+    logger.info("Telegram bot %s disconnected by %s.", bot_id, identity.email)
     return {"result": "disconnected", **_status()}
 
 
@@ -226,12 +241,8 @@ async def delete_avatar(identity: Identity = Depends(current_identity)) -> dict:
 # ---------------------------------------------------------------------------
 # Instagram: connecting publishing accounts.
 #
-# Nobody types an Instagram password into this console. The browser is sent to
-# Instagram's own authorize page and we receive a code, which is traded for a
-# token. That is the whole reason to prefer OAuth over the private-API
-# libraries that accept a username and password: those break Meta's terms, get
-# the USER's account disabled rather than ours, and would put somebody else's
-# password in our database.
+# Each account is identified from its own access token and stored encrypted.
+# Instagram OAuth redirects are not a connection method in this console.
 #
 # Like the Telegram routes above, this is deliberately not agent-driven. It is
 # a fixed sequence of HTTP calls with fixed outcomes.
@@ -277,41 +288,6 @@ def _redirect_uri() -> str:
     return f"{settings.public_base_url.rstrip('/')}/api/settings/instagram/callback"
 
 
-def _require_meta_app() -> None:
-    """Refuse early when this console has no Meta app credentials.
-
-    Raises:
-        HTTPException: 503 with a code the SPA branches on, rather than
-            bouncing someone to Instagram only for Meta to reject the
-            client_id with an error page nobody can act on.
-    """
-    if not settings.ig_app_id or not settings.ig_app_secret:
-        raise HTTPException(
-            503,
-            {
-                "code": "not_configured",
-                "message": (
-                    "This console has no Meta app credentials. Set IG_APP_ID "
-                    "and IG_APP_SECRET, then restart."
-                ),
-            },
-        )
-    if not settings.public_base_url:
-        raise HTTPException(
-            503,
-            {
-                "code": "no_public_url",
-                "message": (
-                    "PUBLIC_BASE_URL is not set, so there is no absolute "
-                    "redirect URI to hand Instagram. Set it to this service's "
-                    "public URL and allowlist "
-                    "<PUBLIC_BASE_URL>/api/settings/instagram/callback in the "
-                    "Meta app."
-                ),
-            },
-        )
-
-
 def _instagram_status() -> dict:
     """Connected accounts plus whether connecting is possible at all."""
     return {
@@ -321,17 +297,6 @@ def _instagram_status() -> dict:
         "redirect_uri": _redirect_uri() if settings.public_base_url else "",
         "accounts": instagram_accounts.listing(),
     }
-
-
-def _back_to_profile(**params: str) -> RedirectResponse:
-    """Send the browser back to the profile page carrying an outcome.
-
-    A redirect rather than a JSON body because the callback is a NAVIGATION -
-    the person is looking at Instagram's page and expects to land back in the
-    console, not at a wall of JSON.
-    """
-    query = urlencode({k: v for k, v in params.items() if v})
-    return RedirectResponse(f"/profile?{query}", status_code=302)
 
 
 async def _store_avatar(ig_user_id: str, payload: bytes) -> str:
@@ -358,116 +323,6 @@ async def _store_avatar(ig_user_id: str, payload: bytes) -> str:
 async def instagram_status(_identity: Identity = Depends(current_identity)) -> dict:
     """Which accounts are connected, and whether more can be."""
     return _instagram_status()
-
-
-@router.get("/settings/instagram/authorize")
-async def instagram_authorize(
-    identity: Identity = Depends(current_identity),
-) -> RedirectResponse:
-    """Send the browser to Instagram to authorise an account."""
-    _require_meta_app()
-    state = instagram_oauth.issue_state(
-        identity.email, secret=settings.session_secret
-    )
-    url = instagram_oauth.authorize_url(
-        client_id=settings.ig_app_id,
-        redirect_uri=_redirect_uri(),
-        state=state,
-    )
-    logger.info("Instagram connect started by %s.", identity.email)
-    return RedirectResponse(url)
-
-
-@router.get("/settings/instagram/callback")
-async def instagram_callback(
-    code: str = "",
-    state: str = "",
-    error: str = "",
-    error_description: str = "",
-) -> RedirectResponse:
-    """Finish the connection Instagram is redirecting back from.
-
-    There is no ``Depends(current_identity)`` parameter here on purpose: who
-    connected is read from the SIGNED STATE, which is the only thing that ties
-    this GET to a flow this console started. The route still sits behind the
-    auth middleware, so a session is required as well - the state is what
-    stops a stranger walking their own code through it, and the middleware is
-    what stops an anonymous request reaching it at all.
-    """
-    if error:
-        # Somebody pressed Cancel on Instagram's page. Not a fault - report it
-        # as an outcome and let the profile page say so quietly.
-        logger.info("Instagram connect declined: %s (%s)", error, error_description)
-        return _back_to_profile(instagram_error=error)
-
-    try:
-        connected_by = instagram_oauth.read_state(
-            state, secret=settings.session_secret
-        )
-    except instagram_oauth.OAuthError as exc:
-        logger.warning("Instagram callback refused: %s", exc.code)
-        return _back_to_profile(instagram_error=exc.code)
-
-    if not code:
-        return _back_to_profile(instagram_error="no_code")
-
-    try:
-        _require_meta_app()
-    except HTTPException as exc:
-        return _back_to_profile(instagram_error=str(exc.detail.get("code", "error")))
-
-    # Three blocking HTTP calls inside a request; keep the loop free.
-    try:
-        short = await asyncio.to_thread(
-            lambda: instagram_oauth.exchange_code(
-                code=code,
-                client_id=settings.ig_app_id,
-                client_secret=settings.ig_app_secret,
-                redirect_uri=_redirect_uri(),
-            )
-        )
-        token, expires_in = await asyncio.to_thread(
-            instagram_oauth.exchange_long_lived,
-            str(short.get("access_token") or ""),
-            settings.ig_app_secret,
-        )
-        identity_payload = await asyncio.to_thread(
-            instagram_oauth.fetch_identity, token
-        )
-    except instagram_oauth.OAuthError as exc:
-        logger.warning("Instagram token exchange failed: %s", exc.message)
-        return _back_to_profile(instagram_error=exc.code, detail=exc.message)
-
-    avatar_key = ""
-    picture_url = identity_payload.get("profile_picture_url") or ""
-    if picture_url:
-        picture = await asyncio.to_thread(instagram_oauth.fetch_avatar, picture_url)
-        if picture:
-            avatar_key = await _store_avatar(
-                identity_payload["ig_user_id"], picture
-            )
-
-    try:
-        account = await instagram_accounts.save(
-            ig_user_id=identity_payload["ig_user_id"],
-            username=identity_payload["username"],
-            name=identity_payload["name"],
-            token=token,
-            expires_in=expires_in,
-            connected_by=connected_by,
-            avatar_key=avatar_key,
-        )
-    except secret_box.SecretsNotConfigured:
-        # Refuse rather than fall back to storing it in the clear - the whole
-        # reason these tokens live in the database is that they are encrypted
-        # there.
-        logger.error("Instagram token not stored: SECRETS_KEY is not set.")
-        return _back_to_profile(instagram_error="secrets_unconfigured")
-
-    logger.info(
-        "Instagram account @%s connected by %s.", account.username, connected_by
-    )
-    return _back_to_profile(instagram="connected", account=account.username)
 
 
 def _extend_pasted_token(token: str, auth_kind: str) -> tuple[str, int, str]:
@@ -517,13 +372,7 @@ async def instagram_connect_token(
 ) -> dict:
     """Connect an account from an access token somebody pasted.
 
-    The Connect button above is the better door and stays the default - it
-    handles no credential, and Instagram hands back the real expiry. But it
-    cannot always be opened: it needs a Meta app, a public HTTPS address Meta
-    has allowlisted, and for any account that is not a listed tester, App
-    Review with Advanced Access behind it. This route needs none of those, so
-    an account can be connected from a token generated in the Meta dashboard on
-    a laptop with no public URL at all.
+    Each account is connected independently using its own access token.
 
     Nothing about STORAGE is relaxed: the token is Fernet-encrypted or refused,
     keyed on the Instagram user id so pasting a new token for an account

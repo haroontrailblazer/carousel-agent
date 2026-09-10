@@ -1,23 +1,9 @@
-"""Runtime Telegram credentials, set from the console and encrypted at rest.
+"""Multiple console-connected Telegram bots, each with an encrypted token.
 
-There is exactly ONE source: what someone connected on the profile page,
-stored in ``app_config``. The environment fallback that used to exist is gone
-on purpose - it meant a bearer token sitting in plaintext in a file and in
-every shell that inherited it, and it was a second, invisible source of truth
-that could quietly override whatever the console displayed.
-
-The token is stored ENCRYPTED (see ``app.services.secret_box``): app_config is
-an ordinary Postgres table, so a database backup or a support session would
-otherwise hand over a credential that can post as your bot.
-
-The awkward part is that ``app.tools.telegram_tools`` is SYNCHRONOUS - the
-dispatcher calls it through ``asyncio.to_thread`` - so it cannot await a
-database read to find out where to send. Hence a small process-level cache:
-refreshed at startup and whenever the credentials change, read synchronously
-by the tools. Decryption happens on load, so the plaintext exists only in
-memory and only in this process.
+The existing single-bot app_config value is read transparently and upgraded on
+the next write. Changes lock the database row so concurrent connections cannot
+overwrite each other. Sync senders use the cache refreshed at startup/on edits.
 """
-
 from __future__ import annotations
 
 import logging
@@ -26,120 +12,103 @@ from typing import Optional
 from app.services import db, secret_box
 
 logger = logging.getLogger(__name__)
-
-#: app_config key. Holds the ENCRYPTED token plus the plain metadata.
 CONFIG_KEY = "telegram"
+_cache: Optional[dict[str, dict]] = None
 
-_cache: Optional[dict] = None
+
+def _stored_bots(stored: object) -> dict[str, dict]:
+    if not isinstance(stored, dict):
+        return {}
+    if isinstance(stored.get("bots"), dict):
+        return dict(stored["bots"])
+    if stored.get("bot_token_enc"):
+        token = secret_box.decrypt(str(stored["bot_token_enc"]))
+        bot_id = str(stored.get("bot_id") or token.partition(":")[0] or "legacy")
+        return {bot_id: dict(stored, bot_id=bot_id)}
+    return {}
+
+
+def _decode_all(stored: object) -> dict[str, dict]:
+    return {
+        bot_id: {
+            "bot_id": bot_id,
+            "bot_token": secret_box.decrypt(str(row.get("bot_token_enc") or "")),
+            **{key: str(row.get(key) or "") for key in (
+                "chat_id", "bot_username", "connected_by", "connected_at"
+            )},
+        }
+        for bot_id, row in _stored_bots(stored).items()
+    }
+
+
+def all_credentials() -> list[dict]:
+    """Snapshot of all destinations, including broken tokens for honest errors."""
+    return [dict(bot) for bot in (_cache or {}).values()]
 
 
 def credentials() -> dict:
-    """Current bot token / chat id. Empty strings when nothing is connected.
-
-    Synchronous on purpose - see the module docstring.
-    """
-    cached = _cache or {}
-    return {
-        "bot_token": str(cached.get("bot_token") or ""),
-        "chat_id": str(cached.get("chat_id") or ""),
-        "bot_username": str(cached.get("bot_username") or ""),
-        "connected_by": str(cached.get("connected_by") or ""),
-        "connected_at": str(cached.get("connected_at") or ""),
-    }
+    """Compatibility view for old callers; broadcasts use all_credentials."""
+    return next(iter(all_credentials()), {key: "" for key in (
+        "bot_id", "bot_token", "chat_id", "bot_username", "connected_by", "connected_at"
+    )})
 
 
 def configured() -> bool:
-    """Whether a review message can actually be sent right now."""
-    creds = credentials()
-    return bool(creds["bot_token"] and creds["chat_id"])
+    return any(bot["bot_token"] and bot["chat_id"] for bot in all_credentials())
 
 
 def source() -> str:
-    """Where the live credentials came from - for the console to display."""
     return "console" if configured() else "unset"
 
 
-def _decode(stored: object) -> Optional[dict]:
-    """Turn a stored row into usable credentials, or None."""
-    if not isinstance(stored, dict) or not stored:
-        return None
-    token = secret_box.decrypt(str(stored.get("bot_token_enc") or ""))
-    if not token:
-        # Either nothing is stored, or it was written under a different
-        # SECRETS_KEY. Both mean "not connected" rather than a broken console.
-        return None
-    return {
-        "bot_token": token,
-        "chat_id": str(stored.get("chat_id") or ""),
-        "bot_username": str(stored.get("bot_username") or ""),
-        "connected_by": str(stored.get("connected_by") or ""),
-        "connected_at": str(stored.get("connected_at") or ""),
-    }
-
-
 async def load() -> dict:
-    """Refresh the cache from the database. Never raises."""
     global _cache
     try:
         stored = await db.get_config(CONFIG_KEY, None)
-    except Exception as exc:  # a missing database must not break startup
-        logger.warning("Could not load Telegram credentials: %s", exc)
+    except Exception as exc:
+        logger.warning("Could not load Telegram bots: %s", exc)
         return credentials()
-    _cache = _decode(stored)
-    if _cache:
-        logger.info("Telegram bot @%s is connected.", _cache.get("bot_username") or "?")
+    _cache = _decode_all(stored)
     return credentials()
 
 
 async def save(
-    *,
-    bot_token: str,
-    chat_id: str,
-    bot_username: str = "",
-    connected_by: str = "",
-    connected_at: str = "",
+    *, bot_token: str, chat_id: str, bot_id: str = "",
+    bot_username: str = "", connected_by: str = "", connected_at: str = "",
 ) -> dict:
-    """Encrypt and persist credentials, and update the cache in one step.
-
-    Raises:
-        secret_box.SecretsNotConfigured: when SECRETS_KEY is absent. Storing a
-            bearer token in the clear is not offered as a fallback.
-    """
+    """Add a bot, or reconnect that same bot without replacing other bots."""
     global _cache
+    bot_id = str(bot_id or bot_token.partition(":")[0])
+    if not bot_token or not chat_id or not bot_id:
+        raise ValueError("A verified bot and destination chat are required.")
     encrypted = secret_box.encrypt(bot_token)
-    await db.set_config(
-        CONFIG_KEY,
-        {
-            "bot_token_enc": encrypted,
-            "chat_id": str(chat_id),
-            "bot_username": bot_username,
-            "connected_by": connected_by,
-            "connected_at": connected_at,
-        },
-    )
-    _cache = {
-        "bot_token": bot_token,
-        "chat_id": str(chat_id),
-        "bot_username": bot_username,
-        "connected_by": connected_by,
-        "connected_at": connected_at,
+    row = {
+        "bot_id": bot_id, "bot_token_enc": encrypted,
+        "chat_id": str(chat_id), "bot_username": bot_username,
+        "connected_by": connected_by, "connected_at": connected_at,
     }
-    return credentials()
+
+    def update(stored):
+        bots = _stored_bots(stored)
+        bots[bot_id] = row
+        return {"bots": bots}
+
+    stored = await db.update_config(CONFIG_KEY, update)
+    _cache = _decode_all(stored)
+    return dict(_cache[bot_id])
 
 
-async def clear() -> None:
-    """Forget the connected bot."""
+async def clear(bot_id: str = "") -> None:
+    """Remove just one bot, or all bots for the legacy disconnect endpoint."""
     global _cache
-    await db.set_config(CONFIG_KEY, {})
-    _cache = None
 
+    def update(stored):
+        bots = _stored_bots(stored)
+        if bot_id:
+            bots.pop(str(bot_id), None)
+        else:
+            bots.clear()
+        return {"bots": bots}
 
-__all__ = [
-    "CONFIG_KEY",
-    "clear",
-    "configured",
-    "credentials",
-    "load",
-    "save",
-    "source",
-]
+    stored = await db.update_config(CONFIG_KEY, update)
+    _cache = _decode_all(stored)

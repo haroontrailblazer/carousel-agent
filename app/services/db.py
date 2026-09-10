@@ -1191,6 +1191,26 @@ async def get_config(key: str, default: Any = None) -> Any:
     return default if value is None else value
 
 
+async def update_config(key: str, update) -> Any:
+    """Atomically read/modify a config value across concurrent app workers."""
+    pool = await get_pool()
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            await connection.execute(
+                "INSERT INTO app_config (key, value) VALUES ($1, '{}'::jsonb) "
+                "ON CONFLICT (key) DO NOTHING", key,
+            )
+            value = await connection.fetchval(
+                "SELECT value FROM app_config WHERE key = $1 FOR UPDATE", key,
+            )
+            updated = update(value)
+            await connection.execute(
+                "UPDATE app_config SET value = $2, updated_at = now() WHERE key = $1",
+                key, updated,
+            )
+    return updated
+
+
 async def set_config(key: str, value: Any) -> None:
     """Write a runtime-editable setting."""
     pool = await get_pool()

@@ -2,8 +2,8 @@
 
 Carousel Factory turns AI/product news (a new model release, a Lovable or
 Supabase feature drop, a paper worth explaining) into finished Instagram
-carousels - planned, written, designed, QA-checked, human-reviewed by email,
-and auto-published - using a Google ADK multi-agent pipeline. A fetcher pulls
+carousels - planned, written, designed, QA-checked, and delivered to Telegram
+with optional approved Instagram publishing - using a Google ADK multi-agent pipeline. A fetcher pulls
 updates from Gmail newsletters, RSS feeds and YouTube channels into a queue;
 each queued item drives one pipeline run: an Editorial Planner decides
 structure (points vs prose, slide count, hook title), a First-Page Visual
@@ -14,13 +14,27 @@ agent renders body slides with gpt-image-2 against the designer's templates, a
 CTA agent renders the closing slide, and a Stitch & Verify agent assembles and
 QA-checks the bundle.
 
-The human stays in the loop by email: a review mail with the preview and
-Approve/Reject links pauses the run (an ADK `LongRunningFunctionTool` - the
-invocation genuinely ends and is resumed later by the review API). **Approve**
-(optional feedback) publishes to Instagram via the Graph API and sends a
-confirmation mail. **Reject** (feedback compulsory) re-runs *only the blamed
-agent* - "the first visual is not good" regenerates just the cover - then
-re-assembles and mails a fresh review. Every piece of feedback is stored in
+Instagram is optional. With no connected account (or **Telegram only** selected),
+QA-passed runs send every finished carousel file and the full caption to
+all connected Telegram bots’ chats, then complete without asking for approval. Files are
+sent as documents to preserve their original quality. Telegram must be connected
+in **Profile → Telegram** for delivery to succeed. Add as many bots as needed;
+reconnecting or disconnecting one leaves the others intact. The backend broadcasts
+the same finished files, review request, or publication confirmation to every bot
+from a single action. It does not regenerate content or invoke an agent per bot.
+
+On the Review page, choose the image or video cover, then click **Download
+carousel** to save a ZIP containing that cover, all body slides, and the CTA
+in carousel order. Downloading does not approve or publish the run.
+
+To publish, connect one or more Professional Instagram accounts from **Profile →
+Instagram**, using a separate access token for each account. Tokens are encrypted
+at rest. Choose the account before starting: its identity is used for the artwork
+and publishing. New connections use token entry only, with no Instagram OAuth
+redirect. A connected-account run sends a Telegram review request and pauses.
+**Approve** publishes to that selected account and sends a confirmation.
+**Reject** (feedback compulsory) reworks the requested parts and asks for review
+again. Every piece of feedback is stored in
 long-term memory, and recurring feedback is distilled by the Learner agent
 into permanent edits to the instruction files under `skills/` - the pipeline's
 editable "harness" - so the system permanently improves from review to review.
@@ -58,8 +72,8 @@ Prerequisites: Python 3.11+ (developed on 3.13), FFmpeg, a Supabase project,
 a Google Cloud project with the Gmail API enabled, an OpenAI API key (all
 models run on it by default; a Gemini key is only needed if you point a
 `*_MODEL` at a bare `gemini-*` id),
-and an Instagram **professional** account connected to a Facebook app with the
-Graph API content-publishing permissions.
+and a Telegram bot connected through Profile. Instagram publishing optionally
+uses a Professional account token with content-publishing permissions.
 
 ### 1. Python environment
 
@@ -87,8 +101,8 @@ Fill in every section of `.env` - LLM keys, Supabase, Gmail, Instagram, CTA
 links, fetch sources. All secrets flow through `app/config.py`; nothing is
 hard-coded. Never commit `.env`.
 
-`IG_HANDLE` defaults to `@baskaranbuilds`. The final CTA rail uses the same
-single official favicon and handle arrangement as the other slides.
+Instagram credentials are connected per account in Profile, not through a
+global account token. Telegram-only artwork omits Instagram identity marks.
 
 ### 4. Database (Supabase Postgres)
 

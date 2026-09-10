@@ -1,3 +1,33 @@
+## Telegram broadcasts
+
+Telegram connections are stored as independently encrypted bot entries in the
+existing `app_config.telegram` value. Legacy single-bot values are preserved and
+upgraded on the next write. Database row locking prevents concurrent connections
+from overwriting one another. Reconnecting a bot updates that bot; disconnecting
+by bot id removes only that destination.
+
+Each existing Telegram tool makes one deterministic broadcast to all bots, using
+the same generated payload and each bot's own token/chat pairing. There are no
+per-bot LLM calls. Every destination is attempted, with up to four concurrent
+sends. A partial failure is reported instead of claiming complete delivery.
+
+## Optional Instagram delivery
+
+Instagram is optional. After QA passes, runs with an empty `account_id` deliver
+all `bundle.ordered_artifacts` and the full caption to every connected Telegram bot and transition
+directly to `done`, storing `publish_result.status = "delivered"`. They create
+no pending review and never call the Instagram publisher. Delivery failure must
+not mark the run complete. Artwork for these runs omits Instagram identity marks.
+
+Runs bound to an Instagram account retain the human approval gate before
+publishing. The run's chosen account is never replaced with another account at
+publish time. Multiple accounts are supported with independently encrypted
+tokens. New account connections use `/settings/instagram/token` only.
+
+For run creation, omitted/null `account_id` chooses a usable default when one
+exists, otherwise Telegram only. An explicit empty string selects Telegram only
+even if accounts are connected; an invalid explicit account is refused.
+
 # Carousel Factory - Build Contracts
 
 The binding spec for every file in this repo. The C4 model

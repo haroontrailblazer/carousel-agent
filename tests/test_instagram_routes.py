@@ -1,11 +1,4 @@
-"""Connecting an account from the console.
-
-The callback is the interesting one. It is a plain GET that arrives from
-Instagram's servers by way of the user's browser, so the only thing proving
-this console started the flow is the signed ``state`` it issued ten minutes
-earlier. Everything here is about what happens when that proof is absent,
-stale or forged - and about the console never showing a raw token.
-"""
+"""Account management stays available; new connections use per-account tokens."""
 
 from __future__ import annotations
 
@@ -73,132 +66,12 @@ class StatusTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(status["app_configured"])
 
 
-class AuthorizeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_authorize_redirects_to_instagram_with_a_signed_state(self) -> None:
-        with patch.object(routes_settings, "settings", _settings()):
-            response = await routes_settings.instagram_authorize(identity=IDENTITY)
-
-        self.assertEqual(response.status_code, 307)
-        location = response.headers["location"]
-        self.assertTrue(location.startswith("https://www.instagram.com/oauth/authorize"))
-
-        state = location.split("state=")[1].split("&")[0]
-        self.assertEqual(
-            instagram_oauth.read_state(state, secret=SECRET), "someone@example.com"
-        )
-
-    async def test_authorize_refuses_without_meta_credentials(self) -> None:
-        with patch.object(routes_settings, "settings", _settings(ig_app_id="")):
-            with self.assertRaises(HTTPException) as caught:
-                await routes_settings.instagram_authorize(identity=IDENTITY)
-        self.assertEqual(caught.exception.status_code, 503)
-        self.assertEqual(caught.exception.detail["code"], "not_configured")
-
-    async def test_authorize_refuses_without_a_public_base_url(self) -> None:
-        """Meta rejects a redirect_uri that is not absolute and allowlisted."""
-        with patch.object(routes_settings, "settings", _settings(public_base_url="")):
-            with self.assertRaises(HTTPException) as caught:
-                await routes_settings.instagram_authorize(identity=IDENTITY)
-        self.assertEqual(caught.exception.detail["code"], "no_public_url")
-
-
-class CallbackTests(unittest.IsolatedAsyncioTestCase):
-    async def _callback(self, **kwargs):
-        defaults = {
-            "code": "the-code",
-            "state": instagram_oauth.issue_state(
-                "someone@example.com", secret=SECRET
-            ),
-            "error": "",
-            "error_description": "",
-        }
-        defaults.update(kwargs)
-        return await routes_settings.instagram_callback(**defaults)
-
-    async def test_a_forged_state_is_refused_and_nothing_is_saved(self) -> None:
-        saved = AsyncMock()
-        with patch.object(routes_settings, "settings", _settings()), patch.object(
-            routes_settings.instagram_accounts, "save", saved
-        ):
-            response = await self._callback(state="not-a-real-state")
-
-        self.assertIn("instagram_error=bad_state", response.headers["location"])
-        saved.assert_not_awaited()
-
-    async def test_a_successful_connection_saves_and_returns_to_the_profile(
-        self,
-    ) -> None:
-        saved = AsyncMock(return_value=_account())
-
-        with patch.object(routes_settings, "settings", _settings()), patch.object(
-            routes_settings.instagram_accounts, "save", saved
-        ), patch.object(
-            routes_settings.instagram_oauth,
-            "exchange_code",
-            lambda **kw: {"access_token": "short"},
-        ), patch.object(
-            routes_settings.instagram_oauth,
-            "exchange_long_lived",
-            lambda *a: ("long-token", 5183944),
-        ), patch.object(
-            routes_settings.instagram_oauth,
-            "fetch_identity",
-            lambda tok: {
-                "ig_user_id": "1784140000",
-                "username": "acme",
-                "name": "Acme",
-                "profile_picture_url": "https://cdn/pic.jpg",
-            },
-        ), patch.object(
-            routes_settings.instagram_oauth, "fetch_avatar", lambda url: b"pic"
-        ), patch.object(
-            routes_settings, "_store_avatar", AsyncMock(return_value="instagram/x.png")
-        ):
-            response = await self._callback()
-
-        self.assertIn("instagram=connected", response.headers["location"])
-        kwargs = saved.await_args.kwargs
-        self.assertEqual(kwargs["token"], "long-token")
-        self.assertEqual(kwargs["username"], "acme")
-        self.assertEqual(kwargs["connected_by"], "someone@example.com")
-
-    async def test_the_user_declining_on_instagram_is_not_an_error_page(self) -> None:
-        with patch.object(routes_settings, "settings", _settings()):
-            response = await self._callback(
-                error="access_denied", error_description="User denied"
-            )
-        self.assertIn("instagram_error=access_denied", response.headers["location"])
-
-    async def test_a_missing_secrets_key_refuses_rather_than_storing_plaintext(
-        self,
-    ) -> None:
-        from app.services import secret_box
-
-        with patch.object(routes_settings, "settings", _settings()), patch.object(
-            routes_settings.instagram_accounts,
-            "save",
-            AsyncMock(side_effect=secret_box.SecretsNotConfigured("no key")),
-        ), patch.object(
-            routes_settings.instagram_oauth,
-            "exchange_code",
-            lambda **kw: {"access_token": "short"},
-        ), patch.object(
-            routes_settings.instagram_oauth,
-            "exchange_long_lived",
-            lambda *a: ("long-token", 100),
-        ), patch.object(
-            routes_settings.instagram_oauth,
-            "fetch_identity",
-            lambda tok: {
-                "ig_user_id": "1",
-                "username": "acme",
-                "name": "",
-                "profile_picture_url": "",
-            },
-        ):
-            response = await self._callback()
-
-        self.assertIn("instagram_error=secrets_unconfigured", response.headers["location"])
+class TokenOnlyRoutesTests(unittest.TestCase):
+    def test_oauth_cannot_connect_accounts(self):
+        paths = {route.path for route in routes_settings.router.routes}
+        self.assertNotIn("/settings/instagram/authorize", paths)
+        self.assertNotIn("/settings/instagram/callback", paths)
+        self.assertIn("/settings/instagram/token", paths)
 
 
 class ManagementTests(unittest.IsolatedAsyncioTestCase):
