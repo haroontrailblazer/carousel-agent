@@ -4,7 +4,7 @@
 .branding-logo-picker:hover { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
 .branding-logo-picker:focus-visible, .branding-logo-details button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 .branding-logo-picker:disabled { opacity: .65; cursor: wait; }
-.branding-logo-preview { display: grid; place-items: center; width: 54px; height: 64px; padding: 5px; border-radius: 9px; background: var(--card); border: 1px solid var(--border); }
+.branding-logo-preview { display: grid; place-items: center; width: 54px; height: 54px; padding: 5px; border-radius: 9px; background: var(--card); border: 1px solid var(--border); }
 .branding-logo-preview img { width: 100%; height: 100%; object-fit: contain; }
 .branding-logo-copy { display: grid; gap: 5px; min-width: 0; padding-right: 12px; }
 .branding-logo-copy strong { font-size: 12px; font-weight: 600; line-height: 1.4; }
@@ -28,3 +28,25 @@
 .branding-destination input { width: 100%; min-width: 0; }
 .branding-destination input[aria-invalid="true"] { border-color: var(--destructive); }
 @media(prefers-reduced-motion:reduce) { .branding-logo-picker { transition: none; } }
+.logo-crop-dialog { max-width: 420px; max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+.logo-crop-dialog .logo-crop-footer { position: sticky; bottom: 0; flex-direction: row; justify-content: flex-end; background: var(--card); }
+.logo-crop-body { display: grid; gap: 12px; padding-bottom: 12px; }
+.logo-crop-stage { width: min(100%, 264px, 34dvh); aspect-ratio: 1; margin: 2px auto 0; overflow: hidden; border-radius: 50%; background-color: var(--muted); background-image: conic-gradient(var(--border) 25%, transparent 0 50%, var(--border) 0 75%, transparent 0); background-size: 16px 16px; box-shadow: 0 0 0 1px var(--border), 0 8px 32px #00000015; cursor: grab; touch-action: none; }
+.logo-crop-stage:active { cursor: grabbing; }
+.logo-crop-stage:focus-visible { outline: 3px solid var(--brand); outline-offset: 4px; }
+.logo-crop-stage canvas { display: block; width: 100%; height: 100%; pointer-events: none; }
+.logo-crop-hint { margin: 0; text-align: center; font-size: 11px; line-height: 1.5; color: var(--muted-foreground); }
+.logo-crop-zoom-label, .logo-crop-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; font-weight: 500; }
+.logo-crop-zoom-label output { font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.logo-crop-zoom { display: flex; align-items: center; gap: 12px; }
+.logo-crop-zoom svg { width: 16px; height: 16px; color: var(--muted-foreground); flex-shrink: 0; }
+.logo-crop-zoom input { width: 100%; min-width: 0; height: 28px; accent-color: var(--brand); cursor: pointer; }
+.logo-crop-zoom input:focus-visible, .logo-crop-preview-heading button:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.logo-crop-preview-heading button { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; color: var(--muted-foreground); cursor: pointer; }
+.logo-crop-preview-heading button:hover { color: var(--foreground); }
+.logo-crop-preview-heading svg { width: 12px; height: 12px; }
+.logo-crop-examples { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.logo-crop-example { display: grid; gap: 5px; text-align: center; font-size: 10px; color: var(--muted-foreground); }
+.logo-crop-example > div { display: grid; place-items: center; height: 68px; border: 1px solid var(--border); border-radius: 10px; }
+.logo-crop-example canvas { display: block; width: 40px; height: 40px; }
+@media (max-height: 650px) { .logo-crop-body { gap: 8px; } .logo-crop-stage { width: min(100%, 180px, 24dvh); } .logo-crop-example > div { height: 52px; } .logo-crop-example canvas { width: 32px; height: 32px; } }

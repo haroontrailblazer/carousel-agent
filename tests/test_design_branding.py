@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 from pydantic import ValidationError
 
 from app.schemas import CarouselDesign
@@ -105,3 +105,28 @@ def test_logo_only_design_can_render_without_inventing_a_handle():
         assert not brand_identity.current(design).unbranded
         brand_layout.apply_body_brand_rail(Image.new("RGB", (1080, 1350), "white"), "", design=design)
         brand_layout.apply_cta_brand_rail(Image.new("RGB", (1080, 1350), "white"), "", design=design)
+
+
+@pytest.mark.parametrize("surface", ["cover", "inside", "cta"])
+def test_circular_crop_keeps_transparent_corners_in_generated_slides(surface, tmp_path):
+    mark = Image.new("RGBA", (512, 512))
+    ImageDraw.Draw(mark).ellipse((0, 0, 511, 511), fill=(245, 0, 210, 255))
+    buffer = io.BytesIO()
+    mark.save(buffer, format="PNG")
+    layout = {"background": "#000000", "logo_visible": True,
+              "logo_transform": {"x": 8, "y": 88, "width": 6, "height": 5}}
+    design = CarouselDesign(
+        logo_data_url="data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(),
+        handle_visible=False, cover=layout, inside=layout, cta=layout,
+    )
+    if surface == "cover":
+        with Image.open(media_tools._build_overlay_png("Your next idea", "idea", tmp_path, design)) as image:
+            result = image.convert("RGB")
+    else:
+        renderer = brand_layout.apply_cta_brand_rail if surface == "cta" else brand_layout.apply_body_brand_rail
+        result = renderer(Image.new("RGB", (1080, 1350)), "", design=design)
+    # The 65px circle is contained in the saved 65x68 box. Its corners remain
+    # the slide background; no renderer fills them or distorts it to an oval.
+    assert result.getpixel((86, 1189)) == (0, 0, 0)
+    assert result.getpixel((150, 1253)) == (0, 0, 0)
+    assert result.getpixel((118, 1221)) == (245, 0, 210)
