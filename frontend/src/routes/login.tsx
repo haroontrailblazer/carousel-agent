@@ -1,7 +1,8 @@
 import * as React from "react"
 import { Link, useLocation, useNavigate } from "react-router"
-import { ArrowRight, Check, Eye, EyeOff, Fingerprint, Github, KeyRound, Loader2, Mail, ShieldCheck, Sparkles, UserRound } from "lucide-react"
+import { ArrowRight, Check, Eye, EyeOff, Fingerprint, Github, Loader2, Mail } from "lucide-react"
 import { AuthShell } from "@/components/auth-shell"
+import { BrandLogo } from "@/components/layout/brand-logo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
@@ -178,7 +179,7 @@ export function LoginRoute({ mode = "login" }: { mode?: Mode }) {
   const showEmail=["email","signup","forgot"].includes(step)
   const emailChip=["password","code"].includes(step)
   const buttonLabel=step === "email"?"Continue with email":step === "signup"?"Create account":step === "forgot"?"Send reset code":step === "code"?"Verify email":step === "mfa"?"Verify and continue":step === "reset"?"Save new password":"Sign in"
-  return <AuthShell><header className="auth-card-header"><div className="auth-card-mark">{signedIn?<UserRound size={21}/>:step === "code"?<Mail size={21}/>:step === "mfa"?<ShieldCheck size={21}/>:step === "reset"?<KeyRound size={21}/>:step === "done"?<Check size={21}/>:<Sparkles size={21}/>}</div><span className="auth-eyebrow">YOUR CREATIVE WORKSPACE</span><h2>{title}</h2><p>{subtitle}</p></header>
+  return <AuthShell><header className="auth-card-header"><BrandLogo className="auth-card-mark"/><span className="auth-eyebrow">YOUR CREATIVE WORKSPACE</span><h2>{title}</h2><p>{subtitle}</p></header>
     {auth.status === "pending" && !["callback","reset"].includes(mode)?<p className="auth-subtle" role="status">Checking your session…</p>:signedIn?<>{error&&<p role="alert" className="auth-alert">{error}</p>}<div className="auth-session"><span className="auth-session-icon"><Check size={17}/></span><div><p>{auth.identity?.email}</p><small>Signed in securely</small></div></div><Button asChild variant="brand" className="auth-submit"><Link to={destination}>Go to dashboard <ArrowRight size={16}/></Link></Button><p className="auth-switch"><button className="auth-text-button" onClick={()=>void perform(auth.signOut)} disabled={busy||oauthPending}>Use another account</button></p></>:step === "done"?<Button asChild variant="brand" className="auth-submit"><Link to="/login">Back to sign in <ArrowRight size={16}/></Link></Button>:<>
       {emailChip&&<div className="auth-email-chip"><span>{address}</span><button type="button" onClick={()=>{setError("");setCode("");setStep(codeKind === "signup" && step === "code"?"signup":"email")}} disabled={busy||oauthPending}>Change email</button></div>}
       {oauthPending&&<p role="status" className="auth-subtle">Complete sign-in in the window that opened. <button className="auth-text-button" onClick={()=>{popup.current?.close();popup.current=null;window.clearInterval(popupTimer.current);setOauthPending(false)}}>Cancel</button></p>}
