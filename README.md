@@ -129,8 +129,8 @@ backend RPCs. See [HTTPS database setup](db/https-database.md).
 
 ### 5. Artifact bucket (Supabase Storage)
 
-Create a **private** bucket named after `MEDIA_BUCKET` (default
-`carousel-media`) in Supabase Dashboard → Storage. Native Storage uses
+Create a **private** bucket named `corousel-media` (the fixed application bucket)
+in Supabase Dashboard → Storage. Native Storage uses
 `SUPABASE_URL` and one **server-only** key: `SUPABASE_SECRET_KEY` (preferred)
 or `SUPABASE_SERVICE_ROLE_KEY` (legacy JWT). No separate S3 setup is needed.
 The browser uses `SUPABASE_ANON_KEY` for Auth; background uploads cannot use
@@ -138,7 +138,8 @@ an anonymous identity. The same server key authorizes database RPCs.
 Never put a server key or management personal access token in `VITE_*` variables.
 
 Existing `SUPABASE_S3_*` deployments continue working until a native key is
-configured. Keep `MEDIA_BUCKET` unchanged to preserve existing artifact paths.
+configured. The bucket name is fixed in `app/config.py`; `MEDIA_BUCKET` environment
+values are ignored.
 Media stays private; external publishers receive expiring signed download URLs.
 See [database and egress notes](db/egress.md) for validation and rollout steps.
 

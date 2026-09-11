@@ -85,7 +85,8 @@ class Settings:
 
     # --- storage / db (Supabase) ---
     supabase_url: str = os.getenv("SUPABASE_URL", "")
-    media_bucket: str = os.getenv("MEDIA_BUCKET", "carousel-media")
+    # Fixed existing bucket name; preserve its spelling and stored media paths.
+    media_bucket: str = "corousel-media"
     # Database RPCs and native Storage share a server credential. Never expose this through
     # /api/auth/config; browsers continue to receive only the anon key.
     supabase_storage_key: str = os.getenv("SUPABASE_SECRET_KEY", "").strip() or os.getenv(

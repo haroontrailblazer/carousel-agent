@@ -28,7 +28,8 @@ No server credential was retrieved, added or changed by this migration.
 
 Run `.venv/Scripts/python.exe -B scripts/db_enforce_policies.py --dsn "$ADMIN_DSN"` to rehearse
 inside a rolled-back transaction. Add `--apply` to commit after validation.
-The maintenance runner uses an explicit temporary admin DSN and `MEDIA_BUCKET`.
+The maintenance runner uses an explicit temporary admin DSN and the fixed
+`corousel-media` bucket from `app/config.py`.
 The application itself uses the server key through Supabase HTTPS RPCs. It checks
 30 denied browser reads, verifies restrictive policies against temporary
 permissive-policy probes, rejects browser inserts and compares every

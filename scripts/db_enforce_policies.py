@@ -1,7 +1,7 @@
 """Apply and verify application access policies without exposing credentials.
 
 Default is a rollback-only rehearsal. Pass --apply to commit the migration.
-Uses an explicit --dsn admin connection and the configured MEDIA_BUCKET. No PAT or new
+Uses an explicit --dsn admin connection and the fixed application media bucket. No PAT or new
 server key is needed. Existing application rows are never modified.
 """
 from __future__ import annotations

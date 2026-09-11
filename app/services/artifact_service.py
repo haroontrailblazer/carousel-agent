@@ -204,7 +204,6 @@ class SupabaseArtifactService(BaseArtifactService):
                 ("SUPABASE_S3_ENDPOINT", self._endpoint_url),
                 ("SUPABASE_S3_ACCESS_KEY", resolved_access_key),
                 ("SUPABASE_S3_SECRET_KEY", resolved_secret_key),
-                ("MEDIA_BUCKET", self.bucket_name),
             )
             if not value
         ]
