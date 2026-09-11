@@ -1,7 +1,7 @@
 import * as React from "react"
 import { flushSync } from "react-dom"
 import { LaunchHandoff } from "@/components/agent/launch-handoff"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useSearchParams } from "react-router"
 import { ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
@@ -103,6 +103,12 @@ export function NewRunRoute() {
   const [submittedDesignName, setSubmittedDesignName] = React.useState("")
   const [launch, setLaunch] = React.useState<{ prompt: string; designName: string } | null>(null)
   const submitting = React.useRef(false)
+  const mounted = React.useRef(true)
+  const pendingStarts = useIsMutating({ mutationKey: ["start-run"] })
+  React.useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   const idleRoot = React.useRef<HTMLDivElement>(null)
   useComposerViewport(idleRoot, !runId && !launch)
 
@@ -131,6 +137,7 @@ export function NewRunRoute() {
   }, [designId, designs])
 
   const start = useMutation({
+    mutationKey: ["start-run"],
     mutationFn: (payload: {
       source: string
       topic?: string
@@ -141,6 +148,12 @@ export function NewRunRoute() {
     }) => post<{ run_id: string; title: string }>("/api/runs", payload),
     onSuccess: (data, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["runs"] })
+      // View transitions can keep this component mounted after the address
+      // bar has changed. Do not overwrite a navigation already in progress.
+      if (!mounted.current || window.location.pathname !== "/new" || new URLSearchParams(window.location.search).has("run")) {
+        toast.success("Your carousel has started", { description: "Follow its progress in Tasks." })
+        return
+      }
       setSubmittedPrompt(variables.url ?? variables.topic ?? "")
       setParams({ run: data.run_id }, { replace: true, viewTransition: true })
       toast.dismiss("studio-design-selection")
@@ -181,6 +194,10 @@ export function NewRunRoute() {
 
   function submit() {
     if (submitting.current || start.isPending) return
+    if (pendingStarts > 0) {
+      toast.info("A carousel is still starting", { description: "You can keep browsing while it starts." })
+      return
+    }
     const trimmed = value.trim()
     if (trimmed.length < 3) return
     const design = designs.find((item) => item.id === designId)

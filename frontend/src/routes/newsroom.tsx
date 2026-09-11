@@ -1,7 +1,7 @@
 import * as React from "react"
 import { StudioEmblem } from "@/components/layout/studio-emblem"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "react-router"
+import { useMutation, useMutationState, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Link, useNavigate } from "react-router"
 import { ArrowUpRight, Image as ImageIcon, Loader2, Newspaper, RefreshCw, Sparkles, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -52,7 +52,16 @@ function StoryThumbnail({ item }: { item: QueueItem }) {
  */
 export function NewsroomRoute() {
   const queryClient = useQueryClient()
-  const [claiming, setClaiming] = React.useState<string | null>(null)
+  const navigate = useNavigate()
+  // Mutation-cache state survives leaving and returning to this page.
+  const pendingStarts = useMutationState({
+    filters: { mutationKey: ["start-run"], status: "pending" },
+    select: mutation => mutation.state.variables as { newsId?: string },
+  })
+  const pendingDeletes = useMutationState({
+    filters: { mutationKey: ["delete-story"], status: "pending" },
+    select: mutation => mutation.state.variables as string,
+  })
   const [selectedStory, setSelectedStory] = React.useState<QueueItem | null>(null)
   const createTrigger = React.useRef<HTMLButtonElement | null>(null)
   const submitting = React.useRef(false)
@@ -95,6 +104,7 @@ export function NewsroomRoute() {
   })
 
   const start = useMutation({
+    mutationKey: ["start-run"],
     mutationFn: ({ newsId, design }: { newsId: string; design: CarouselDesign }) =>
       post<{ run_id: string; title: string }>("/api/runs", {
         source: "queue",
@@ -102,8 +112,7 @@ export function NewsroomRoute() {
         design_id: design.id,
         design: designPayload(design),
       }),
-    onMutate: ({ newsId }) => setClaiming(newsId),
-    onSettled: () => { setClaiming(null); submitting.current = false },
+    onSettled: () => { submitting.current = false },
     onSuccess: (data) => {
       setSelectedStory(null)
       // Both lists change: the story leaves the queue, and a task appears.
@@ -116,7 +125,7 @@ export function NewsroomRoute() {
         action: {
           label: "Watch it",
           onClick: () => {
-            window.location.href = `/tasks/${data.run_id}`
+            void navigate(`/tasks/${data.run_id}`)
           },
         },
       })
@@ -148,6 +157,7 @@ export function NewsroomRoute() {
   })
 
   const remove = useMutation({
+    mutationKey: ["delete-story"],
     mutationFn: (newsId: string) => del<{ result: string }>("/api/queue/" + encodeURIComponent(newsId)),
     onSuccess: async (_data, newsId) => {
       await queryClient.cancelQueries({ queryKey: ["queue"] })
@@ -233,8 +243,8 @@ export function NewsroomRoute() {
         <div className="newsroom-section-label"><span>Ready to create</span><span>{items.length} {items.length === 1 ? "story" : "stories"}</span></div>
         <div className="news-story-grid">
           {items.map(item => {
-            const busy = claiming === item.id
-            const deleting = remove.isPending && remove.variables === item.id
+            const busy = pendingStarts.some(start => start.newsId === item.id)
+            const deleting = pendingDeletes.includes(item.id)
             const href = sourceUrl(item.source_url)
             return <article key={item.id} className="news-story-card" aria-label={item.title} aria-busy={busy || deleting}>
               <StoryThumbnail item={item} />
@@ -245,11 +255,11 @@ export function NewsroomRoute() {
                   : item.title}</h2>
                 <p className="news-story-description">{item.summary || "Open the original story for the details, or turn this headline into your next carousel."}</p>
                 <div className="news-story-actions">
-                  <Button variant="brand" size="sm" onClick={event => { createTrigger.current = event.currentTarget; setSelectedStory(item) }} disabled={start.isPending || remove.isPending}>
+                  <Button variant="brand" size="sm" onClick={event => { createTrigger.current = event.currentTarget; setSelectedStory(item) }} disabled={pendingStarts.length > 0 || deleting}>
                     {busy ? <Loader2 className="animate-spin" /> : <Sparkles />}
                     {busy ? "Creating…" : "Create carousel"}
                   </Button>
-                  <Button variant="ghost" size="sm" className="news-story-delete" onClick={() => remove.mutate(item.id)} disabled={start.isPending || remove.isPending}>
+                  <Button variant="ghost" size="sm" className="news-story-delete" onClick={() => remove.mutate(item.id)} disabled={busy || deleting}>
                     {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
                     {deleting ? "Deleting…" : "Delete"}
                   </Button>
@@ -269,6 +279,10 @@ export function NewsroomRoute() {
           if (submitting.current) return
           submitting.current = true
           start.mutate({ newsId: selectedStory.id, design })
+          setSelectedStory(null)
+          toast.info("Starting your carousel", {
+            description: "You can keep browsing. Find your carousel in Tasks once it starts.",
+          })
         }}
       />}
     </div>

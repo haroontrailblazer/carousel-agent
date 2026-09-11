@@ -23,13 +23,26 @@ Instruction lives in ``skills/agents/research.md`` (Learner-editable) with
 
 from __future__ import annotations
 
+import asyncio
+
 from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool
 
 from app.config import agent_instructions, settings
 from app.llm import resolve_role_model
 from app.state import AGENT_RESEARCH, K_NEWS_ITEM, K_RECENT_FEEDBACK, K_REWORK_FEEDBACK
-from app.tools.research_tools import save_research_brief, search_web
+from app.tools import research_tools
+from app.tools.research_tools import save_research_brief
+
+
+async def search_web(query: str) -> dict:
+    """Search the live web for one focused question and return cited facts.
+
+    The synchronous provider client and its retry sleeps must not run on the
+    API event loop. to_thread also carries this run's credentials and tenant
+    context into the worker without blocking navigation, Stop, or heartbeats.
+    """
+    return await asyncio.to_thread(research_tools.search_web, query)
 
 # NOTE: the literal template placeholders below MUST match the state keys in
 # app/state.py: {news_item} == K_NEWS_ITEM, {rework_feedback?} ==
