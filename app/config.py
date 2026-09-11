@@ -178,10 +178,7 @@ class Settings:
     # hand after the first deploy.
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "")
 
-    # --- observability (Langfuse; empty keys = tracing disabled) ---
-    langfuse_public_key: str = os.getenv("LANGFUSE_PUBLIC_KEY", "")
-    langfuse_secret_key: str = os.getenv("LANGFUSE_SECRET_KEY", "")
-    langfuse_base_url: str = os.getenv("https://cloud.langfuse.com")
+    # Langfuse credentials and endpoint are saved in Profile & settings.
 
     # --- media / design assets ---
     ffmpeg_bin: str = os.getenv("FFMPEG_BIN", "ffmpeg")

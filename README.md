@@ -248,7 +248,7 @@ not tappable. Tunnel the console or deploy it to get a real button.
 
 ## Token & cost traceability
 
-Two layers, both on by default:
+Two independent layers:
 
 - **Run totals (always on, no setup).** The orchestrator sums every model
   call's `usage_metadata` (Gemini natively; OpenAI via the LiteLLM wrapper,
@@ -259,15 +259,16 @@ Two layers, both on by default:
   `tokens in 41,203 / out 9,882 / total 51,085 over 14 LLM call(s) +
   31,440 image tokens over 8 image call(s)`, and every image call is also
   logged individually as `[tokens] gpt-image-2 images.edit: ...`.
-- **Langfuse (per-call traces + cost).** Create a free project at
-  https://cloud.langfuse.com, put `LANGFUSE_PUBLIC_KEY` /
-  `LANGFUSE_SECRET_KEY` in `.env`, restart - nothing else. Every run
-  becomes a trace: one span per agent, one generation per LLM call with
-  input/output/total tokens and cost (computed by Langfuse from the model
-  id), plus a generation per gpt-image-2 call. Instrumentation lives in
-  `app/observability.py` (OpenInference Google-ADK instrumentor) and is
-  initialized by `app/agent.py`, the fetcher CLI, and the review API; with
-  the keys unset it is a logged no-op.
+- **Langfuse (optional external analytics).** An administrator connects a
+  Langfuse project under **Profile & settings > Tracing** using its HTTPS
+  server URL, public key and secret key, then enables export. Both keys are
+  encrypted in workspace storage and never returned by the settings API.
+  Langfuse values in `.env` are ignored. Changes apply to new and resumed
+  runs; each invocation keeps its own destination until it ends.
+  `app/langfuse_tracing.py` routes OpenInference ADK spans and image token
+  usage through an isolated OTLP exporter. It exports timings and usage,
+  with prompt/response contents hidden. Disabled or unavailable Langfuse
+  never blocks creation or the console's local trace and token totals.
 
 ## The review flow
 

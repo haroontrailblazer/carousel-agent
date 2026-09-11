@@ -3,6 +3,7 @@ import { StudioArtwork } from "@/components/layout/studio-artwork"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Cable,
+  Activity,
   Check,
   CircleUserRound,
   ExternalLink,
@@ -38,6 +39,7 @@ import { ApiError, del, get, post, postBytes } from "@/lib/api"
 import { compressAvatar } from "@/lib/image"
 import "./profile.css"
 import { AISettingsSection } from "./ai-settings"
+import { TracingSettingsSection } from "./tracing-settings"
 
 type InstagramAccount = {
   id: string
@@ -800,12 +802,12 @@ function InstagramSection() {
 
 export function ProfileRoute() {
   const { profile } = useProfile()
-  type SettingsView = "account" | "appearance" | "connections" | "ai"
+  type SettingsView = "account" | "appearance" | "connections" | "ai" | "tracing"
   const [view, setView] = React.useState<SettingsView>(() => {
     const params = new URLSearchParams(window.location.search)
     return params.has("instagram") || params.has("instagram_error")
       ? "connections"
-      : params.get("view") === "ai" ? "ai" : "account"
+      : params.get("view") === "tracing" ? "tracing" : params.get("view") === "ai" ? "ai" : "account"
   })
 
   const views = [
@@ -825,6 +827,7 @@ export function ProfileRoute() {
       icon: <Cable />,
     },
     { value: "ai" as const, label: "AI & models", icon: <KeyRound /> },
+    { value: "tracing" as const, label: "Tracing", icon: <Activity /> },
   ]
 
   return (
@@ -840,6 +843,7 @@ export function ProfileRoute() {
       </div>
       <Tabs items={views} value={view} onChange={setView} label="Settings views" className="profile-tabs" />
       <TabPanel value="ai" selected={view === "ai"}><AISettingsSection /></TabPanel>
+      <TabPanel value="tracing" selected={view === "tracing"}><TracingSettingsSection /></TabPanel>
       <TabPanel value="account" selected={view === "account"}><IdentitySection /></TabPanel>
       <TabPanel value="appearance" selected={view === "appearance"}><AppearanceSection /></TabPanel>
       <TabPanel value="connections" selected={view === "connections"} className="profile-connections">

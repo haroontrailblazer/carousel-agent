@@ -275,8 +275,8 @@ export function TraceSummaryBar({
       label: "Tokens",
       value: summary.tokens ? compactNumber(summary.tokens.total) : "—",
       title: summary.tokens
-        ? `${summary.tokens.prompt.toLocaleString()} in · ${summary.tokens.output.toLocaleString()} out`
-        : undefined,
+        ? `${summary.tokens.prompt.toLocaleString()} in · ${summary.tokens.output.toLocaleString()} out. Reported by agent responses; Langfuse is optional.`
+        : "Agent token usage has not been reported yet. Langfuse is not required.",
     },
     {
       key: "tools",

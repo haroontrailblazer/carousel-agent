@@ -68,6 +68,7 @@ from web_api.routes_designs import router as designs_router
 from web_api.routes_runs import router as runs_router
 from web_api.routes_settings import router as settings_router
 from web_api.routes_ai_settings import router as ai_settings_router
+from web_api.routes_tracing_settings import router as tracing_settings_router
 from web_api.spa import SPAStaticFiles
 
 
@@ -207,6 +208,7 @@ def build_app() -> ASGIApp:
     root.include_router(runs_router, prefix="/api", tags=["runs"])
     root.include_router(settings_router, prefix="/api", tags=["settings"])
     root.include_router(ai_settings_router, prefix="/api", tags=["settings"])
+    root.include_router(tracing_settings_router, prefix="/api", tags=["settings"])
 
     # Registered LAST: it is the catch-all, and anything mounted after it would
     # never be reached.

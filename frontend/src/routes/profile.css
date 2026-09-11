@@ -79,6 +79,13 @@
 .profile-field .profile-ai-unavailable { color: var(--destructive); }
 .profile-ai-error { display: grid; gap: 12px; color: var(--destructive); font-size: 12px; line-height: 1.6; }
 .profile-ai-form .profile-save-row>span { flex: 1 1 240px; line-height: 1.6; }
+.profile-tracing-toggle { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.profile-tracing-toggle input { width: 17px; height: 17px; margin-top: 2px; accent-color: var(--brand); }
+.profile-tracing-toggle span { display: grid; gap: 4px; }
+.profile-tracing-toggle strong { font-size: 12px; font-weight: 600; }
+.profile-tracing-toggle small { font-size: 11px; line-height: 1.5; color: var(--muted-foreground); }
+.profile-page .profile-tabs { max-width: 100%; overflow-x: auto; }
+.profile-page .profile-tabs[aria-label="Settings views"] [role="tab"] { flex-shrink: 0; }
 .profile-connected-account { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--background); }
 .profile-connected-account>div { min-width: 0; flex-basis: 180px; }
 .profile-connection-avatar { position: relative; display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 50%; background: var(--brand-soft); color: var(--brand); }
@@ -101,7 +108,7 @@
   .profile-overview-avatar { width: 56px; height: 56px; }
   .profile-overview h2 { font-size: 18px; }
   .profile-overview-note { width: 100%; margin-left: 68px; }
-  .profile-page .profile-tabs { gap: 0; justify-content: space-between; }
+  .profile-page .profile-tabs { gap: 16px; justify-content: flex-start; }
   .profile-page .profile-tabs[aria-label="Settings views"] [role="tab"] { justify-content: center; padding-inline: 0; gap: 0; min-width: 0; font-size: 11px; white-space: nowrap; }
   .profile-tabs [role="tab"] svg { display: none; }
   .profile-section .profile-section-header { padding: 18px 16px; }

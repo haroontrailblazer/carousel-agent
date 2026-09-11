@@ -51,14 +51,11 @@ from app.agents.stitch_verify import build_stitch_verify_agent
 from app.agents.template_design import build_template_design_agent
 from app import runtime
 from app.config import settings
-from app.observability import init_observability
+from app.langfuse_tracing import run_tracing
+from app.services import tracing_config
 from app.orchestrator import ORCHESTRATOR_NAME, CarouselOrchestrator
 
 logger = logging.getLogger(__name__)
-
-# Instrument BEFORE any model call so every process importing this module
-# (`adk web`, the fetcher, the review API) traces from the first request.
-init_observability()
 
 _ORCHESTRATOR_DESCRIPTION = (
     "Carousel Factory orchestrator: turns one queued AI/product news item "
@@ -133,7 +130,8 @@ class ConfiguredRunner(Runner):
         self.ai_settings.require_key()
         with ai_config.bind(self.ai_settings):
             try:
-                async with aclosing(super().run_async(**kwargs)) as events:
+                config = await tracing_config.load_for_run()
+                async with run_tracing(config, kwargs.get("session_id", "")), aclosing(super().run_async(**kwargs)) as events:
                     async for event in events:
                         yield event
             finally:
