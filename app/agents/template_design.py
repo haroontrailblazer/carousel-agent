@@ -467,7 +467,10 @@ async def render_body_slides(
 
     result: dict = {
         "status": "ok",
-        "template_used": template_ref or "style-prompt fallback (no template image yet)",
+        "input_source": "task state: copy_set, carousel_plan, research_brief, carousel_design",
+        "design_used": {"id": design.id, "name": design.name},
+        "slide_indices": [slide.index for slide in slides],
+        "template_used": template_ref or "design layout (no reference image)",
         "count": len(rendered),
         "rendered": [{"index": r["index"], "artifact": r["artifact"]} for r in rendered],
     }

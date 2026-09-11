@@ -179,6 +179,8 @@ export function PhaseRail({
 
 /** One tool call, with its full payload available without relying on hover. */
 const ToolCallRow = React.memo(function ToolCallRow({ tool }: { tool: ToolCall }) {
+  const readsSlideState = tool.name === "render_body_slides"
+  const noOverrides = tool.args?.trim() === "{}"
   const tone =
     tool.status === "error"
       ? "failed"
@@ -210,12 +212,17 @@ const ToolCallRow = React.memo(function ToolCallRow({ tool }: { tool: ToolCall }
         <ChevronDown className="size-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180" />
       </summary>
 
-      {(tool.args || tool.result) && (
+      {readsSlideState && <div className="border-t border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-xs leading-6">
+        <p className="font-semibold">Inputs from this task</p>
+        <p className="text-[var(--muted-foreground)]">Reads the copywriter’s saved headlines and body text, the editorial plan, research, and the selected design automatically. The text is placed on the slides exactly as written.</p>
+        {noOverrides && <p className="mt-1 text-[var(--muted-foreground)]">No slide filter supplied: renders all body slides. Empty arguments do not mean empty content.</p>}
+      </div>}
+      {((tool.args && !(readsSlideState && noOverrides)) || tool.result) && (
         <div className="grid gap-3 bg-[var(--muted)] px-3 py-3 lg:grid-cols-2">
-          {tool.args && (
+          {tool.args && !(readsSlideState && noOverrides) && (
             <div className="min-w-0">
               <p className="mb-1.5 text-xs font-semibold text-[var(--muted-foreground)]">
-                Arguments
+                {readsSlideState ? "Slide filter" : "Arguments"}
               </p>
               <pre className="max-h-80 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px] border border-[var(--border)] bg-[var(--background)] p-3 font-mono text-xs leading-6">
                 {tool.args}
