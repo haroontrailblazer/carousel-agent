@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal, Optional
 from urllib.parse import quote
 
@@ -130,6 +130,8 @@ class Identity:
     subject: str
     role: str = "reviewer"
     source: Literal["cookie", "bearer"] = "cookie"
+    assurance: str = "aal1"
+    requires_mfa: bool = False
 
     @property
     def is_admin(self) -> bool:
@@ -242,6 +244,7 @@ def issue_session_token(identity: Identity, *, ttl_s: int, secret: str) -> str:
             "sub": identity.subject,
             "email": identity.email,
             "role": identity.role,
+            "aal": identity.assurance,
             "iat": now,
             "exp": now + int(ttl_s),
         },
@@ -302,6 +305,7 @@ def read_session_token(raw: str, *, secret: str) -> Optional[Identity]:
         subject=str(claims.get("sub") or ""),
         role=str(claims.get("role") or "reviewer"),
         source="cookie",
+        assurance=str(claims.get("aal") or "aal1"),
     )
 
 
@@ -349,7 +353,14 @@ async def authorize_email(email: str, subject: str = "") -> Identity:
     if not row or not row.get("enabled"):
         raise AuthError("access_revoked", "Your account is disabled.")
     # Each account administers only its own rows; this is not a platform role.
-    return Identity(email=clean, subject=owner, role="admin")
+    return Identity(email=clean, subject=owner, role="admin", requires_mfa=bool(row.get("requires_mfa")))
+
+
+def enforce_assurance(identity: Identity, assurance: str) -> Identity:
+    """Only signed claims can satisfy an enrolled account's second factor."""
+    if identity.requires_mfa and assurance != "aal2":
+        raise AuthError("mfa_required", "Verify your authenticator code to continue.")
+    return replace(identity, assurance="aal2" if assurance == "aal2" else "aal1")
 
 
 def _cookie_value(scope: Scope, name: str) -> str:
@@ -430,7 +441,8 @@ class AuthMiddleware:
         if identity is not None:
             try:
                 UUID(identity.subject)
-                return await authorize_email(identity.email, identity.subject)
+                fresh = await authorize_email(identity.email, identity.subject)
+                return enforce_assurance(fresh, identity.assurance)
             except (ValueError, AuthError):
                 return None
 
@@ -439,12 +451,13 @@ class AuthMiddleware:
             token = header[7:].strip()
             try:
                 verified = self._verifier.verify(token)
-                identity = await authorize_email(verified["email"], verified["subject"])
+                identity = enforce_assurance(await authorize_email(verified["email"], verified["subject"]), verified.get("claims", {}).get("aal", "aal1"))
                 return Identity(
                     email=identity.email,
                     subject=identity.subject,
                     role=identity.role,
                     source="bearer",
+                    assurance=identity.assurance,
                 )
             except AuthError as exc:
                 logger.info("Bearer authentication refused: %s", exc.code)

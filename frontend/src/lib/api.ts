@@ -77,7 +77,7 @@ let redirectingToLogin = false
  * reloads the page and resets every module-level variable - including that
  * guard. It only ever protected concurrent requests within ONE page load.
  */
-const PUBLIC_ROUTES = ["/login", "/reset-password"]
+const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/reset-password", "/auth/callback", "/auth/confirm"]
 
 function onPublicRoute(): boolean {
   const path = window.location.pathname

@@ -18,6 +18,7 @@ from web_api.auth import (
     AuthError,
     Identity,
     authorize_email,
+    enforce_assurance,
     build_verifier,
     clear_cookie_headers,
     issue_session_token,
@@ -71,7 +72,7 @@ async def create_session(payload: SessionRequest, request: Request) -> Response:
     verifier = build_verifier()
     try:
         verified = verifier.verify(payload.access_token)
-        identity = await authorize_email(verified["email"], verified["subject"])
+        identity = enforce_assurance(await authorize_email(verified["email"], verified["subject"]), verified.get("claims", {}).get("aal", "aal1"))
     except AuthError as exc:
         # 403 when we know who they are but will not let them in; 401 when the
         # credential itself is the problem. The SPA shows a different message

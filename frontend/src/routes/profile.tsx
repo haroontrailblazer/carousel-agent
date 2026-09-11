@@ -40,6 +40,7 @@ import { compressAvatar } from "@/lib/image"
 import "./profile.css"
 import { AISettingsSection } from "./ai-settings"
 import { TracingSettingsSection } from "./tracing-settings"
+import { SecuritySettingsSection } from "./security-settings"
 import { SourceSettingsSection } from "./source-settings"
 
 type InstagramAccount = {
@@ -845,7 +846,7 @@ export function ProfileRoute() {
       <Tabs items={views} value={view} onChange={setView} label="Settings views" className="profile-tabs" />
       <TabPanel value="ai" selected={view === "ai"}><AISettingsSection /></TabPanel>
       <TabPanel value="tracing" selected={view === "tracing"}><TracingSettingsSection /></TabPanel>
-      <TabPanel value="account" selected={view === "account"}><IdentitySection /></TabPanel>
+      <TabPanel value="account" selected={view === "account"}><div className="grid gap-5"><IdentitySection /><SecuritySettingsSection /></div></TabPanel>
       <TabPanel value="appearance" selected={view === "appearance"}><AppearanceSection /></TabPanel>
       <TabPanel value="connections" selected={view === "connections"} className="profile-connections">
         <InstagramSection />

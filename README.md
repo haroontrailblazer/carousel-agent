@@ -178,6 +178,45 @@ server can dispatch a request for a verified workspace. Keep server credentials,
 `SECRETS_KEY` and `SESSION_SECRET` in the deployment environment; those are
 infrastructure secrets, not personal integration settings.
 
+The public landing page verifies the existing application cookie before showing
+**Go to dashboard**. `/login` and `/signup` use email-first access, password
+confirmation, email codes and resend cooldowns. `/forgot-password`,
+`/reset-password`, `/auth/confirm` and `/auth/callback` are public recovery routes.
+OAuth uses PKCE with a popup and redirect fallback; return destinations stay on
+this application origin. Provider buttons appear only when enabled in Supabase.
+
+Apply `013_workspace_mfa.sql` before deploying these auth screens. It reports
+verified factors from Supabase Auth without exposing Auth tables to browsers.
+Both new sessions and existing API cookies enforce the account's MFA requirement.
+Profile → Account security supports TOTP setup/removal and passkey management.
+Removing an authenticator requires its current code. Supabase does not provide
+Oreag's custom backup-code flow here; keep an authenticator backup. Password
+recovery still requires an enrolled second factor.
+
+`db/auth-emails/` contains the branded confirmation, sign-in and recovery emails,
+including both the one-time code and a token-hash link that works across devices.
+`scripts/configure_auth_experience.py` previews the selected configuration, or
+applies it with `--apply`, reading the authorized management token from stdin.
+It uses Carousel's project and production origin, stores only selected non-secret
+rollback settings in ignored `.work/`, and preserves SMTP/provider credentials.
+The password policy requires 12 characters with upper/lowercase, a number and a
+symbol. Passkeys are bound to `carousell.up.railway.app`; changing that domain
+requires planning for existing passkeys.
+
+Regression checks: `python -m pytest -q -p no:cacheprovider`,
+`node scripts/test_workspace_isolation.cjs` (local PGlite installation), and
+`node scripts/test_auth_experience.cjs` with a built Vite preview at port 4183.
+The browser test needs Playwright (or `PLAYWRIGHT_MODULE` pointing to its installed
+module); `AUTH_TEST_ORIGIN` can override the local preview origin. Its auth,
+email, OAuth and MFA services are entirely mocked and it sends no real emails.
+
+Create separate Google/GitHub OAuth apps for Carousel. Their callback is
+`https://lovmbnastwiyhhujaadg.supabase.co/auth/v1/callback`; the homepage is
+`https://carousell.up.railway.app`. Store their credentials only in Supabase Auth.
+Google setup uses the separate `carousel-508307` project. Provider creation and
+Google's audience selection remain pending operator approval; neither provider
+is enabled yet. Do not reuse Oreag credentials or enable placeholder providers.
+
 This supports separate accounts on one application instance. Agent task queues
 and live event subscriptions remain process-local: use one application worker
 until a distributed job worker/event bus is introduced for horizontal scaling.

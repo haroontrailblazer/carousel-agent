@@ -21,7 +21,7 @@
 import * as React from "react"
 import { useQueryClient } from "@tanstack/react-query"
 
-import { del, onSessionExpired, probe } from "@/lib/api"
+import { onSessionExpired, probe } from "@/lib/api"
 import { setWorkspaceScope } from "@/lib/workspace"
 import { supabase } from "@/lib/supabase"
 import type { Identity } from "@/lib/types"
@@ -69,6 +69,7 @@ type AuthValue = {
   status: AuthStatus
   identity: Identity | null
   signIn: (email: string, password: string) => Promise<void>
+  completeSignIn: (token: string) => Promise<void>
   signOut: () => Promise<void>
   refresh: () => Promise<void>
 }
@@ -78,6 +79,7 @@ const AuthContext = React.createContext<AuthValue | null>(null)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient()
   const account = React.useRef("")
+  const revision = React.useRef(0)
   const [status, setStatus] = React.useState<AuthStatus>("pending")
   const [identity, setIdentity] = React.useState<Identity | null>(null)
 
@@ -86,10 +88,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // itself cause a navigation. Routing this through api() meant a 401 here
     // triggered a redirect to /login - and on /login that redirect fired
     // again on every mount, reloading the page forever.
+    const request = ++revision.current
     const me = await probe<Identity>("/api/auth/me")
+    if (request !== revision.current) return
     const owner = me?.id ?? me?.email ?? ""
     if (account.current !== owner) {
       await queryClient.cancelQueries()
+      if (request !== revision.current) return
       queryClient.clear()
       account.current = owner
       setWorkspaceScope(owner)
@@ -113,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // If any request anywhere discovers the session is dead, drop it here too
     // so the UI stops rendering signed-in chrome behind the redirect.
     return onSessionExpired(() => {
+      revision.current++
       setIdentity(null)
       setStatus("out")
       rememberSession(false)
@@ -122,44 +128,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
   }, [refresh])
 
-  const signIn = React.useCallback(
-    async (email: string, password: string) => {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (error) throw error
-      const token = data.session?.access_token
-      if (!token) throw new Error("Sign-in did not return a session.")
+  React.useEffect(() => {
+    const update = () => { if (document.visibilityState === "visible") void refresh() }
+    window.addEventListener("focus", update)
+    window.addEventListener("pageshow", update)
+    return () => { window.removeEventListener("focus", update); window.removeEventListener("pageshow", update) }
+  }, [refresh])
 
-      // Exchange the verified account token for our server session cookie.
-      const response = await fetch("/api/auth/session", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ access_token: token }),
-      })
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}))
-        throw new Error(body.error ?? "Could not start a session.")
-      }
-      await refresh()
-    },
-    [refresh],
-  )
+  const completeSignIn = React.useCallback(async (token: string) => {
+    const response = await fetch("/api/auth/session", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ access_token: token }),
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}))
+      throw Object.assign(new Error(body.error ?? "Could not start a session."), { code: body.code })
+    }
+    await refresh()
+  }, [refresh])
+
+  const signIn = React.useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    if (!data.session?.access_token) throw new Error("Sign-in did not return a session.")
+    await completeSignIn(data.session.access_token)
+  }, [completeSignIn])
 
   const signOut = React.useCallback(async () => {
+    // Do not claim sign-out succeeded while an httpOnly cookie is still active.
+    const response = await fetch("/api/auth/session", { method: "DELETE", credentials: "include" })
+    if (!response.ok) throw new Error("Could not sign out. Please check your connection and try again.")
+    revision.current++
     setIdentity(null)
     setStatus("out")
     await queryClient.cancelQueries()
     queryClient.clear()
     account.current = ""
     setWorkspaceScope("")
-    try {
-      await del("/api/auth/session")
-    } catch {
-      /* clearing a cookie must work even when the session is already dead */
-    }
     // scope: "local" - one expired tab must not sign the user out on their
     // other devices.
     await supabase.auth.signOut({ scope: "local" })
@@ -169,11 +175,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [queryClient])
 
   const value = React.useMemo(
-    () => ({ status, identity, signIn, signOut, refresh }),
-    [status, identity, signIn, signOut, refresh],
+    () => ({ status, identity, signIn, completeSignIn, signOut, refresh }),
+    [status, identity, signIn, completeSignIn, signOut, refresh],
   )
 
-  return <AuthContext.Provider value={value}><React.Fragment key={identity?.id ?? identity?.email ?? "signed-out"}>{children}</React.Fragment></AuthContext.Provider>
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth(): AuthValue {

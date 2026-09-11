@@ -21,6 +21,16 @@ const B = '22222222-2222-4222-8222-222222222222';
     INSERT INTO news_queue(id,url_hash,payload) VALUES('story','hash','{"title":"Legacy"}');
     INSERT INTO runs(run_id,title) VALUES('legacy-run','Legacy task');`);
   await db.exec(fs.readFileSync(path.join(root,'db/migrations/012_private_workspaces.sql'),'utf8'));
+  await db.exec(`CREATE TABLE auth.mfa_factors(id uuid PRIMARY KEY,user_id uuid,status text);`);
+  await db.exec(fs.readFileSync(path.join(root,'db/migrations/013_workspace_mfa.sql'),'utf8'));
+  const provision=async()=> (await db.query('SELECT public.carousel_provision_workspace($1,$2) AS value',[A,'haroon@closefuture.io'])).rows[0].value;
+  assert.deepEqual(await provision(),{enabled:true,requires_mfa:false});
+  await db.query("INSERT INTO auth.mfa_factors VALUES($1,$2,'unverified')",[B,A]);
+  assert.equal((await provision()).requires_mfa,false);
+  await db.query("UPDATE auth.mfa_factors SET status='verified' WHERE id=$1",[B]);
+  assert.equal((await provision()).requires_mfa,true);
+  await db.query('DELETE FROM auth.mfa_factors WHERE id=$1',[B]);
+  assert.equal((await provision()).requires_mfa,false);
   const rpc=async(owner,operation,args={})=>(await db.query('SELECT public.carousel_tenant_rpc($1,$2,$3) AS value',[owner,operation,args])).rows[0].value;
   const catalog=JSON.parse(fs.readFileSync(path.join(root,'app/services/db_operations.json'),'utf8'));
   const query=async(owner,sql,args=[])=>{
@@ -64,6 +74,6 @@ const B = '22222222-2222-4222-8222-222222222222';
   }
   await db.query('UPDATE carousel_workspaces SET enabled=false WHERE id=$1',[B]);
   await assert.rejects(()=>getConfig(B));
-  console.log('PASS PostgreSQL: preserved legacy data; isolated settings, identical session IDs, app state, designs, leases and deletes; denied browser/direct RPC and disabled accounts.');
+  console.log('PASS PostgreSQL: verified MFA enrollment detection; preserved legacy data; isolated settings, identical session IDs, app state, designs, leases and deletes; denied browser/direct RPC and disabled accounts.');
  } finally { await db.close(); }
 })().catch(e=>{console.error(e.message);process.exitCode=1});

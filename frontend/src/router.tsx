@@ -91,7 +91,7 @@ function BootSplash() {
  * someone remembering to add a line.
  */
 function RequireAuth() {
-  const { status } = useAuth()
+  const { status, identity } = useAuth()
   const location = useLocation()
 
   if (status === "pending") {
@@ -115,10 +115,10 @@ function RequireAuth() {
     )
   }
   if (status === "out") {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />
+    return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />
   }
   return (
-    <AppShell>
+    <AppShell key={identity?.id ?? identity?.email}>
       <Outlet />
     </AppShell>
   )
@@ -155,7 +155,12 @@ export const router = createBrowserRouter([
       // small, and it is the screen a signed-out visitor is guaranteed to
       // need - putting it behind its own download would trade a smaller
       // bundle for a second round trip on the very first paint.
-      { path: "/login", element: <LoginRoute /> },
+      { path: "/login", element: <LoginRoute key="login" /> },
+      { path: "/signup", element: <LoginRoute key="signup" mode="signup" /> },
+      { path: "/forgot-password", element: <LoginRoute key="forgot" mode="forgot" /> },
+      { path: "/auth/callback", element: <LoginRoute key="callback" mode="callback" /> },
+      { path: "/auth/confirm", element: <LoginRoute key="callback" mode="callback" /> },
+      { path: "/", element: <LoginRoute key="home" mode="home" /> },
       {
         path: "/reset-password",
         lazy: async () => ({
@@ -166,7 +171,7 @@ export const router = createBrowserRouter([
       {
         element: <RequireAuth />,
         children: [
-          { path: "/", element: <Navigate to="/new" replace /> },
+          { path: "/dashboard", element: <Navigate to="/new" replace /> },
           {
             path: "/new",
             lazy: async () => ({ Component: (await newRunChunk()).NewRunRoute }),

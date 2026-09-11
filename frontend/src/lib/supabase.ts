@@ -67,10 +67,12 @@ export async function getSupabase(): Promise<SupabaseClient> {
   client = createClient(config.supabase_url, config.supabase_anon_key, {
     auth: {
       persistSession: true,
+      flowType: "pkce",
+      experimental: { passkey: true },
       autoRefreshToken: true,
-      // Needed for password-recovery links, which land with the token in the
-      // URL fragment.
-      detectSessionInUrl: true,
+      // The public callback handles PKCE, email confirmation and recovery
+      // explicitly, so the SDK must not consume the same link a second time.
+      detectSessionInUrl: false,
     },
   })
   return client
