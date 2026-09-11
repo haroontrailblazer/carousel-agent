@@ -69,7 +69,9 @@ export function TaskActions({
   // different words, because here it means "ask me again".
   const awaitingReview = status === "awaiting_review"
 
-  const fail = (error: unknown, fallback: string) => {
+  const fail = (error: unknown, fallback: string, action: "resume" | "rerun" | "stop" | "delete") => {
+    refresh()
+    void queryClient.invalidateQueries({ queryKey: ["run", runId] })
     const code = error instanceof ApiError ? error.code : undefined
     if (code === "too_many_active_runs") {
       toast.error("One at a time", {
@@ -100,8 +102,10 @@ export function TaskActions({
       return
     }
     if (code === "run_is_active") {
-      toast.error("Still running", {
-        description: "Only finished tasks can be deleted.",
+      toast.info("Task is still active", {
+        description: action === "delete"
+          ? "Stop this task before deleting it."
+          : "This task is already running or starting. Its status is being refreshed.",
       })
       return
     }
@@ -121,7 +125,7 @@ export function TaskActions({
       void queryClient.invalidateQueries({ queryKey: ["trace", runId] })
       navigate(`/tasks/${runId}`)
     },
-    onError: (e) => fail(e, "Could not resume that task."),
+    onError: (e) => fail(e, "Could not resume that task.", "resume"),
   })
 
   const rerun = useMutation({
@@ -136,7 +140,7 @@ export function TaskActions({
       // Same id now - a re-run continues this task rather than opening one.
       navigate(`/tasks/${data.run_id}`)
     },
-    onError: (e) => fail(e, "Could not re-run that task."),
+    onError: (e) => fail(e, "Could not re-run that task.", "rerun"),
   })
 
   const stop = useMutation({
@@ -146,7 +150,7 @@ export function TaskActions({
       refresh()
       void queryClient.invalidateQueries({ queryKey: ["run", runId] })
     },
-    onError: (e) => fail(e, "Could not stop that task."),
+    onError: (e) => fail(e, "Could not stop that task.", "stop"),
   })
 
   const remove = useMutation({
@@ -159,7 +163,7 @@ export function TaskActions({
       if (onDeleted) onDeleted()
       else navigate("/tasks")
     },
-    onError: (e) => fail(e, "Could not delete that task."),
+    onError: (e) => fail(e, "Could not delete that task.", "delete"),
   })
 
   const canStop = status === "running"

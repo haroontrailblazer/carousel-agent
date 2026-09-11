@@ -104,7 +104,7 @@ class StartedRun:
     title: str
 
 
-def active_run_ids() -> set[str]:
+def active_run_ids(*, exclude_reservation: str = "") -> set[str]:
     """Runs currently being driven by this process, from BOTH registries.
 
     A run is driven from two places and the second is the expensive one. A
@@ -120,7 +120,9 @@ def active_run_ids() -> set[str]:
     on top of a rework, and let two drivers touch one ADK session.
     """
     active = {rid for rid, task in _run_tasks.items() if not task.done()}
-    active |= set(_reserved)
+    # Only the caller handing off its own reservation may exclude it. Actual
+    # generation/review drivers still count, even with the same run id.
+    active |= set(_reserved) - {exclude_reservation}
 
     # Deferred: app.review.resume imports app.services.db, and importing it at
     # module scope would close an import cycle through app.runs.service.
@@ -150,6 +152,8 @@ def _claim_slot(run_id: str) -> None:
         RunRefused: when every slot is taken.
     """
     active = active_run_ids()
+    if run_id in active:
+        raise RunRefused("run_is_active", "That task is already running or starting.")
     if len(active) >= MAX_CONCURRENT_RUNS:
         raise RunRefused(
             "too_many_active_runs",
@@ -745,7 +749,8 @@ async def resume_interrupted_run(
         True if a resume was started; False if the run is unknown or already
         being driven.
     """
-    if run_id in active_run_ids():
+    active = active_run_ids(exclude_reservation=run_id) if slot_held else active_run_ids()
+    if run_id in active:
         return False
     run = await db.get_run(run_id)
     if run is None:
@@ -859,9 +864,10 @@ async def restart_run(run_id: str, *, requested_by: str = "") -> bool:
         return await resume_interrupted_run(
             run_id, requested_by=requested_by, slot_held=True
         )
-    except BaseException:
+    finally:
+        # Includes False returns (for example a disappeared run), not only
+        # exceptions. No driver was registered on those paths to own the slot.
         _release_slot(run_id)
-        raise
 
 async def cancel_run(run_id: str) -> bool:
     """Stop whatever this process is running for ``run_id``.
