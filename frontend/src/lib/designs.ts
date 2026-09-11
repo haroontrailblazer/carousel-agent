@@ -45,6 +45,9 @@ export type SlideDesign = {
   titlePosition: DesignPosition
   titleAlign: "left" | "center" | "right"
   fontFamily: DesignFont
+  letterSpacing: number
+  wordSpacing: number
+  lineHeight: number
   background: string
   textColor: string
   highlightTextColor: string
@@ -136,6 +139,7 @@ const baseSlide: SlideDesign = {
   titlePosition: "top-left",
   titleAlign: "left",
   fontFamily: "condensed",
+  letterSpacing: 0, wordSpacing: 0, lineHeight: 120,
   background: "#f7f7f5",
   textColor: "#161811",
   highlightTextColor: "#8fb832",
@@ -509,6 +513,9 @@ function normalizeSlide(
         ? 65
         : baseSlide.shadowSoftness,
     shadowColor: value?.shadowColor || baseSlide.shadowColor,
+    letterSpacing: Number.isFinite(value?.letterSpacing) ? Math.max(-2, Math.min(12, Number(value?.letterSpacing))) : 0,
+    wordSpacing: Number.isFinite(value?.wordSpacing) ? Math.max(0, Math.min(32, Number(value?.wordSpacing))) : 0,
+    lineHeight: Number.isFinite(value?.lineHeight) ? Math.max(100, Math.min(200, Number(value?.lineHeight))) : 120,
     shadowCurve: Number.isFinite(value?.shadowCurve) ? Number(value?.shadowCurve) : 0,
     imagePosition: surface === "cover" ? "middle-center" : slide.imagePosition,
     imageScale: surface === "cover" ? 100 : slide.imageScale,
@@ -573,6 +580,9 @@ type PersistedSlideDesign = {
   title_position?: DesignPosition
   title_align?: SlideDesign["titleAlign"]
   font_family?: DesignFont
+  letter_spacing?: number
+  word_spacing?: number
+  line_height?: number
   background?: string
   text_color?: string
   highlight_text_color?: string
@@ -624,6 +634,7 @@ function fromPersistedSlide(value: PersistedSlideDesign | undefined): Partial<Sl
     titlePosition: value.title_position,
     titleAlign: value.title_align,
     fontFamily: value.font_family,
+    letterSpacing: value.letter_spacing, wordSpacing: value.word_spacing, lineHeight: value.line_height,
     background: value.background,
     textColor: value.text_color,
     highlightTextColor: value.highlight_text_color,
@@ -822,6 +833,7 @@ function slidePayload(slide: SlideDesign) {
     title_position: slide.titlePosition,
     title_align: slide.titleAlign,
     font_family: slide.fontFamily,
+    letter_spacing: slide.letterSpacing, word_spacing: slide.wordSpacing, line_height: slide.lineHeight,
     background: slide.background,
     text_color: slide.textColor,
     highlight_text_color: slide.highlightTextColor,

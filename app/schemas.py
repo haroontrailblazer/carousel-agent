@@ -65,6 +65,9 @@ class SlideDesign(BaseModel):
     title_position: DesignPosition = "top-left"
     title_align: Literal["left", "center", "right"] = "left"
     font_family: DesignFont = "condensed"
+    letter_spacing: float = Field(0, ge=-2, le=12)
+    word_spacing: float = Field(0, ge=0, le=32)
+    line_height: int = Field(120, ge=100, le=200)
     background: str = Field("#f7f7f5", pattern=r"^#[0-9a-fA-F]{6}$")
     text_color: str = Field("#161811", pattern=r"^#[0-9a-fA-F]{6}$")
     highlight_text_color: str = Field("#8fb832", pattern=r"^#[0-9a-fA-F]{6}$")

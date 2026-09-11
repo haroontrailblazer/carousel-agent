@@ -48,6 +48,7 @@ from yt_dlp.utils import DownloadError, download_range_func
 
 from app.config import settings
 from app.cover_shadow import cover_shadow_mask
+from app.text_spacing import advance, text_width, line_offset
 from app.schemas import CarouselDesign
 from app.text_rules import require_no_em_dash
 from app.tools import brand_identity
@@ -1100,18 +1101,22 @@ def _load_title_font(
 def _line_width(
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     text: str,
+    letter_spacing: float = 0,
+    word_spacing: float = 0,
 ) -> float:
     """Width of ``text`` measured char-by-char (matches per-char drawing)."""
-    return sum(font.getlength(ch) for ch in text)
+    return text_width(font, text, letter_spacing, word_spacing)
 
 
 def _wrap_title(
     title: str,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     max_w: float,
+    letter_spacing: float = 0,
+    word_spacing: float = 0,
 ) -> list[str]:
     """Wrap a cover hook into the fewest balanced shared-headline lines."""
-    if _line_width(font, title) <= max_w:
+    if _line_width(font, title, letter_spacing, word_spacing) <= max_w:
         return [title]
     words = title.split(" ")
     if len(words) < 2:
@@ -1126,12 +1131,12 @@ def _wrap_title(
                 " ".join(words[boundaries[i] : boundaries[i + 1]])
                 for i in range(line_count)
             ]
-            widths = [_line_width(font, line) for line in lines]
+            widths = [_line_width(font, line, letter_spacing, word_spacing) for line in lines]
             score = max(widths) + (max(widths) - min(widths)) * 0.12
             if score < best[0]:
                 best = (score, lines)
         fallback = best
-        if all(_line_width(font, line) <= max_w for line in best[1]):
+        if all(_line_width(font, line, letter_spacing, word_spacing) <= max_w for line in best[1]):
             return best[1]
     return fallback[1]
 
@@ -1171,19 +1176,24 @@ def _render_title_block(
         if title_transform is not None
         else width - safe_margin * 2
     )
+    letter_spacing = slide.letter_spacing if slide else 0
+    word_spacing = slide.word_spacing if slide else 0
     title_size = slide.title_size if slide else _COVER_TITLE_FONT_SIZE
     max_h = round(height * title_transform.height / 100) if title_transform else height
     # Fit the real headline into its saved lower box, above the branding.
     # A long headline must not spill down onto the logo or handle.
     for fitted_size in range(title_size, 43, -1):
         font = _load_title_font(fitted_size, slide.font_family if slide else "condensed")
-        lines = _wrap_title(text, font, max_w)
+        lines = _wrap_title(text, font, max_w, letter_spacing, word_spacing)
         ascent, descent = font.getmetrics()
         line_h = ascent + descent
         gap = int(line_h * 0.10)
+        if slide is not None:
+            line_h = round(fitted_size * slide.line_height / 100)
+            gap = 0
         total_h = len(lines) * line_h + (len(lines) - 1) * gap
         if len(lines) <= _TITLE_MAX_LINES and total_h <= max_h and all(
-            _line_width(font, line) <= max_w for line in lines
+            _line_width(font, line, letter_spacing, word_spacing) <= max_w for line in lines
         ):
             break
     else:
@@ -1201,7 +1211,7 @@ def _render_title_block(
     top = max(0, min(top, height - int(height * 0.02) - total_h))
 
     global_idx = 0  # char index into `text` (lines re-join with single spaces)
-    block_width = max((_line_width(font, line) for line in lines), default=0)
+    block_width = max((_line_width(font, line, letter_spacing, word_spacing) for line in lines), default=0)
     horizontal = slide.title_position.split("-", 1)[1] if slide else "center"
     if title_transform is not None:
         block_left = float(round(width * title_transform.x / 100))
@@ -1217,7 +1227,7 @@ def _render_title_block(
         alignment_width = float(block_width)
     for line_no, line in enumerate(lines):
         y = top + line_no * (line_h + gap)
-        line_width = _line_width(font, line)
+        line_width = _line_width(font, line, letter_spacing, word_spacing)
         align = slide.title_align if slide else "center"
         if align == "left":
             x = block_left
@@ -1230,8 +1240,8 @@ def _render_title_block(
                 color = (*hex_color(slide.highlight_text_color, ACCENT_GREEN), 255) if slide else _highlight_color()
             else:
                 color = (*hex_color(slide.text_color, _TEXT_PRIMARY[:3]), 255) if slide else _TEXT_PRIMARY
-            draw.text((x, y), ch, font=font, fill=color)
-            x += font.getlength(ch)
+            draw.text((x, y + (line_offset(font, line_h) if slide else 0)), ch, font=font, fill=color)
+            x += advance(font, ch, letter_spacing, word_spacing)
             global_idx += 1
         global_idx += 1  # the space (or line break) between joined lines
     return canvas

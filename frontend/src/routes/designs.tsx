@@ -264,7 +264,7 @@ function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = f
               : <img src={"/illustrations/" + visual + (thumbnail ? "-160.webp" : visual === "carousel-sculpture" ? "-640.webp" : "-320.webp")} alt="Sample dimensional carousel artwork" draggable={false} />}
         </div>, slide.imageScale, [30, 100])}
       {surface === "cover" && <CoverShadow height={slide.shadowHeight} blur={slide.shadowSoftness} curve={slide.shadowCurve} />}
-      {object("title", <div className="simple-slide-text" style={{ fontFamily: font, fontSize: (slide.titleSize / 10.8) + "cqw", textAlign: slide.titleAlign }}>
+      {object("title", <div className="simple-slide-text" style={{ fontFamily: font, letterSpacing: (slide.letterSpacing / 10.8) + "cqw", wordSpacing: (slide.wordSpacing / 10.8) + "cqw", lineHeight: slide.lineHeight / 100, fontSize: (slide.titleSize / 10.8) + "cqw", textAlign: slide.titleAlign }}>
         <div>{title[0]}<br /><span style={{ color: slide.highlightTextColor }}>{title[1]}</span></div>
         {surface !== "cover" && <p style={{ fontSize: "3.33cqw" }}>{surface === "cta" ? "The next story is worth a swipe. Join the conversation." : copy?.body ?? "One clear idea. A little curiosity. Something worth sharing."}</p>}
       </div>, slide.titleSize, [44, 160])}
@@ -495,6 +495,10 @@ export function DesignsRoute() {
         {selectedElement === "title" && <>
           <Field label="Font"><select value={slide.fontFamily} onChange={e => updateSlide({ fontFamily: e.target.value as typeof slide.fontFamily })}>{(Object.keys(DESIGN_FONTS) as DesignFontFamily[]).map(family => <option key={family} value={family}>{DESIGN_FONTS[family].label}</option>)}</select></Field>
           <RangeField label="Text size" value={slide.titleSize} min={44} max={160} onChange={titleSize => updateSlide({ titleSize })} />
+          <RangeField label="Letter spacing" value={slide.letterSpacing} min={-2} max={12} suffix=" px" onChange={letterSpacing => updateSlide({ letterSpacing })} />
+          <RangeField label="Word spacing" value={slide.wordSpacing} min={0} max={32} suffix=" px" onChange={wordSpacing => updateSlide({ wordSpacing })} />
+          <RangeField label="Line height" value={slide.lineHeight} min={100} max={200} suffix="%" onChange={lineHeight => updateSlide({ lineHeight })} />
+          <Button variant="ghost" size="sm" onClick={() => updateSlide({ letterSpacing: 0, wordSpacing: 0, lineHeight: 120 })}><RotateCcw className="size-3" />Reset spacing</Button>
           <div className="simple-alignment" role="group" aria-label="Text alignment">{([["left", AlignLeft], ["center", AlignCenter], ["right", AlignRight]] as const).map(([align, Icon]) =>
             <button key={align} type="button" aria-label={"Align text " + align} aria-pressed={slide.titleAlign === align} onClick={() => updateSlide({ titleAlign: align })}><Icon /></button>)}</div>
         </>}

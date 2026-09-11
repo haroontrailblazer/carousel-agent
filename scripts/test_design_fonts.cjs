@@ -34,6 +34,15 @@ const origin = process.env.FONT_TEST_ORIGIN || 'http://127.0.0.1:4183';
         const selected = await page.getByLabel('Saved design').inputValue();
         const manifest = JSON.parse(fs.readFileSync('frontend/public/fonts/carousel/manifest.json', 'utf8'));
         const expected = { cover: 'sans', inside: 'serif', cta: 'condensed' };
+        const spacing = { cover: [4, 8, 140], inside: [-1, 12, 130], cta: [2, 6, 160] };
+        const spacingLabels = ['Letter spacing', 'Word spacing', 'Line height'];
+        const setSpacing = async values => {
+          for (const [index, label] of spacingLabels.entries()) {
+            const slider = page.getByRole('slider', { name: label, exact: true });
+            await slider.press("Home");
+            for (let step = Number(await slider.getAttribute("min")); step < values[index]; step++) await slider.press("ArrowRight");
+          }
+        };
         const surfaceName = { cover: 'Cover 01', inside: 'Inside slide 02', cta: 'CTA 03' };
         for (const [surface, family] of Object.entries(expected)) {
           await page.getByRole('button', { name: surfaceName[surface], exact: true }).click();
@@ -57,8 +66,18 @@ const origin = process.env.FONT_TEST_ORIGIN || 'http://127.0.0.1:4183';
             assert.equal(style.weight, '700');
             if (surface !== 'cover') assert.deepEqual(style.body, { family: manifest[choice].family, weight: '400' });
           }
+          await setSpacing(spacing[surface]);
           await page.getByRole('link', { name: 'Use design' }).waitFor();
-          assert.equal(designs.find(design => design.id === selected)[surface].font_family, family);
+          const saved = designs.find(design => design.id === selected)[surface];
+          assert.deepEqual([saved.letter_spacing, saved.word_spacing, saved.line_height], spacing[surface]);
+          assert.equal(saved.font_family, family);
+          const metrics = await page.locator(`.design-canvas[data-thumbnail="false"][data-surface="${surface}"]`).first().evaluate(canvas => {
+            const text = canvas.querySelector('.simple-slide-text'), style = getComputedStyle(text);
+            const scale = canvas.clientWidth / 1080;
+            return [parseFloat(style.letterSpacing) / scale, parseFloat(style.wordSpacing) / scale, parseFloat(style.lineHeight) / parseFloat(style.fontSize) * 100];
+          });
+          metrics.forEach((value, i) => assert(Math.abs(value - spacing[surface][i]) < 0.1));
+
           await page.screenshot({ path: `.work/fonts-${surface}-${viewport.width}.png`, fullPage: true });
         }
         await page.reload();
@@ -67,10 +86,13 @@ const origin = process.env.FONT_TEST_ORIGIN || 'http://127.0.0.1:4183';
           await page.getByRole('button', { name: surfaceName[surface], exact: true }).click();
           await page.getByRole('button', { name: 'Text', exact: true }).click();
           assert.equal(await page.getByLabel('Font', { exact: true }).inputValue(), family);
+          for (const [i, label] of spacingLabels.entries()) assert.equal(await page.getByRole('slider', { name: label, exact: true }).inputValue(), String(spacing[surface][i]));
         }
+        await page.getByRole('button', { name: 'Reset spacing' }).click();
+        for (const [i, label] of spacingLabels.entries()) assert.equal(await page.getByRole('slider', { name: label, exact: true }).inputValue(), String([0, 0, 120][i]));
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert.deepEqual(errors, []);
-        console.log(`PASS ${viewport.width}px: all bundled font faces and weights loaded, cover/body/CTA selections persisted, no horizontal overflow`);
+        console.log(`PASS ${viewport.width}px: all bundled font faces and weights loaded, cover/body/CTA font and spacing selections persisted, spacing reset, no horizontal overflow`);
       } catch (error) {
         console.error(page.url(), errors, (await page.locator('body').innerText()).slice(-3000));
         throw error;

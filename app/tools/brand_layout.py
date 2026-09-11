@@ -20,6 +20,7 @@ from typing import Literal
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps, ImageStat
 
 from app.schemas import CarouselDesign, SlideDesign
+from app.text_spacing import advance, text_width, line_offset
 from app.tools import brand_identity
 
 
@@ -131,9 +132,11 @@ def hex_color(value: str, fallback: tuple[int, int, int]) -> tuple[int, int, int
 def _line_width(
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     text: str,
+    letter_spacing: float = 0,
+    word_spacing: float = 0,
 ) -> float:
     """Measure one line using the same font instance used for drawing."""
-    return float(font.getlength(text))
+    return text_width(font, text, letter_spacing, word_spacing)
 
 
 def _balanced_wrap(
@@ -141,15 +144,17 @@ def _balanced_wrap(
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     max_width: int,
     max_lines: int,
+    letter_spacing: float = 0,
+    word_spacing: float = 0,
 ) -> list[str]:
     """Wrap a short headline into balanced lines without shrinking its font."""
     normalized = " ".join(str(text or "").split())
     if not normalized:
         return []
-    if _line_width(font, normalized) <= max_width:
+    if _line_width(font, normalized, letter_spacing, word_spacing) <= max_width:
         return [normalized]
     words = normalized.split(" ")
-    if any(_line_width(font, word) > max_width for word in words):
+    if any(_line_width(font, word, letter_spacing, word_spacing) > max_width for word in words):
         raise ValueError("headline contains a word wider than the fixed text area")
     best_overall: tuple[float, list[str]] | None = None
     for line_count in range(2, min(max_lines, len(words)) + 1):
@@ -160,17 +165,17 @@ def _balanced_wrap(
                 " ".join(words[boundaries[i] : boundaries[i + 1]])
                 for i in range(line_count)
             ]
-            widths = [_line_width(font, line) for line in lines]
+            widths = [_line_width(font, line, letter_spacing, word_spacing) for line in lines]
             score = max(widths) + (max(widths) - min(widths)) * 0.12
             if best is None or score < best[0]:
                 best = (score, lines)
         if best is None:
             continue
         best_overall = best
-        if all(_line_width(font, line) <= max_width for line in best[1]):
+        if all(_line_width(font, line, letter_spacing, word_spacing) <= max_width for line in best[1]):
             return best[1]
     if best_overall is None or any(
-        _line_width(font, line) > max_width for line in best_overall[1]
+        _line_width(font, line, letter_spacing, word_spacing) > max_width for line in best_overall[1]
     ):
         raise ValueError(
             f"headline does not fit at the fixed {HEADLINE_FONT_SIZE}px size "
@@ -183,19 +188,21 @@ def _greedy_wrap(
     text: str,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     max_width: int,
+    letter_spacing: float = 0,
+    word_spacing: float = 0,
 ) -> list[str]:
     """Wrap body copy at a fixed size while preserving every word verbatim."""
     normalized = " ".join(str(text or "").split())
     if not normalized:
         return []
     words = normalized.split(" ")
-    if any(_line_width(font, word) > max_width for word in words):
+    if any(_line_width(font, word, letter_spacing, word_spacing) > max_width for word in words):
         raise ValueError("body copy contains a word wider than the fixed text area")
     lines: list[str] = []
     current = words[0]
     for word in words[1:]:
         candidate = f"{current} {word}"
-        if _line_width(font, candidate) <= max_width:
+        if _line_width(font, candidate, letter_spacing, word_spacing) <= max_width:
             current = candidate
         else:
             lines.append(current)
@@ -219,6 +226,9 @@ def _fit_typography_layout(
     *,
     preferred_headline_size: int = HEADLINE_FONT_SIZE,
     font_family: str = "condensed",
+    letter_spacing: float = 0,
+    word_spacing: float = 0,
+    line_height: int | None = None,
     panel_top: int = TEXT_PANEL_TOP,
     panel_bottom: int = TEXT_PANEL_BOTTOM,
 ) -> _TypographyLayout:
@@ -257,10 +267,10 @@ def _fit_typography_layout(
                 headline_text,
                 head_font,
                 max_width,
-                HEADLINE_MAX_LINES,
+                HEADLINE_MAX_LINES, letter_spacing, word_spacing,
             )
             wrapped_body = [
-                _greedy_wrap(line, body_font, max_width) for line in clean_body
+                _greedy_wrap(line, body_font, max_width, letter_spacing, word_spacing) for line in clean_body
             ]
         except ValueError:
             continue
@@ -271,6 +281,10 @@ def _fit_typography_layout(
         body_line_height = body_ascent + body_descent
         head_gap = max(4, round(head_line_height * 0.06))
         body_gap = max(5, round(body_line_height * 0.14))
+        if line_height is not None:
+            head_line_height = round(headline_size * line_height / 100)
+            body_line_height = round(body_size * line_height / 100)
+            head_gap = body_gap = 0
         thought_gap = 10
         headline_height = (
             len(headline_lines) * head_line_height
@@ -364,6 +378,9 @@ def apply_slide_typography(
         max_width,
         preferred_headline_size=(slide.title_size if slide else HEADLINE_FONT_SIZE),
         font_family=(slide.font_family if slide else "condensed"),
+        letter_spacing=(slide.letter_spacing if slide else 0),
+        word_spacing=(slide.word_spacing if slide else 0),
+        line_height=(slide.line_height if slide else None),
         panel_top=panel_top,
         panel_bottom=panel_bottom,
     )
@@ -389,7 +406,11 @@ def apply_slide_typography(
         y = panel_top + max(0, (panel_bottom - panel_top - layout.total_height) // 2)
     else:
         y = max(panel_top, panel_bottom - layout.total_height - 18)
-    widest_headline = max((_line_width(head_font, line) for line in headline_lines), default=0)
+    letter_spacing = slide.letter_spacing if slide else 0
+    word_spacing = slide.word_spacing if slide else 0
+    head_offset = line_offset(head_font, layout.head_line_height) if slide else 0
+    body_offset = line_offset(body_font, layout.body_line_height) if slide else 0
+    widest_headline = max((_line_width(head_font, line, letter_spacing, word_spacing) for line in headline_lines), default=0)
     horizontal = slide.title_position.split("-", 1)[1] if slide else "left"
     if title_transform is not None:
         block_left = float(content_left)
@@ -404,7 +425,7 @@ def apply_slide_typography(
         block_left = float(content_left)
         alignment_width = float(widest_headline)
     for line in headline_lines:
-        line_width = _line_width(head_font, line)
+        line_width = _line_width(head_font, line, letter_spacing, word_spacing)
         if slide is not None and slide.title_align == "center":
             x = float(block_left + (alignment_width - line_width) / 2)
         elif slide is not None and slide.title_align == "right":
@@ -413,8 +434,8 @@ def apply_slide_typography(
             x = float(block_left)
         for char in line:
             color = highlight_text_color if highlight_start <= global_index < highlight_end else text_color
-            draw.text((x, y), char, font=head_font, fill=color)
-            x += head_font.getlength(char)
+            draw.text((x, y + head_offset), char, font=head_font, fill=color)
+            x += advance(head_font, char, letter_spacing, word_spacing)
             global_index += 1
         global_index += 1
         y += layout.head_line_height + layout.head_gap
@@ -423,12 +444,15 @@ def apply_slide_typography(
     y += layout.section_gap
     for thought_index, lines in enumerate(wrapped_body):
         for line_index, line in enumerate(lines):
-            draw.text(
-                (content_left, y),
-                line,
-                font=body_font,
-                fill=text_color,
-            )
+            width = _line_width(body_font, line, letter_spacing, word_spacing)
+            x = float(content_left)
+            if slide and slide.title_align == "center":
+                x += (max_width - width) / 2
+            elif slide and slide.title_align == "right":
+                x += max_width - width
+            for char in line:
+                draw.text((x, y + body_offset), char, font=body_font, fill=text_color)
+                x += advance(body_font, char, letter_spacing, word_spacing)
             y += layout.body_line_height
             if line_index < len(lines) - 1:
                 y += layout.body_gap
