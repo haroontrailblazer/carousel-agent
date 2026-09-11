@@ -27,9 +27,9 @@ RUN npm run build
 FROM python:3.13-slim
 
 # ffmpeg is a hard requirement, not an optional extra: the cover video is
-# trimmed and rendered with it. The Liberation and DejaVu fonts are what the
-# slide compositor draws with - without them Pillow silently falls back to a
-# bitmap default and every slide's typography is wrong.
+# trimmed and rendered with it. System fonts remain available for auxiliary
+# tools; slide typography uses the bundled frontend/public/fonts/carousel
+# files, copied below, so browser previews and exports use identical faces.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         fonts-liberation \

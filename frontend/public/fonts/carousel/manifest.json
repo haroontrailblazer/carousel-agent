@@ -1,0 +1,20 @@
+{
+  "sans": {
+    "family": "Carousel Barlow",
+    "label": "Modern sans · Barlow",
+    "regular": "Barlow-Regular.ttf",
+    "bold": "Barlow-Bold.ttf"
+  },
+  "serif": {
+    "family": "Carousel PT Serif",
+    "label": "Editorial serif · PT Serif",
+    "regular": "PT_Serif-Web-Regular.ttf",
+    "bold": "PT_Serif-Web-Bold.ttf"
+  },
+  "condensed": {
+    "family": "Carousel Barlow Condensed",
+    "label": "Bold condensed · Barlow Condensed",
+    "regular": "BarlowCondensed-Regular.ttf",
+    "bold": "BarlowCondensed-Bold.ttf"
+  }
+}

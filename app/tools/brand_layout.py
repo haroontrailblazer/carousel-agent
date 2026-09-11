@@ -10,6 +10,7 @@ is a fallback only when that design does not supply its own logo or handle.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from itertools import combinations
 from io import BytesIO
@@ -90,76 +91,10 @@ class _TypographyLayout:
     section_gap: int
     total_height: int
 
-# Windows paths first (the dev machine), then the Linux equivalents installed
-# by the Dockerfile. Without the Linux entries every lookup falls through to
-# ImageFont.load_default() - a tiny bitmap face - and slide typography silently
-# collapses in a container instead of failing loudly. DejaVu ships with
-# fonts-dejavu-core; Liberation is metrically compatible with Arial.
-_FONT_CANDIDATES = (
-    Path("C:/Windows/Fonts/segoeui.ttf"),
-    Path("C:/Windows/Fonts/arial.ttf"),
-    Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
-    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-)
-_BOLD_FONT_CANDIDATES = (
-    Path("C:/Windows/Fonts/seguisb.ttf"),
-    Path("C:/Windows/Fonts/arialbd.ttf"),
-    Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
-    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-)
-_HEADLINE_FONT_CANDIDATES = (
-    Path("C:/Windows/Fonts/bahnschrift.ttf"),
-    Path("C:/Windows/Fonts/impact.ttf"),
-    Path("C:/Windows/Fonts/arialbd.ttf"),
-    # Condensed first - closest to Bahnschrift/Impact for headline weight.
-    Path("/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf"),
-    Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
-    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
-)
-
-
-def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Load a stable UI font available on Windows, with a Pillow fallback."""
-    candidates = _BOLD_FONT_CANDIDATES if bold else _FONT_CANDIDATES
-    for path in candidates:
-        if path.exists():
-            return ImageFont.truetype(str(path), size=size)
-    return ImageFont.load_default()
-
-
-def headline_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Load the shared condensed headline face used by the cover system."""
-    for path in _HEADLINE_FONT_CANDIDATES:
-        if not path.exists():
-            continue
-        try:
-            font = ImageFont.truetype(str(path), size=size)
-        except OSError:
-            continue
-        if "bahnschrift" in path.name.lower():
-            try:
-                axes = font.get_variation_axes()
-                values: list[float] = []
-                for axis in axes:
-                    name = axis.get("name", b"")
-                    if isinstance(name, bytes):
-                        name = name.decode("ascii", errors="ignore")
-                    lowered = str(name).lower()
-                    if "weight" in lowered or lowered == "wght":
-                        values.append(min(float(axis["maximum"]), 700.0))
-                    elif "width" in lowered or lowered == "wdth":
-                        values.append(max(float(axis["minimum"]), 75.0))
-                    else:
-                        values.append(float(axis["default"]))
-                if values:
-                    font.set_variation_by_axes(values)
-            except OSError:
-                pass
-        return font
-    try:
-        return ImageFont.truetype("DejaVuSans-Bold.ttf", size=size)
-    except OSError:
-        return ImageFont.load_default(size=size)
+# The browser and compositor read the same manifest and exact font binaries.
+# Never substitute host fonts: that changes a saved design between dev and Linux.
+_FONT_DIRECTORY = Path(__file__).resolve().parents[2] / "frontend/public/fonts/carousel"
+_DESIGN_FONTS = json.loads((_FONT_DIRECTORY / "manifest.json").read_text(encoding="utf-8"))
 
 
 def design_font(
@@ -167,20 +102,19 @@ def design_font(
     family: str = "condensed",
     *,
     bold: bool = False,
-) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Resolve the user-selected slide family to an installed safe font."""
-    if family == "serif":
-        candidates = (
-            Path("C:/Windows/Fonts/georgia.ttf"),
-            Path("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"),
-            Path("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"),
-        )
-        for path in candidates:
-            if path.exists():
-                return ImageFont.truetype(str(path), size=size)
-    if family == "sans":
-        return _font(size, bold=bold)
-    return headline_font(size) if bold else _font(size)
+) -> ImageFont.FreeTypeFont:
+    """Load the exact selected face and weight also served to the design editor."""
+    face = _DESIGN_FONTS[family]
+    path = _FONT_DIRECTORY / face["bold" if bold else "regular"]
+    return ImageFont.truetype(str(path), size=size)
+
+
+def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont:
+    return design_font(size, "sans", bold=bold)
+
+
+def headline_font(size: int) -> ImageFont.FreeTypeFont:
+    return design_font(size, "condensed", bold=True)
 
 
 def hex_color(value: str, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
@@ -317,7 +251,7 @@ def _fit_typography_layout(
 
     for headline_size, body_size in candidates:
         head_font = design_font(headline_size, font_family, bold=True)
-        body_font = _font(body_size)
+        body_font = design_font(body_size, font_family)
         try:
             headline_lines = _balanced_wrap(
                 headline_text,
@@ -762,17 +696,7 @@ def _draw_handle_positioned(
         raise brand_identity.NoBrandIdentity("The brand rail was asked to draw an empty handle.")
     if not text.startswith("@"):
         text = "@" + text
-    font = _font(font_size)
-    if transform is not None:
-        # The editor uses Arial bold; Liberation Sans is its Linux metric match.
-        for path in (
-            Path("C:/Windows/Fonts/arialbd.ttf"),
-            Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
-            Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"),
-        ):
-            if path.exists():
-                font = ImageFont.truetype(str(path), size=font_size)
-                break
+    font = _font(font_size, bold=True)
     draw = ImageDraw.Draw(image)
     box = draw.textbbox((0, 0), text, font=font)
     width, height = box[2] - box[0], box[3] - box[1]
@@ -808,7 +732,7 @@ def draw_design_branding(
     )
     if shared_anchor:
         label = handle if handle.startswith("@") else "@" + handle
-        font = _font(design.handle_size)
+        font = _font(design.handle_size, bold=True)
         box = ImageDraw.Draw(image).textbbox((0, 0), label, font=font)
         width, height = box[2] - box[0], box[3] - box[1]
         left, top = _position_box(

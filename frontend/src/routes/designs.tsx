@@ -8,6 +8,8 @@ import { DesignGenerationSettings } from "@/components/design-generation-setting
 import { CoverShadow } from "@/components/cover-shadow"
 import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { type CarouselDesign, type DesignImageType, type DesignPosition, type ElementTransform, duplicateDesign, newDesign, PREBUILT_DESIGNS, useCarouselDesigns } from "@/lib/designs"
+import { DESIGN_FONTS, designFontFamily, type DesignFontFamily } from "@/lib/design-fonts"
+import "./design-fonts.css"
 import "./design-editor.css"
 
 type Surface = "cover" | "inside" | "cta"
@@ -240,7 +242,7 @@ function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = f
   const title = surface === "cta" ? ["Stay curious.", "Follow for more."] : copy?.[surface] ?? (surface === "cover" ? ["Good ideas.", "Great stories."] : ["Make every", "swipe count."])
   const photo = design.id === "editorial-signal" || slide.titleAlign === "center" ? "editorial-canyon" : "newsroom-atrium"
   const visual = design.id === "minimal-mono" ? "research-lens" : slide.imageType === "product" ? "carousel-sculpture" : "design-stylus"
-  const font = slide.fontFamily === "serif" ? "Georgia, serif" : slide.fontFamily === "condensed" ? "'Arial Narrow', Arial, sans-serif" : "Arial, sans-serif"
+  const font = designFontFamily(slide.fontFamily)
   function object(kind: MoveableElementKind, children: React.ReactNode, scalar?: number, scalarRange?: [number, number]) {
     const transform = slide[TRANSFORM_KEYS[kind]]
     if (thumbnail) return <div className={"design-canvas-element design-canvas-element--" + kind} style={{ left: transform.x + "%", top: transform.y + "%", width: transform.width + "%", height: transform.height + "%" }}>{children}</div>
@@ -267,7 +269,7 @@ function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = f
         {surface !== "cover" && <p style={{ fontSize: "3.33cqw" }}>{surface === "cta" ? "The next story is worth a swipe. Join the conversation." : copy?.body ?? "One clear idea. A little curiosity. Something worth sharing."}</p>}
       </div>, slide.titleSize, [44, 160])}
       {design.logoVisible && slide.logoVisible && object("logo", <img className="simple-slide-logo" src={design.logoDataUrl || "/illustrations/carousel-sculpture-160.webp"} alt={design.logoDataUrl ? "Your design logo" : "Sample brand logo"} draggable={false} />, design.logoSize, [24, 120])}
-      {design.handleVisible && slide.handleVisible && object("handle", <span className="design-canvas-handle" style={{ fontSize: (design.handleSize / 10.8) + "cqw" }}>{design.handleText || "@yourhandle"}</span>, design.handleSize, [16, 64])}
+      {design.handleVisible && slide.handleVisible && object("handle", <span className="design-canvas-handle" style={{ fontFamily: designFontFamily("sans"), fontSize: (design.handleSize / 10.8) + "cqw" }}>{design.handleText || "@yourhandle"}</span>, design.handleSize, [16, 64])}
     </div>
   </div>
 }
@@ -491,7 +493,7 @@ export function DesignsRoute() {
             onClick={() => patchSelectedTransform({ locked: !activeTransform.locked })}>{activeTransform.locked ? <Lock /> : <Unlock />}</button>}
         </h2>
         {selectedElement === "title" && <>
-          <Field label="Font"><select value={slide.fontFamily} onChange={e => updateSlide({ fontFamily: e.target.value as typeof slide.fontFamily })}><option value="sans">Modern sans</option><option value="serif">Editorial serif</option><option value="condensed">Bold condensed</option></select></Field>
+          <Field label="Font"><select value={slide.fontFamily} onChange={e => updateSlide({ fontFamily: e.target.value as typeof slide.fontFamily })}>{(Object.keys(DESIGN_FONTS) as DesignFontFamily[]).map(family => <option key={family} value={family}>{DESIGN_FONTS[family].label}</option>)}</select></Field>
           <RangeField label="Text size" value={slide.titleSize} min={44} max={160} onChange={titleSize => updateSlide({ titleSize })} />
           <div className="simple-alignment" role="group" aria-label="Text alignment">{([["left", AlignLeft], ["center", AlignCenter], ["right", AlignRight]] as const).map(([align, Icon]) =>
             <button key={align} type="button" aria-label={"Align text " + align} aria-pressed={slide.titleAlign === align} onClick={() => updateSlide({ titleAlign: align })}><Icon /></button>)}</div>

@@ -50,14 +50,15 @@ class BrandLayoutTests(unittest.TestCase):
             "Production adds latency, ambiguity, failures, and changing context.",
             "That gap is where impressive autonomous agent demos break.",
         ]
-        layout = _fit_typography_layout(headline, body, 904)
+        # A shorter panel forces fitting even with a true condensed font.
+        layout = _fit_typography_layout(headline, body, 904, panel_bottom=540)
         self.assertTrue(
             layout.headline_size < HEADLINE_FONT_SIZE
             or layout.body_size < BODY_FONT_SIZE
         )
         self.assertGreaterEqual(layout.headline_size, HEADLINE_MIN_FONT_SIZE)
         self.assertGreaterEqual(layout.body_size, BODY_MIN_FONT_SIZE)
-        self.assertLessEqual(layout.total_height, 620 - 140)
+        self.assertLessEqual(layout.total_height, 540 - 140)
 
         image = Image.new("RGB", (1080, 1350), PAPER)
         rendered = apply_slide_typography(image, headline, body)

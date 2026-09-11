@@ -1,0 +1,7 @@
+/* Exact files used by app/tools/brand_layout.py; no operating-system fallback. */
+@font-face { font-family: "Carousel Barlow"; src: url("/fonts/carousel/Barlow-Regular.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: block; }
+@font-face { font-family: "Carousel Barlow"; src: url("/fonts/carousel/Barlow-Bold.ttf") format("truetype"); font-style: normal; font-weight: 700; font-display: block; }
+@font-face { font-family: "Carousel PT Serif"; src: url("/fonts/carousel/PT_Serif-Web-Regular.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: block; }
+@font-face { font-family: "Carousel PT Serif"; src: url("/fonts/carousel/PT_Serif-Web-Bold.ttf") format("truetype"); font-style: normal; font-weight: 700; font-display: block; }
+@font-face { font-family: "Carousel Barlow Condensed"; src: url("/fonts/carousel/BarlowCondensed-Regular.ttf") format("truetype"); font-style: normal; font-weight: 400; font-display: block; }
+@font-face { font-family: "Carousel Barlow Condensed"; src: url("/fonts/carousel/BarlowCondensed-Bold.ttf") format("truetype"); font-style: normal; font-weight: 700; font-display: block; }
