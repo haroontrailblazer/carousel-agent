@@ -4,8 +4,8 @@ The two-sided human-in-the-loop gate of the Carousel Factory:
 
 - **Outbound** (phase ``review``): the ``send_review_request`` tool pulls local
   preview files out of the artifact store, sends them to the reviewers via
-  :func:`app.tools.telegram_tools.send_review_message` (Approve/Reject
-  buttons), and
+  :func:`app.tools.telegram_tools.send_review_message` (authenticated review
+  button), and
   increments ``K_REVIEW_ROUND``. The LLM then calls ``await_human_review`` - a
   :class:`google.adk.tools.LongRunningFunctionTool` that returns ``None``.
   Verified against installed google-adk 2.7.0
@@ -103,7 +103,8 @@ literally, including on the second and later review rounds.
 ## Mode SEND_MAIL - request a review and pause
 
 1. Call `send_review_request` (no arguments). It sends the reviewers a preview
-   (cover poster + slide thumbnails + caption) with Approve/Reject buttons and
+   (video cover + image cover + all slides + CTA + caption + source link)
+   with a Review carousel button and
    increments the review round counter.
 2. If (and ONLY if) the tool result has status "sent", immediately call
    `await_human_review` (no arguments). This is a long-running operation: the
@@ -295,12 +296,12 @@ async def capture_verdict_on_resume(
 # Tools
 # ---------------------------------------------------------------------------
 async def send_review_request(tool_context: ToolContext) -> dict:
-    """Send the reviewers the assembled carousel with Approve/Reject buttons.
+    """Send every generated preview followed by an authenticated review link.
 
-    Loads the preview artifacts (cover poster, body slides, CTA slide) from
+    Loads the preview artifacts (cover video, poster, body slides, CTA slide) from
     the artifact store, writes them to local files under the workdir, and
-    sends them to Telegram as a photo album plus a message carrying the
-    Approve/Reject links. Increments the review round in session state -
+    sends them to Telegram as mixed media albums plus the full caption,
+    original source URL, and a Review carousel button. Increments the review round in session state -
     but only after the message was actually sent.
 
     Returns:
@@ -327,14 +328,20 @@ async def send_review_request(tool_context: ToolContext) -> dict:
     except Exception as exc:
         return {"status": "error", "error": f"Bundle in state is malformed: {exc}"}
 
+    if not bundle.cta.artifact or any(not slide.artifact for slide in bundle.slides):
+        return {"status": "error", "error": "The bundle is missing a slide or CTA artifact."}
+
     round_no = int(state.get(K_REVIEW_ROUND) or 0) + 1
 
     preview_dir = settings.workdir / "review_previews" / run_id
     poster_path = await _materialize_artifact(
         tool_context, bundle.cover.poster_artifact, preview_dir
     )
+    video_path = await _materialize_artifact(
+        tool_context, bundle.cover.video_artifact, preview_dir
+    ) if bundle.cover.video_artifact else ""
     slide_paths: list[str] = []
-    slide_artifacts = [s.artifact for s in bundle.slides if s.artifact]
+    slide_artifacts = [s.artifact for s in sorted(bundle.slides, key=lambda slide: slide.index) if s.artifact]
     if bundle.cta.artifact:
         slide_artifacts.append(bundle.cta.artifact)
     for artifact_name in slide_artifacts:
@@ -342,13 +349,23 @@ async def send_review_request(tool_context: ToolContext) -> dict:
         if local:
             slide_paths.append(local)
 
+    if not poster_path or (bundle.cover.video_artifact and not video_path) or len(slide_paths) != len(slide_artifacts):
+        return {"status": "error", "error": "Review previews are incomplete; restore the missing artifacts and retry."}
+
     payload = bundle.model_dump(mode="json")
     payload["preview_paths"] = {
+        "video": video_path,
         "poster": poster_path,
         "slides": slide_paths,
     }
+    payload["preview_labels"] = {
+        video_path: "Video cover", poster_path: "Image cover",
+        **{path: ("CTA" if index == len(slide_paths) - 1 and bundle.cta.artifact else f"Slide {index + 2}")
+           for index, path in enumerate(slide_paths)},
+    }
     payload["delivery_target"] = "instagram" if state.get(K_ACCOUNT_ID) else "telegram"
     news_item = state.get(K_NEWS_ITEM) or {}
+    payload["source_url"] = str(news_item.get("source_url") or "")
     payload["news_title"] = (
         str(news_item.get("title") or "") or bundle.cover.title or "Untitled carousel"
     )
@@ -369,13 +386,13 @@ async def send_review_request(tool_context: ToolContext) -> dict:
         "Review message sent for run %s (round %s, %d preview file(s)).",
         run_id,
         round_no,
-        len(slide_paths) + (1 if poster_path else 0),
+        len(slide_paths) + bool(poster_path) + bool(video_path),
     )
     return {
         "status": "sent",
         "message_id": result.get("message_id", ""),
         "round": round_no,
-        "previews_attached": len(slide_paths) + (1 if poster_path else 0),
+        "previews_attached": len(slide_paths) + bool(poster_path) + bool(video_path),
     }
 
 

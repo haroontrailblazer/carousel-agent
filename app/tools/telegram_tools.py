@@ -124,7 +124,7 @@ def _request(
 
 
 def _preview_paths(bundle: dict) -> list[Path]:
-    """Local preview files from ``bundle["preview_paths"]``, poster first.
+    """Local preview files, video first when available, then poster and slides.
 
     Accepts the same two shapes the mail path did: a plain list (first entry is
     the poster/cover frame) or ``{"poster": path, "slides": [paths...]}``.
@@ -134,6 +134,8 @@ def _preview_paths(bundle: dict) -> list[Path]:
     candidates: list[Path] = []
 
     if isinstance(raw, dict):
+        if raw.get("video"):
+            candidates.append(Path(str(raw["video"])))
         poster = raw.get("poster") or raw.get("cover")
         if poster:
             candidates.append(Path(str(poster)))
@@ -206,47 +208,70 @@ def _buttons_supported(url: str) -> bool:
         return True
 
 
-def _send_album(client: httpx.Client, chat_id: str, paths: list[Path]) -> int:
-    """Upload previews as one photo album.
+def _send_album(client: httpx.Client, chat_id: str, paths: list[Path], labels: dict | None = None) -> int:
+    """Send every preview in order, including video and a final single item."""
+    for offset in range(0, len(paths), MEDIA_GROUP_LIMIT):
+        if offset:
+            time.sleep(3.1 if chat_id.startswith("-") else 1.1)
+        group = paths[offset:offset + MEDIA_GROUP_LIMIT]
+        with ExitStack() as stack:
+            media: list[dict] = []
+            files: dict[str, tuple] = {}
+            for index, path in enumerate(group):
+                key = f"file{index}"
+                mime = mimetypes.guess_type(path.name)[0] or "image/png"
+                kind = "video" if mime.startswith("video/") else "photo"
+                files[key] = (path.name, stack.enter_context(path.open("rb")), mime)
+                item = {"type": kind, "media": f"attach://{key}"}
+                if labels and labels.get(str(path)):
+                    item["caption"] = labels[str(path)]
+                if kind == "video":
+                    item["supports_streaming"] = True
+                media.append(item)
+            if len(group) == 1:
+                kind = media[0]["type"]
+                data = {"chat_id": chat_id, "caption": media[0].get("caption", "")}
+                if kind == "video":
+                    data["supports_streaming"] = "true"
+                _request(client, "sendVideo" if kind == "video" else "sendPhoto",
+                         data=data, files={kind: files["file0"]})
+            elif group:
+                _request(client, "sendMediaGroup",
+                         data={"chat_id": chat_id, "media": json.dumps(media)}, files=files)
+    return len(paths)
 
-    Telegram caps an album at :data:`MEDIA_GROUP_LIMIT`; a full carousel
-    (cover + up to 10 slides + CTA) can exceed that, so the extras are dropped
-    here and the message below says so rather than failing the send.
 
-    Returns:
-        How many images were actually uploaded.
-    """
-    usable = paths[:MEDIA_GROUP_LIMIT]
-    if not usable:
-        return 0
-
-    with ExitStack() as stack:
-        media: list[dict] = []
-        files: dict[str, tuple] = {}
-        for index, path in enumerate(usable):
-            key = f"file{index}"
-            handle = stack.enter_context(path.open("rb"))
-            mime = mimetypes.guess_type(path.name)[0] or "image/png"
-            files[key] = (path.name, handle, mime)
-            media.append({"type": "photo", "media": f"attach://{key}"})
-        _request(
-            client,
-            "sendMediaGroup",
-            data={"chat_id": chat_id, "media": json.dumps(media)},
-            files=files,
-        )
-    return len(usable)
+def _message_chunks(text: str) -> list[str]:
+    """Keep the full caption and source; Telegram counts UTF-16 text units."""
+    chunks: list[str] = []
+    while text:
+        units = 0
+        end = 0
+        for char in text:
+            size = 2 if ord(char) > 0xFFFF else 1
+            if units + size > MESSAGE_LIMIT:
+                break
+            units += size
+            end += 1
+        if end < len(text):
+            boundary = text.rfind("\n", 0, end)
+            if boundary > 0:
+                end = boundary + 1
+        chunks.append(text[:end])
+        text = text[end:]
+    return chunks
 
 
 def _send_review_message(run_id: str, bundle: dict, round_no: int, *, creds: dict) -> dict:
-    """Send the reviewers a carousel preview with Approve/Reject buttons.
+    """Send the full carousel preview, caption, source and protected review link.
 
     Args:
         run_id: Pipeline run id - becomes part of the review URLs.
         bundle: The assembled ``Bundle`` as a dict. Must additionally carry
             ``preview_paths``: local file paths of the poster frame and the
             slide PNGs (list, poster first; or ``{"poster": ..., "slides":
-            [...]}``). These are uploaded as a photo album.
+            [...]}``). An optional ``video`` entry precedes the poster. All files are
+            uploaded in ordered, mixed-media albums.
         round_no: 1-based review round number, shown in the message.
 
     Returns:
@@ -265,28 +290,23 @@ def _send_review_message(run_id: str, bundle: dict, round_no: int, *, creds: dic
     review_url = _console_review_url(run_id)
     previews = _preview_paths(bundle)
 
-    with httpx.Client(base_url=_api_base(creds), timeout=_TIMEOUT) as client:
+    with _delivery_lock(creds.get("bot_id") or chat_id), httpx.Client(base_url=_api_base(creds), timeout=_TIMEOUT) as client:
         # Album first so the slides sit above the decision prompt in the chat,
         # which is how the review mail read.
-        sent_previews = _send_album(client, chat_id, previews)
+        sent_previews = _send_album(client, chat_id, previews, bundle.get("preview_labels"))
 
         lines = [f"Carousel review needed - round {int(round_no)}", news_title]
         if caption:
             lines += ["", "Caption:", caption]
-        if len(previews) > sent_previews:
-            lines += [
-                "",
-                f"Showing {sent_previews} of {len(previews)} images "
-                f"(Telegram allows {MEDIA_GROUP_LIMIT} per album).",
-            ]
+        source_url = str(bundle.get("source_url") or "").strip()
+        if source_url:
+            lines += ["", "Original source:", source_url]
         use_buttons = _buttons_supported(review_url)
         if use_buttons:
             lines += [
                 "",
                 "Open the review screen to approve or reject.",
-                "Sign-in required - approving sends the files to Telegram."
-                if bundle.get("delivery_target") == "telegram"
-                else "Sign-in required - approving publishes to Instagram.",
+                "Sign in to the account that created this carousel to review it.",
             ]
         else:
             # Telegram refuses a non-public URL in a button, which would fail
@@ -301,8 +321,7 @@ def _send_review_message(run_id: str, bundle: dict, round_no: int, *, creds: dic
             lines += ["", f"Review and decide: {review_url}"]
 
         text = "\n".join(lines)
-        if len(text) > MESSAGE_LIMIT:
-            text = text[: MESSAGE_LIMIT - 3].rstrip() + "..."
+        chunks = _message_chunks(text)
 
         data: dict[str, Any] = {
             "chat_id": chat_id,
@@ -319,11 +338,17 @@ def _send_review_message(run_id: str, bundle: dict, round_no: int, *, creds: dic
                     # the console, and two buttons opening the identical page
                     # would imply the choice was already made by tapping.
                     "inline_keyboard": [
-                        [{"text": "REVIEW CAROUSEL", "url": review_url}],
+                        [{"text": "Review carousel", "url": review_url}],
                     ]
                 }
             )
-        result = _request(client, "sendMessage", data=data)
+        for index, chunk in enumerate(chunks):
+            if index or sent_previews:
+                time.sleep(3.1 if chat_id.startswith("-") else 1.1)
+            part = {**data, "text": chunk}
+            if index < len(chunks) - 1:
+                part.pop("reply_markup", None)
+            result = _request(client, "sendMessage", data=part)
 
     message_id = str(result.get("message_id", ""))
     logger.info(

@@ -10,7 +10,8 @@ literally, including on the second and later review rounds.
 ## Mode SEND_MAIL - request a review and pause
 
 1. Call `send_review_request` (no arguments). It sends the reviewers a preview
-   (cover poster + slide thumbnails + caption) with Approve/Reject buttons and
+   (video cover + image cover + all slides + CTA + caption + source link)
+   with a Review carousel button and
    increments the review round counter.
 2. If (and ONLY if) the tool result has status "sent", immediately call
    `await_human_review` (no arguments). This is a long-running operation: the

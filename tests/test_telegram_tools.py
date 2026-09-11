@@ -183,6 +183,9 @@ class SendReviewMessageTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.calls: list[tuple[str, dict]] = []
+        delay = patch.object(tg.time, "sleep")
+        delay.start()
+        self.addCleanup(delay.stop)
 
     def _previews(self, count: int) -> list[str]:
         made = []
@@ -222,11 +225,12 @@ class SendReviewMessageTests(unittest.TestCase):
         self.assertEqual(result["previews_sent"], 3)
         self.assertEqual(result["message_id"], "7")
 
-    def test_album_is_capped_at_the_telegram_limit(self) -> None:
-        """A full carousel exceeds the cap; it must trim, not fail."""
+    def test_all_previews_are_sent_across_multiple_albums(self) -> None:
+        """The album limit must never drop the final slides or CTA."""
         bundle = {"news_title": "T", "preview_paths": self._previews(14)}
         result = self._run(bundle)
-        self.assertEqual(result["previews_sent"], tg.MEDIA_GROUP_LIMIT)
+        self.assertEqual(result["previews_sent"], 14)
+        self.assertEqual([method for method, _ in self.calls], ["sendMediaGroup", "sendMediaGroup", "sendMessage"])
 
     def test_no_previews_still_sends_the_decision_message(self) -> None:
         """Previews are a convenience; the Approve/Reject links are the point."""
@@ -336,7 +340,7 @@ class ButtonFallbackTests(unittest.TestCase):
         keyboard = json.loads(body["reply_markup"][0])
         self.assertEqual(
             [row[0]["text"] for row in keyboard["inline_keyboard"]],
-            ["REVIEW CAROUSEL"],
+            ["Review carousel"],
         )
 
 
