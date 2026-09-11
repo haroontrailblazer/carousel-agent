@@ -44,7 +44,7 @@ from app.config import settings
 from app.services import source_config
 from app.observability import init_observability, shutdown_observability
 from app.schemas import NewsItem
-from app.news_media import feed_thumbnail
+from app.news_media import feed_thumbnail, safe_image_url
 from app.services import db
 from app.state import K_NEWS_ITEM, K_PHASE, K_RUN_ID, PHASE_DONE, PHASE_REVIEW
 
@@ -115,6 +115,24 @@ def _unique_capped(urls: Iterable[str], cap: int = MAX_MEDIA_URLS) -> list[str]:
         if len(out) >= cap:
             break
     return out
+
+
+def _media_urls_from_html(markup: str, base_url: str = "") -> list[str]:
+    """Collect article images and linked videos for pasted-URL runs.
+
+    Resolve relative media against the final page URL after redirects. Keep
+    only HTTP(S) media, discard tracking images, and bound the agent payload.
+    """
+    urls: list[str] = []
+    for src in _IMG_SRC_RE.findall(markup or ""):
+        url = safe_image_url(html_lib.unescape(src), base_url)
+        if url and not _TRACKING_PIXEL_RE.search(url):
+            urls.append(url)
+    for href in _A_HREF_RE.findall(markup or ""):
+        url = safe_image_url(html_lib.unescape(href), base_url)
+        if url and _VIDEO_LINK_RE.search(url):
+            urls.append(url)
+    return _unique_capped(urls)
 
 
 # ---------------------------------------------------------------------------

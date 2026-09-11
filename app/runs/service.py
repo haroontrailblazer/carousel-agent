@@ -270,7 +270,7 @@ async def fetch_url_item(url: str) -> dict:
         body=text[:MAX_BODY_CHARS],
         source_name="web",
         source_url=clean,
-        media_urls=_media_urls_from_html(markup),
+        media_urls=_media_urls_from_html(markup, base_url=resp.url),
         tags=["url"],
     )
     return item.model_dump(mode="json")
