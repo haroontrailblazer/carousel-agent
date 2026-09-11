@@ -59,6 +59,7 @@ class SlideDesign(BaseModel):
     shadow_opacity: int = Field(64, ge=0, le=100)
     shadow_height: int = Field(44, ge=18, le=72)
     shadow_softness: int = Field(36, ge=0, le=100)
+    shadow_curve: int = Field(0, ge=0, le=100)
     shadow_color: str = Field("#000000", pattern=r"^#[0-9a-fA-F]{6}$")
     title_size: int = Field(76, ge=44, le=160)
     title_position: DesignPosition = "top-left"
@@ -134,8 +135,8 @@ class CarouselDesign(BaseModel):
             handle_visible=False,
             shadow_visible=True,
             shadow_opacity=72,
-            shadow_height=48,
-            shadow_softness=42,
+            shadow_height=52,
+            shadow_softness=65,
             title_size=128,
             title_position="bottom-center",
             title_align="center",
@@ -149,6 +150,12 @@ class CarouselDesign(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def migrate_cta_layout(cls, value: Any) -> Any:
+        # Older contracts omitted these fields because the cover was fixed.
+        if isinstance(value, dict) and isinstance(value.get("cover"), dict):
+            value = {**value, "cover": {
+                "shadow_height": 52, "shadow_softness": 65, "shadow_curve": 0,
+                **value["cover"],
+            }}
         # Saved designs originally shared the inside layout with the CTA.
         # Copy it on read, then allow the two layouts to evolve independently.
         if isinstance(value, dict) and value.get("cta") is None:
@@ -172,8 +179,6 @@ class CarouselDesign(BaseModel):
         self.cover.shadow_visible = True
         self.cover.shadow_color = "#000000"
         self.cover.shadow_opacity = 100
-        self.cover.shadow_height = 52
-        self.cover.shadow_softness = 65
         self.cover.title_position = "bottom-" + self.cover.title_align
         title = self.cover.title_transform or ElementTransform(x=8, y=62, width=84, height=24)
         title_height = min(title.height, 24)

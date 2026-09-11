@@ -47,6 +47,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, download_range_func
 
 from app.config import settings
+from app.cover_shadow import cover_shadow_mask
 from app.schemas import CarouselDesign
 from app.text_rules import require_no_em_dash
 from app.tools import brand_identity
@@ -1341,19 +1342,20 @@ def _build_overlay_png(
 ) -> Path:
     """Draw the shared video/image cover: black fade, title, logo and handle.
 
-    The upper media area stays clear. From 48% to 66% of the canvas the
-    shadow fades to opaque black, matching the design editor exactly.
+    The saved height, blur and edge curve match the editor preview. With
+    default settings the fade runs from 48% to 66% of the canvas height.
     """
     width, height = settings.slide_width, settings.slide_height
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     # Legacy template art may contain extra frames and baked-in branding.
     # Covers now have exactly five layers, so always draw a clean shadow.
-    shadow_draw = ImageDraw.Draw(canvas)
-    ramp_top = round(height * 0.48)
-    solid_top = round(height * 0.66)
-    for y in range(ramp_top, height):
-        alpha = round(255 * min(1, (y - ramp_top) / max(1, solid_top - ramp_top)))
-        shadow_draw.line((0, y, width, y), fill=(0, 0, 0, alpha))
+    cover = design.cover if design else None
+    canvas.putalpha(cover_shadow_mask(
+        width, height,
+        coverage=cover.shadow_height if cover else 52,
+        blur=cover.shadow_softness if cover else 65,
+        curve=cover.shadow_curve if cover else 0,
+    ))
     canvas.alpha_composite(_render_title_block(title, highlight, design))
     if design is not None:
         identity = brand_identity.current(design)

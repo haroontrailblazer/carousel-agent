@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { DesignBranding } from "@/components/design-branding"
 import { DesignGenerationSettings } from "@/components/design-generation-settings"
+import { CoverShadow } from "@/components/cover-shadow"
 import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { type CarouselDesign, type DesignImageType, type DesignPosition, type ElementTransform, duplicateDesign, newDesign, PREBUILT_DESIGNS, useCarouselDesigns } from "@/lib/designs"
 import "./design-editor.css"
@@ -260,7 +261,7 @@ function DesignCanvas({ design, surface, selectedElement, preview, thumbnail = f
                   {[75, 215, 355].map((x, i) => <g key={x}><rect x={x} y="94" width="80" height="112" rx="12" fill={slide.background} stroke="currentColor" strokeWidth="2"/><rect x={x + 14} y="114" width="52" height="42" rx="5" fill="currentColor" opacity={0.2 + i * 0.25}/><path d={"M" + (x + 14) + " 174h38m-38 12h24"} stroke={slide.textColor} strokeWidth="3"/></g>)}</svg>
               : <img src={"/illustrations/" + visual + (thumbnail ? "-160.webp" : visual === "carousel-sculpture" ? "-640.webp" : "-320.webp")} alt="Sample dimensional carousel artwork" draggable={false} />}
         </div>, slide.imageScale, [30, 100])}
-      {surface === "cover" && <div className="simple-slide-shadow" />}
+      {surface === "cover" && <CoverShadow height={slide.shadowHeight} blur={slide.shadowSoftness} curve={slide.shadowCurve} />}
       {object("title", <div className="simple-slide-text" style={{ fontFamily: font, fontSize: (slide.titleSize / 10.8) + "cqw", textAlign: slide.titleAlign }}>
         <div>{title[0]}<br /><span style={{ color: slide.highlightTextColor }}>{title[1]}</span></div>
         {surface !== "cover" && <p style={{ fontSize: "3.33cqw" }}>{surface === "cta" ? "The next story is worth a swipe. Join the conversation." : copy?.body ?? "One clear idea. A little curiosity. Something worth sharing."}</p>}
@@ -499,7 +500,13 @@ export function DesignsRoute() {
           ? <p className="simple-control-help">Your searched and trimmed video fills the whole cover. An image cover uses the same layout. Media is cropped to fit automatically.</p>
           : <><Field label="Image style"><select value={slide.imageType} onChange={e => updateSlide({ imageType: e.target.value as DesignImageType })}>{IMAGE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
             <p className="simple-control-help">Drag the image and resize its corners to set where your visual goes.</p></>)}
-        {selectedElement === "shadow" && <p className="simple-control-help">Always on. A soft fade leads into a pitch-black base behind the title and branding, on both video and image covers.</p>}
+        {selectedElement === "shadow" && <>
+          <RangeField label="Shadow height" value={slide.shadowHeight} min={18} max={72} suffix="%" onChange={shadowHeight => updateSlide({ shadowHeight })} />
+          <RangeField label="Blur" value={slide.shadowSoftness} min={0} max={100} suffix="%" onChange={shadowSoftness => updateSlide({ shadowSoftness })} />
+          <RangeField label="Edge curve" value={slide.shadowCurve} min={0} max={100} suffix="%" onChange={shadowCurve => updateSlide({ shadowCurve })} />
+          <p className="simple-control-help">Blur softens the fade. Edge curve rounds it upward at the sides. The black base stays behind your text on image and video covers.</p>
+          <Button variant="ghost" size="sm" onClick={() => updateSlide({ shadowHeight: 52, shadowSoftness: 65, shadowCurve: 0 })}><RotateCcw className="size-3" />Reset shadow</Button>
+        </>}
         {(selectedElement === "logo" || selectedElement === "handle") && <>
           <label className="simple-toggle"><input type="checkbox" checked={visible(selectedElement)} onChange={e => setLayerVisibility(selectedElement, e.target.checked)} />Show {ELEMENT_LABELS[selectedElement].toLowerCase()}</label>
           <p className="simple-control-help">Set your {selectedElement === "logo" ? "logo" : "handle"} in Your branding above. Drag it here to place it.</p>

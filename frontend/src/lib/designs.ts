@@ -39,6 +39,7 @@ export type SlideDesign = {
   shadowOpacity: number
   shadowHeight: number
   shadowSoftness: number
+  shadowCurve: number
   shadowColor: string
   titleSize: number
   titlePosition: DesignPosition
@@ -104,7 +105,8 @@ export function coverLayout(slide: SlideDesign): SlideDesign {
     imageType: "editorial", imagePosition: "middle-center", imageScale: 100,
     imageTransform: { ...FULL_BLEED_COVER_TRANSFORM },
     shadowVisible: true, shadowColor: "#000000", shadowOpacity: 100,
-    shadowHeight: 52, shadowSoftness: 65,
+    shadowHeight: slide.shadowHeight ?? 52, shadowSoftness: slide.shadowSoftness ?? 65,
+    shadowCurve: slide.shadowCurve ?? 0,
     titlePosition: ("bottom-" + slide.titleAlign) as DesignPosition,
     titleTransform: { ...title, height, y: Math.max(62, Math.min(title?.y ?? 62, 86 - height)) },
   }
@@ -128,6 +130,7 @@ const baseSlide: SlideDesign = {
   shadowOpacity: 64,
   shadowHeight: 44,
   shadowSoftness: 36,
+  shadowCurve: 0,
   shadowColor: "#000000",
   titleSize: 76,
   titlePosition: "top-left",
@@ -410,6 +413,7 @@ const PREVIOUS_COVER_DESIGNS: CarouselDesign[] = PREVIOUS_PREBUILT_DESIGNS.map(d
   ...design,
   cover: coverLayout({
     ...design.cover, textColor: "#F6F4F0",
+    shadowHeight: 52, shadowSoftness: 65, shadowCurve: 0,
     highlightTextColor: design.id === "minimal-mono" ? "#F6F4F0" : "#F79270",
     titleSize: 100, titleTransform: { x: 8, y: 62, width: 84, height: 24, locked: false },
     logoVisible: true, handleVisible: true,
@@ -497,14 +501,15 @@ function normalizeSlide(
     shadowHeight: Number.isFinite(value?.shadowHeight)
       ? Number(value?.shadowHeight)
       : surface === "cover"
-        ? 48
+        ? 52
         : baseSlide.shadowHeight,
     shadowSoftness: Number.isFinite(value?.shadowSoftness)
       ? Number(value?.shadowSoftness)
       : surface === "cover"
-        ? 42
+        ? 65
         : baseSlide.shadowSoftness,
     shadowColor: value?.shadowColor || baseSlide.shadowColor,
+    shadowCurve: Number.isFinite(value?.shadowCurve) ? Number(value?.shadowCurve) : 0,
     imagePosition: surface === "cover" ? "middle-center" : slide.imagePosition,
     imageScale: surface === "cover" ? 100 : slide.imageScale,
     highlightTextColor: value?.highlightTextColor || value?.accentColor || baseSlide.highlightTextColor,
@@ -562,6 +567,7 @@ type PersistedSlideDesign = {
   shadow_opacity?: number
   shadow_height?: number
   shadow_softness?: number
+  shadow_curve?: number
   shadow_color?: string
   title_size?: number
   title_position?: DesignPosition
@@ -612,6 +618,7 @@ function fromPersistedSlide(value: PersistedSlideDesign | undefined): Partial<Sl
     shadowOpacity: value.shadow_opacity,
     shadowHeight: value.shadow_height,
     shadowSoftness: value.shadow_softness,
+    shadowCurve: value.shadow_curve,
     shadowColor: value.shadow_color,
     titleSize: value.title_size,
     titlePosition: value.title_position,
@@ -809,6 +816,7 @@ function slidePayload(slide: SlideDesign) {
     shadow_opacity: slide.shadowOpacity,
     shadow_height: slide.shadowHeight,
     shadow_softness: slide.shadowSoftness,
+    shadow_curve: slide.shadowCurve,
     shadow_color: slide.shadowColor,
     title_size: slide.titleSize,
     title_position: slide.titlePosition,
