@@ -68,7 +68,7 @@ _DEFAULT_INSTRUCTION = """\
 
 You render the BODY slides of an Instagram carousel - every slide between the
 cover and the final CTA - as 1080x1350 (4:5) PNG images that follow the design
-system in skills/design-skill.md (ink/paper rhythm, one lime-accent element,
+system in skills/design-skill.md (the selected background and highlight colors,
 content-aware layout archetype, deterministic body-only slide-number tag, and swipe-cue
 arrow). Generate the lower visual directly for its exact 2:1 panel so it meets
 the divider naturally without stretching or cropping. Keep all important

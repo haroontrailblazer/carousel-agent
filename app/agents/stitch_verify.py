@@ -46,6 +46,7 @@ from app.design_limits import design_slide_limit
 from app.schemas import (
     Bundle,
     CTASlide,
+    CarouselDesign,
     CarouselPlan,
     CopySet,
     CoverSpec,
@@ -67,6 +68,7 @@ from app.state import (
     K_COPY,
     K_COVER,
     K_CTA_SLIDE,
+    K_DESIGN,
     K_NEWS_ITEM,
     K_PLAN,
     K_QA_REPORT,
@@ -132,9 +134,11 @@ a review mail.
 - Never invent issues or hide issues: report exactly what the tool returned.
 - You have no other tools. Do not try to fix content yourself - routing the
   rework to the responsible agent is the fix.
-- If rework feedback from the human reviewer is present in your context, it
-  is the highest-priority correction: mention in your summary whether the
-  re-checked pieces now satisfy it.
+- The current tool result is the QA verdict. Previous automated failures are
+  historical context, not proof that the current output failed. Do not call
+  automated QA feedback a human review or invent an unsatisfied request.
+- Branding comes from the selected design and run identity. Never require a
+  particular creator, favicon, palette or a deliberately hidden mark.
 """
 
 
@@ -174,10 +178,10 @@ def _instruction_provider(ctx: ReadonlyContext) -> str:
     if rework:
         parts.append(
             "## HIGHEST PRIORITY - rework feedback for this run\n\n"
-            "The human reviewer (or a previous QA round) demanded corrections."
-            " This overrides every default guideline. The re-run agents were"
-            " asked to fix exactly this; verify their output with extra care"
-            " and reference it in your summary:\n\n"
+            "This may contain human feedback or a previous automated QA result."
+            " Re-check it using the current tool result and selected design."
+            " Do not repeat obsolete failures, override the selected identity,"
+            " or describe automated QA as a human rejection:\n\n"
             f"{rework}"
         )
 
@@ -388,7 +392,9 @@ async def _verify_brand_padding(
     # Body slides carry a number in the top-left anchor; the cover and CTA do
     # not. Only presence is checked - see validate_footer_padding on why the
     # value itself is not, and do not read this as "the number is correct".
-    errors = validate_footer_padding(data, kind, expect_slide_number=kind == "body")
+    raw_design = tool_context.state.get(K_DESIGN)
+    design = CarouselDesign.model_validate(raw_design) if raw_design else None
+    errors = validate_footer_padding(data, kind, expect_slide_number=kind == "body", design=design)
     if not errors:
         return None
     owner = AGENT_CTA if kind == "cta" else AGENT_TEMPLATE_DESIGN

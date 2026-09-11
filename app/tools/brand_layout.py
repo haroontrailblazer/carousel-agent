@@ -4,11 +4,8 @@ Image models create the editorial content, but the brand favicon, handle,
 swipe arrow, and their padding are composited here so every carousel uses
 identical geometry and exact text.
 
-The GEOMETRY is fixed; the MARKS are not. Which handle and which profile
-picture get drawn belongs to whichever Instagram account the run is targeting,
-and comes from ``app.tools.brand_identity``. This module used to load a single
-favicon checked into the repository, which was right while the console
-published to one account and silently wrong the moment a second was connected.
+Brand marks and their geometry belong to the selected design. Account identity
+is a fallback only when that design does not supply its own logo or handle.
 """
 
 from __future__ import annotations
@@ -19,7 +16,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Literal
 
-from PIL import Image, ImageDraw, ImageFont, ImageStat
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps, ImageStat
 
 from app.schemas import CarouselDesign, SlideDesign
 from app.tools import brand_identity
@@ -384,7 +381,7 @@ def apply_slide_typography(
     theme: Literal["auto", "paper", "ink"] = "auto",
     design: CarouselDesign | None = None,
 ) -> Image.Image:
-    """Composite readable Baskaran Builds typography over a text-free visual.
+    """Composite the selected design's readable typography over a text-free visual.
 
     The preferred 76px/36px sizes are used whenever they fit. Longer approved
     copy steps down proportionally within the explicit 60px/30px readable
@@ -714,14 +711,40 @@ def _position_box(
     return left, top
 
 
-def _transform_origin(transform: object, width: int, height: int) -> tuple[int, int]:
-    """Convert a normalized editor box into a native slide origin."""
-    left = round(SLIDE_WIDTH * float(getattr(transform, "x")) / 100)
-    top = round(SLIDE_HEIGHT * float(getattr(transform, "y")) / 100)
+def _transform_box(transform: object) -> tuple[int, int, int, int]:
+    """The editor's percentage rectangle, including its width and height."""
     return (
-        max(0, min(left, SLIDE_WIDTH - width)),
-        max(0, min(top, SLIDE_HEIGHT - height)),
+        round(SLIDE_WIDTH * float(getattr(transform, "x")) / 100),
+        round(SLIDE_HEIGHT * float(getattr(transform, "y")) / 100),
+        max(1, round(SLIDE_WIDTH * float(getattr(transform, "width")) / 100)),
+        max(1, round(SLIDE_HEIGHT * float(getattr(transform, "height")) / 100)),
     )
+
+
+def _paste_mark(image: Image.Image, mark: Image.Image, xy: tuple[int, int]) -> None:
+    if image.mode == "RGBA":
+        image.alpha_composite(mark, xy)
+    else:
+        image.paste(mark, xy, mark)
+
+
+def _draw_logo_positioned(image: Image.Image, design: CarouselDesign, slide: SlideDesign) -> None:
+    if slide.logo_transform is None:
+        mark = _favicon_from_source(design.logo_size, design)
+        left, top = _position_box(design.logo_position, mark.width, mark.height, margin=slide.safe_margin)
+    else:
+        left, top, width, height = _transform_box(slide.logo_transform)
+        # The editor uses object-fit: contain. Decode an uploaded logo directly
+        # so a rectangular box does not get a second square letterbox.
+        identity = brand_identity.current(design)
+        if design.logo_data_url and identity is not None:
+            with Image.open(BytesIO(identity.favicon_png)) as source:
+                mark = ImageOps.contain(source.convert("RGBA"), (width, height), Image.Resampling.LANCZOS)
+        else:
+            mark = _favicon_from_source(min(width, height), design)
+        left += (width - mark.width) // 2
+        top += (height - mark.height) // 2
+    _paste_mark(image, mark, (left, top))
 
 
 def _draw_handle_positioned(
@@ -740,15 +763,73 @@ def _draw_handle_positioned(
     if not text.startswith("@"):
         text = "@" + text
     font = _font(font_size)
+    if transform is not None:
+        # The editor uses Arial bold; Liberation Sans is its Linux metric match.
+        for path in (
+            Path("C:/Windows/Fonts/arialbd.ttf"),
+            Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+            Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"),
+        ):
+            if path.exists():
+                font = ImageFont.truetype(str(path), size=font_size)
+                break
     draw = ImageDraw.Draw(image)
     box = draw.textbbox((0, 0), text, font=font)
     width, height = box[2] - box[0], box[3] - box[1]
-    left, top = (
-        _transform_origin(transform, width, height)
-        if transform is not None
-        else _position_box(position, width, height, margin=margin)
-    )
+    if transform is not None:
+        left, top, box_width, box_height = _transform_box(transform)
+        # Match the editor's left-aligned, vertically centered flex box. Clip
+        # inside that box rather than moving long handles away from saved x/y.
+        label = Image.new("RGBA", (box_width, box_height))
+        ImageDraw.Draw(label).text(
+            (-box[0], (box_height - height) / 2 - box[1]), text, font=font, fill=(*fill, 255)
+        )
+        _paste_mark(image, label, (left, top))
+        return
+    left, top = _position_box(position, width, height, margin=margin)
     draw.text((left - box[0], top - box[1]), text, font=font, fill=fill)
+
+
+def draw_design_branding(
+    image: Image.Image,
+    handle: str,
+    design: CarouselDesign,
+    slide: SlideDesign,
+    fill: tuple[int, int, int],
+    *,
+    only: Literal["logo", "handle"] | None = None,
+) -> None:
+    """Use the same branding layout for cover, body, CTA and deterministic QA."""
+    logo_visible = design.logo_visible and slide.logo_visible
+    handle_visible = design.handle_visible and slide.handle_visible and bool(handle)
+    shared_anchor = (
+        logo_visible and handle_visible and design.logo_position == design.handle_position
+        and slide.logo_transform is None and slide.handle_transform is None
+    )
+    if shared_anchor:
+        label = handle if handle.startswith("@") else "@" + handle
+        font = _font(design.handle_size)
+        box = ImageDraw.Draw(image).textbbox((0, 0), label, font=font)
+        width, height = box[2] - box[0], box[3] - box[1]
+        left, top = _position_box(
+            design.logo_position, design.logo_size + 16 + width,
+            max(design.logo_size, height), margin=slide.safe_margin,
+        )
+        if only != "handle":
+            _paste_mark(image, _favicon_from_source(design.logo_size, design), (left, top))
+        if only != "logo":
+            ImageDraw.Draw(image).text(
+                (left + design.logo_size + 16 - box[0], top + (design.logo_size - height) / 2 - box[1]),
+                label, font=font, fill=fill,
+            )
+        return
+    if logo_visible and only != "handle":
+        _draw_logo_positioned(image, design, slide)
+    if handle_visible and only != "logo":
+        _draw_handle_positioned(
+            image, handle, position=design.handle_position, font_size=design.handle_size,
+            margin=slide.safe_margin, fill=fill, transform=slide.handle_transform,
+        )
 
 
 def _draw_swipe_arrow(image: Image.Image, fill: tuple[int, int, int]) -> None:
@@ -796,7 +877,7 @@ def apply_body_brand_rail(
     slide_no: int | str | None = None,
     design: CarouselDesign | None = None,
 ) -> Image.Image:
-    """Add the official favicon, exact handle, divider, and arrow."""
+    """Add the selected logo, exact handle, divider, and arrow."""
     handle = (design.handle_text or handle) if design else handle
     result = image.convert("RGB")
     background = hex_color(design.inside.background, PAPER) if design else _rail_colors(result)[0]
@@ -814,63 +895,7 @@ def apply_body_brand_rail(
         result.paste(favicon, (BODY_FAVICON_LEFT, favicon_top), favicon)
         _draw_handle(result, handle, left=BODY_HANDLE_LEFT, center_y=RAIL_CENTER_Y, fill=text)
     else:
-        margin = design.inside.safe_margin
-        shared_anchor = (
-            design.logo_visible
-            and design.inside.logo_visible
-            and design.handle_visible
-            and design.inside.handle_visible
-            and bool(handle)
-            and design.handle_position == design.logo_position
-            and design.inside.logo_transform is None
-            and design.inside.handle_transform is None
-        )
-        if design.logo_visible and design.inside.logo_visible and not shared_anchor:
-            favicon = _favicon_from_source(design.logo_size, design)
-            left, top = (
-                _transform_origin(design.inside.logo_transform, design.logo_size, design.logo_size)
-                if design.inside.logo_transform is not None
-                else _position_box(
-                    design.logo_position,
-                    design.logo_size,
-                    design.logo_size,
-                    margin=margin,
-                )
-            )
-            result.paste(favicon, (left, top), favicon)
-        if design.handle_visible and design.inside.handle_visible and handle:
-            # When both marks intentionally share one anchor, keep the handle
-            # beside the logo rather than drawing both into the same pixels.
-            if shared_anchor:
-                font = _font(design.handle_size)
-                label = handle if handle.startswith("@") else "@" + handle
-                box = ImageDraw.Draw(result).textbbox((0, 0), label, font=font)
-                width, height = box[2] - box[0], box[3] - box[1]
-                logo_left, logo_top = _position_box(
-                    design.logo_position,
-                    design.logo_size + 16 + width,
-                    max(design.logo_size, height),
-                    margin=margin,
-                )
-                # Reposition the logo as one optical group.
-                favicon = _favicon_from_source(design.logo_size, design)
-                result.paste(favicon, (logo_left, logo_top), favicon)
-                ImageDraw.Draw(result).text(
-                    (logo_left + design.logo_size + 16 - box[0], logo_top + (design.logo_size - height) / 2 - box[1]),
-                    label,
-                    font=font,
-                    fill=text,
-                )
-            else:
-                _draw_handle_positioned(
-                    result,
-                    handle,
-                    position=design.handle_position,
-                    font_size=design.handle_size,
-                    margin=margin,
-                    fill=text,
-                    transform=design.inside.handle_transform,
-                )
+        draw_design_branding(result, handle, design, design.inside, text)
     _draw_swipe_arrow(result, text)
     return result
 
@@ -880,7 +905,9 @@ def apply_cta_brand_rail(
     handle: str,
     design: CarouselDesign | None = None,
 ) -> Image.Image:
-    """Add only the official favicon and handle to the unnumbered CTA rail."""
+    """Add selected CTA branding to the unnumbered closing slide."""
+    if design is not None:
+        design = design.model_copy(update={"inside": design.cta})
     handle = (design.handle_text or handle) if design else handle
     result = image.convert("RGB")
     text = _prepare_rail(result, design)
@@ -893,58 +920,7 @@ def apply_cta_brand_rail(
         result.paste(favicon, (CTA_FAVICON_LEFT, favicon_top), favicon)
         _draw_handle(result, handle, left=CTA_HANDLE_LEFT, center_y=RAIL_CENTER_Y, fill=text)
     else:
-        shared_anchor = (
-            design.logo_visible
-            and design.inside.logo_visible
-            and design.handle_visible
-            and design.inside.handle_visible
-            and bool(handle)
-            and design.logo_position == design.handle_position
-            and design.inside.logo_transform is None
-            and design.inside.handle_transform is None
-        )
-        if design.logo_visible and design.inside.logo_visible and not shared_anchor:
-            favicon = _favicon_from_source(design.logo_size, design)
-            left, top = (
-                _transform_origin(design.inside.logo_transform, design.logo_size, design.logo_size)
-                if design.inside.logo_transform is not None
-                else _position_box(
-                    design.logo_position,
-                    design.logo_size,
-                    design.logo_size,
-                    margin=design.inside.safe_margin,
-                )
-            )
-            result.paste(favicon, (left, top), favicon)
-        if shared_anchor:
-            label = handle if handle.startswith("@") else "@" + handle
-            font = _font(design.handle_size)
-            box = ImageDraw.Draw(result).textbbox((0, 0), label, font=font)
-            width, height = box[2] - box[0], box[3] - box[1]
-            left, top = _position_box(
-                design.logo_position,
-                design.logo_size + 16 + width,
-                max(design.logo_size, height),
-                margin=design.inside.safe_margin,
-            )
-            favicon = _favicon_from_source(design.logo_size, design)
-            result.paste(favicon, (left, top), favicon)
-            ImageDraw.Draw(result).text(
-                (left + design.logo_size + 16 - box[0], top + (design.logo_size - height) / 2 - box[1]),
-                label,
-                font=font,
-                fill=text,
-            )
-        elif design.handle_visible and design.inside.handle_visible and handle:
-            _draw_handle_positioned(
-                result,
-                handle,
-                position=design.handle_position,
-                font_size=design.handle_size,
-                margin=design.inside.safe_margin,
-                fill=text,
-                transform=design.inside.handle_transform,
-            )
+        draw_design_branding(result, handle, design, design.cta, text)
     return result
 
 
@@ -952,8 +928,10 @@ def validate_footer_padding(
     data: bytes,
     kind: SlideKind,
     expect_slide_number: bool = False,
+    *,
+    design: CarouselDesign | None = None,
 ) -> list[str]:
-    """Validate footer furniture, safe-area geometry, and exact native size.
+    """Validate the selected branding, divider and exact native size.
 
     Args:
         expect_slide_number: Whether a slide number should be drawn in the
@@ -977,52 +955,54 @@ def validate_footer_padding(
     if image.size != (SLIDE_WIDTH, SLIDE_HEIGHT):
         return [f"expected {SLIDE_WIDTH}x{SLIDE_HEIGHT}, got {image.width}x{image.height}"]
 
-    if not (
-        BODY_FAVICON_LEFT >= SAFE_LEFT
-        and RAIL_RIGHT <= SLIDE_WIDTH - SAFE_RIGHT
-        and RAIL_CENTER_Y + BODY_FAVICON_SIZE / 2
-        <= SLIDE_HEIGHT - SAFE_BOTTOM
-    ):
-        errors.append("footer furniture falls outside the 88/76 px safe area")
-
     divider = image.crop((SAFE_LEFT, RAIL_DIVIDER_Y - 1, RAIL_RIGHT, RAIL_DIVIDER_Y + 2))
     if len(divider.getcolors(maxcolors=100_000) or []) < 2:
         errors.append("footer divider is missing")
 
-    if kind == "body":
-        favicon_top = round(RAIL_CENTER_Y - BODY_FAVICON_SIZE / 2)
-        favicon = image.crop(
-            (
-                BODY_FAVICON_LEFT,
-                favicon_top,
-                BODY_FAVICON_LEFT + BODY_FAVICON_SIZE,
-                favicon_top + BODY_FAVICON_SIZE,
-            )
-        )
-        cream_pixels = sum(
-            1
-            for r, g, b in favicon.getdata()
-            if r > 205 and g > 205 and b > 185
-        )
-        if cream_pixels < 500 or sum(ImageStat.Stat(favicon).var) < 500:
-            errors.append("official Baskaran Builds favicon is missing or mispositioned")
-    else:
-        favicon_top = round(RAIL_CENTER_Y - CTA_FAVICON_SIZE / 2)
-        favicon = image.crop(
-            (
-                CTA_FAVICON_LEFT,
-                favicon_top,
-                CTA_FAVICON_LEFT + CTA_FAVICON_SIZE,
-                favicon_top + CTA_FAVICON_SIZE,
-            )
-        )
-        cream_pixels = sum(
-            1
-            for r, g, b in favicon.getdata()
-            if r > 205 and g > 205 and b > 185
-        )
-        if cream_pixels < 500 or sum(ImageStat.Stat(favicon).var) < 500:
-            errors.append("official Baskaran Builds favicon is missing from the CTA rail")
+    # Verify the current design/account marks, never the colors or location of
+    # an unrelated brand. Explicitly unbranded runs and hidden marks are valid.
+    identity = brand_identity.current(design)
+    if identity is not None and not identity.unbranded:
+        layers: dict[str, Image.Image] = {}
+        if design is not None:
+            slide = design.cta if kind == "cta" else design.inside
+            text = hex_color(slide.text_color, TEXT_DARK)
+            for element in ("logo", "handle"):
+                layer = Image.new("RGBA", image.size)
+                draw_design_branding(layer, identity.at_handle, design, slide, text, only=element)
+                layers[element] = layer
+        else:
+            text = _rail_colors(image)[1]
+            logo = Image.new("RGBA", image.size)
+            _paste_mark(logo, _favicon_from_source(BODY_FAVICON_SIZE),
+                        (BODY_FAVICON_LEFT, round(RAIL_CENTER_Y - BODY_FAVICON_SIZE / 2)))
+            layers["logo"] = logo
+            handle = Image.new("RGBA", image.size)
+            if identity.at_handle:
+                _draw_handle(handle, identity.at_handle, left=BODY_HANDLE_LEFT, center_y=RAIL_CENTER_Y, fill=text)
+            layers["handle"] = handle
+
+        expected = Image.new("RGBA", image.size)
+        for layer in layers.values():
+            expected.alpha_composite(layer)
+        if kind == "body":
+            _draw_swipe_arrow(expected, text)
+        for element, layer in layers.items():
+            bounds = layer.getbbox()
+            if bounds is None:
+                continue  # This design intentionally omits this mark.
+            # Check opaque foreground pixels; transparent edges over artwork
+            # depend on the underlying image and must not trigger false rework.
+            mask = layer.getchannel("A").crop(bounds).point(lambda alpha: 255 if alpha >= 250 else 0)
+            checked = mask.histogram()[255]
+            if not checked:
+                continue
+            difference = ImageChops.difference(image.crop(bounds), expected.crop(bounds).convert("RGB"))
+            red, green, blue = difference.split()
+            mismatch = ImageChops.lighter(ImageChops.lighter(red, green), blue).point(lambda value: 255 if value > 24 else 0)
+            failed = ImageChops.multiply(mismatch, mask).histogram()[255]
+            if failed / checked > 0.08:
+                errors.append(f"selected {element} is missing or does not match its configured position")
     if expect_slide_number:
         number = image.crop(
             (

@@ -159,11 +159,9 @@ _client_singleton: Optional[OpenAI] = None
 # Inline fallback used only when skills/design-skill.md is missing on disk.
 _FALLBACK_STYLE = """
 Design system for an exact 2:1 lower visual panel that will be merged into a
-1080x1350 editorial social slide. Alternate ink (#161811) and paper (#F7F7F5)
-backgrounds. Use warm white (#E8E4D6) or ink (#1A1A18)
-text and exactly #8FB832 green for exactly ONE emphasized element. Never use
-another green shade, tint, gradient, glow, or color variation for highlights.
-Bricolage-style bold grotesk headlines, clean Instrument-style body text,
+1080x1350 editorial social slide. Follow the selected surface's saved background,
+palette and art direction. Never impose a particular creator's visual identity.
+Typography and branding use the selected design and are added in code. Use
 one dominant explanatory visual composed fully inside the wide panel. Choose
 an editorial explainer, data proof, process line, comparison,
 dark technical proof, or statement-pause layout based on the content. Never use
@@ -181,11 +179,11 @@ _NO_TEXT_RULE = (
     "captions, logos, handles, watermarks, pseudo-text, or writing-like marks "
     "anywhere. Typography is added deterministically after this panel is merged "
     "into the slide. If a chart, interface, sign, poster, or diagram normally contains "
-    "writing, remove its labels and use only clear unlabeled shapes. Do not "
-    "use lime or any green accent in the visual layer because the typography "
-    "layer owns the slide's single exact saved highlight-text color. Generated illustration "
-    "uses only paper, ink, warm white, and muted neutral tones. Do not use red, "
-    "orange, blue, purple, or unrelated gradients. Real source-image colors "
+    "writing, remove its labels and use only clear unlabeled shapes. Keep "
+    "decorative accents restrained because the typography layer owns the "
+    "slide's exact saved highlight-text color. Generated illustration follows "
+    "the selected surface's background and art direction, with neutral supporting tones. "
+    "Real source-image colors "
     "are allowed only in the sourced image composited after generation."
 )
 

@@ -53,8 +53,7 @@ from app.tools import brand_identity
 from app.tools.brand_layout import (
     ACCENT_GREEN,
     HEADLINE_MAX_LINES,
-    _position_box,
-    _transform_origin,
+    draw_design_branding,
     design_font,
     hex_color,
     headline_font,
@@ -93,7 +92,7 @@ _MAX_PROBES = 4  # cap yt-dlp probes per find_source_clip call
 _TREND_PAGE_LIMIT = 4
 _IMAGE_CANDIDATE_LIMIT = 5
 
-# Title styling (current baskaranbuilds.com tokens; skills/cover-style.md).
+# Legacy title defaults; saved cover designs override these tokens.
 _TEXT_PRIMARY = (232, 228, 214, 255)  # #E8E4D6
 _ACCENT_GREEN = (*ACCENT_GREEN, 255)  # #8FB832
 _TITLE_MAX_LINES = HEADLINE_MAX_LINES
@@ -1357,50 +1356,12 @@ def _build_overlay_png(
         shadow_draw.line((0, y, width, y), fill=(0, 0, 0, alpha))
     canvas.alpha_composite(_render_title_block(title, highlight, design))
     if design is not None:
-        draw = ImageDraw.Draw(canvas)
-        margin = design.cover.safe_margin
-        if design.logo_visible and design.cover.logo_visible:
-            favicon = brand_identity.require_favicon(design.logo_size, design)
-            left, top = (
-                _transform_origin(design.cover.logo_transform, design.logo_size, design.logo_size)
-                if design.cover.logo_transform is not None
-                else _position_box(
-                    design.logo_position,
-                    design.logo_size,
-                    design.logo_size,
-                    margin=margin,
-                )
-            )
-            canvas.alpha_composite(favicon, (left, top))
-        if design.handle_visible and design.cover.handle_visible:
-            handle = brand_identity.require_handle(design)
-            font = design_font(design.handle_size, "sans")
-            box = draw.textbbox((0, 0), handle, font=font)
-            text_width, text_height = box[2] - box[0], box[3] - box[1]
-            left, top = (
-                _transform_origin(design.cover.handle_transform, text_width, text_height)
-                if design.cover.handle_transform is not None
-                else _position_box(
-                    design.handle_position,
-                    text_width,
-                    text_height,
-                    margin=margin,
-                )
-            )
-            # If both marks share an anchor, nudge the handle beside the mark.
-            if (
-                design.logo_visible
-                and design.cover.logo_visible
-                and design.handle_position == design.logo_position
-                and design.cover.logo_transform is None
-                and design.cover.handle_transform is None
-            ):
-                left += design.logo_size + 16
-            draw.text(
-                (left - box[0], top - box[1]),
-                handle,
-                font=font,
-                fill=(*hex_color(design.cover.text_color, _TEXT_PRIMARY[:3]), 255),
+        identity = brand_identity.current(design)
+        if identity is None or not identity.unbranded:
+            handle = brand_identity.require_handle(design) if design.handle_visible and design.cover.handle_visible else ""
+            draw_design_branding(
+                canvas, handle, design, design.cover,
+                hex_color(design.cover.text_color, _TEXT_PRIMARY[:3]),
             )
     out = wd / "overlay-composite.png"
     canvas.save(out)
