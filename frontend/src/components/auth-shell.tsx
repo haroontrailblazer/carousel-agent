@@ -5,8 +5,8 @@ import { BrandLogo } from "@/components/layout/brand-logo"
 import { StudioArtwork } from "@/components/layout/studio-artwork"
 import "@/routes/auth.css"
 
-export function AuthShell({ children }: { children: ReactNode }) {
-  return <main className="auth-page">
+export function AuthShell({ children, step }: { children: ReactNode; step: string }) {
+  return <main className="auth-page" data-auth-step={step}>
     <section className="auth-story" aria-label="Your creative studio">
       <Link className="auth-wordmark" to="/" aria-label="Carousel Factory home"><BrandLogo className="size-10"/><span>carousel<span className="auth-wordmark-dot">.</span></span></Link>
       <div className="auth-story-copy"><span className="auth-eyebrow"><span/> A little idea. A whole creative team.</span><h1>Make your next<br/>story <em>unmissable.</em></h1><p>Turn what’s happening into something<br className="auth-desktop-break"/> worth swiping. Your agents take it from here.</p></div>

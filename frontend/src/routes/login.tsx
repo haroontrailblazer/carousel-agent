@@ -14,10 +14,14 @@ type Step = "email" | "password" | "signup" | "code" | "forgot" | "reset" | "mfa
 type CodeKind = "email" | "signup" | "recovery"
 const initialStep = (mode: Mode): Step => mode === "signup" ? "signup" : mode === "forgot" ? "forgot" : mode === "reset" ? "reset" : mode === "callback" ? "callback" : "email"
 
-export function PasswordField({ value, onChange, confirm = false, rules = false }: { value: string; onChange: (value: string) => void; confirm?: boolean; rules?: boolean }) {
+function PasswordRequirements({ value }: { value: string }) {
+  return <div className="auth-rules" aria-label="Password requirements">{passwordRules.map(rule => <span key={rule.label} data-valid={rule.test(value)}>{rule.test(value) ? "✓ " : ""}{rule.label}</span>)}</div>
+}
+
+export function PasswordField({ value, onChange, confirm = false, rules = false, newPassword = false }: { value: string; onChange: (value: string) => void; confirm?: boolean; rules?: boolean; newPassword?: boolean }) {
   const [visible, setVisible] = React.useState(false)
   const id = confirm ? "confirm-password" : "password"
-  return <div className="auth-field"><label htmlFor={id}>{confirm ? "Confirm password" : rules ? "New password" : "Password"}</label><div className="auth-password"><Input id={id} type={visible ? "text" : "password"} autoComplete={rules || confirm ? "new-password" : "current-password"} required value={value} onChange={e => onChange(e.target.value)} /><button type="button" className="auth-eye" aria-label={`${visible ? "Hide" : "Show"} ${confirm ? "confirm password" : "password"}`} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>{rules && <div className="auth-rules" aria-label="Password requirements">{passwordRules.map(rule => <span key={rule.label} data-valid={rule.test(value)}>{rule.test(value) ? "✓ " : ""}{rule.label}</span>)}</div>}</div>
+  return <div className="auth-field"><label htmlFor={id}>{confirm ? "Confirm password" : rules || newPassword ? "New password" : "Password"}</label><div className="auth-password"><Input id={id} type={visible ? "text" : "password"} autoComplete={rules || newPassword || confirm ? "new-password" : "current-password"} required value={value} onChange={e => onChange(e.target.value)} /><button type="button" className="auth-eye" aria-label={`${visible ? "Hide" : "Show"} ${confirm ? "confirm password" : "password"}`} onClick={() => setVisible(!visible)}>{visible ? <EyeOff size={16}/> : <Eye size={16}/>}</button></div>{rules && <PasswordRequirements value={value}/>}</div>
 }
 
 export function LoginRoute({ mode = "login" }: { mode?: Mode }) {
@@ -179,18 +183,19 @@ export function LoginRoute({ mode = "login" }: { mode?: Mode }) {
   const showEmail=["email","signup","forgot"].includes(step)
   const emailChip=["password","code"].includes(step)
   const buttonLabel=step === "email"?"Continue with email":step === "signup"?"Create account":step === "forgot"?"Send reset code":step === "code"?"Verify email":step === "mfa"?"Verify and continue":step === "reset"?"Save new password":"Sign in"
-  return <AuthShell><header className="auth-card-header"><BrandLogo className="auth-card-mark"/><span className="auth-eyebrow">YOUR CREATIVE WORKSPACE</span><h2>{title}</h2><p>{subtitle}</p></header>
+  return <AuthShell step={step}><header className="auth-card-header"><BrandLogo className="auth-card-mark"/><span className="auth-eyebrow">YOUR CREATIVE WORKSPACE</span><h2>{title}</h2><p>{subtitle}</p></header>
     {auth.status === "pending" && !["callback","reset"].includes(mode)?<p className="auth-subtle" role="status">Checking your session…</p>:signedIn?<>{error&&<p role="alert" className="auth-alert">{error}</p>}<div className="auth-session"><span className="auth-session-icon"><Check size={17}/></span><div><p>{auth.identity?.email}</p><small>Signed in securely</small></div></div><Button asChild variant="brand" className="auth-submit"><Link to={destination}>Go to dashboard <ArrowRight size={16}/></Link></Button><p className="auth-switch"><button className="auth-text-button" onClick={()=>void perform(auth.signOut)} disabled={busy||oauthPending}>Use another account</button></p></>:step === "done"?<Button asChild variant="brand" className="auth-submit"><Link to="/login">Back to sign in <ArrowRight size={16}/></Link></Button>:<>
       {emailChip&&<div className="auth-email-chip"><span>{address}</span><button type="button" onClick={()=>{setError("");setCode("");setStep(codeKind === "signup" && step === "code"?"signup":"email")}} disabled={busy||oauthPending}>Change email</button></div>}
       {oauthPending&&<p role="status" className="auth-subtle">Complete sign-in in the window that opened. <button className="auth-text-button" onClick={()=>{popup.current?.close();popup.current=null;window.clearInterval(popupTimer.current);setOauthPending(false)}}>Cancel</button></p>}
       {query.get("reset") === "success" && <p role="status" className="auth-subtle">Password updated. Sign in with your new password.</p>}
       {error&&<p role="alert" className="auth-alert">{error}</p>}
       {step === "callback"?<div className="auth-options">{busy?<Loader2 className="animate-spin" size={20}/>:<Link className="auth-text-button" to="/login">Back to sign in</Link>}</div>:<form className="auth-form" onSubmit={submit}>
-        <fieldset disabled={busy||oauthPending} className="auth-form">
+        <fieldset disabled={busy||oauthPending} className="auth-form auth-form-fields">
           {step === "signup"&&<div className="auth-field"><label htmlFor="name">Your name <span className="auth-subtle">Optional</span></label><Input id="name" autoComplete="name" maxLength={80} value={name} onChange={e=>setName(e.target.value)} placeholder="How should we call you?"/></div>}
           {showEmail&&<div className="auth-field"><label htmlFor="email">Email address</label><Input id="email" type="email" autoComplete="email" placeholder="you@company.com" required value={email} onChange={e=>setEmail(e.target.value)}/></div>}
-          {["password","signup","reset"].includes(step)&&<PasswordField value={password} onChange={setPassword} rules={step !== "password"}/>}
+          {["password","signup","reset"].includes(step)&&<PasswordField value={password} onChange={setPassword} rules={step === "reset"} newPassword={step !== "password"}/>}
           {["signup","reset"].includes(step)&&<PasswordField value={confirm} onChange={setConfirm} confirm/>}
+          {step === "signup"&&<PasswordRequirements value={password}/>}
           {["code","mfa"].includes(step)&&<div className="auth-field auth-code"><label htmlFor="code">{step === "mfa"?"Authenticator code":"Email verification code"}</label><Input id="code" inputMode="numeric" autoComplete="one-time-code" pattern={step === "mfa"?"[0-9]{6}":"[0-9]{6,10}"} maxLength={step === "mfa"?6:10} required value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} placeholder="······"/></div>}
           {step === "password"&&<div className="auth-subtle" style={{textAlign:"right"}}><button type="button" className="auth-text-button" onClick={()=>{setError("");setStep("forgot")}}>Forgot password?</button></div>}
           <Button type="submit" variant="brand" className="auth-submit" disabled={!ready || busy || oauthPending}>{busy?<><Loader2 size={16} className="animate-spin"/> Please wait…</>:<>{buttonLabel}<ArrowRight size={16}/></>}</Button>
