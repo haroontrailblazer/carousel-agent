@@ -1016,6 +1016,8 @@ async def rename_run(
 @router.post("/runs/{run_id}/cancel")
 async def cancel(run_id: str, _identity: Identity = Depends(current_identity)) -> dict:
     """Stop a run this process is driving."""
+    if await db.get_run(run_id) is None:
+        raise HTTPException(404, {"code": "no_such_run", "message": "Unknown task."})
     if not await cancel_run(run_id):
         raise HTTPException(
             409,
@@ -1193,7 +1195,7 @@ def _fetching_now() -> bool:
     """
     from app.scheduler import fetch_in_progress
 
-    return fetch_in_progress() or any(not t.done() for t in _fetch_tasks)
+    return fetch_in_progress()
 
 
 @router.post("/schedule/run-now", status_code=status.HTTP_202_ACCEPTED)

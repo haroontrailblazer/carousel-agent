@@ -24,6 +24,8 @@ import logging
 from dataclasses import asdict, dataclass, field
 from typing import AsyncIterator, Optional
 
+from app import tenancy
+
 logger = logging.getLogger(__name__)
 
 #: How many events a single slow subscriber may fall behind before it starts
@@ -84,6 +86,7 @@ class RunBus:
         removal, every disconnect would leak a queue that the run task keeps
         filling forever.
         """
+        run_id = (tenancy.current(), run_id)
         queue: asyncio.Queue = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
         self._subscribers.setdefault(run_id, set()).add(queue)
         try:
@@ -115,7 +118,7 @@ class RunBus:
         marker and lost the very event the marker was warning it about, which
         is exactly the behaviour this docstring promises not to have.
         """
-        for queue in list(self._subscribers.get(event.run_id, ())):
+        for queue in list(self._subscribers.get((tenancy.current(), event.run_id), ())):
             try:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
@@ -146,11 +149,11 @@ class RunBus:
 
     def subscriber_count(self, run_id: str) -> int:
         """How many browsers are currently watching a run."""
-        return len(self._subscribers.get(run_id, ()))
+        return len(self._subscribers.get((tenancy.current(), run_id), ()))
 
     def watched_runs(self) -> set[str]:
         """Runs with at least one live subscriber."""
-        return set(self._subscribers)
+        return {run for owner, run in self._subscribers if owner == tenancy.current()}
 
 
 #: The process-wide bus. One per process, matching the one-instance constraint.

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 import jwt
 from fastapi import FastAPI
@@ -36,7 +36,7 @@ from web_api.auth import (
 )
 
 SECRET = "t" * 48
-ALLOWED = Identity(email="a@b.co", subject="a@b.co", role="reviewer")
+ALLOWED = Identity(email="a@b.co", subject="11111111-1111-4111-8111-111111111111", role="reviewer")
 
 
 def _app(secret: str = SECRET) -> TestClient:
@@ -74,7 +74,7 @@ def _app(secret: str = SECRET) -> TestClient:
     class _Verifier(SupabaseJWTVerifier):
         def verify(self, token):
             if token == "good":
-                return {"email": ALLOWED.email, "subject": "sub", "claims": {}}
+                return {"email": ALLOWED.email, "subject": ALLOWED.subject, "claims": {}}
             raise AuthError("token_invalid", "no")
 
     app = AuthMiddleware(
@@ -88,7 +88,7 @@ def _app(secret: str = SECRET) -> TestClient:
 
 def _cookie(role: str = "reviewer", ttl: int = 3600, secret: str = SECRET) -> dict:
     token = issue_session_token(
-        Identity(email=ALLOWED.email, subject="s", role=role),
+        Identity(email=ALLOWED.email, subject=ALLOWED.subject, role=role),
         ttl_s=ttl,
         secret=secret,
     )
@@ -139,6 +139,11 @@ class OpenPathTests(unittest.TestCase):
 
 
 class ProtectedPathTests(unittest.TestCase):
+    def setUp(self):
+        for target in ("app.services.instagram_accounts.load", "app.services.telegram_config.load"):
+            mocked = patch(target, AsyncMock())
+            mocked.start(); self.addCleanup(mocked.stop)
+
     def test_the_api_is_closed_when_signed_out(self) -> None:
         r = _app().get("/api/runs")
         self.assertEqual(r.status_code, 401)
@@ -156,7 +161,8 @@ class ProtectedPathTests(unittest.TestCase):
 
     def test_a_valid_cookie_opens_the_api(self) -> None:
         client = _app()
-        self.assertEqual(client.get("/api/runs", cookies=_cookie()).status_code, 200)
+        with patch.object(auth_mod, "authorize_email", AsyncMock(return_value=ALLOWED)):
+            self.assertEqual(client.get("/api/runs", cookies=_cookie()).status_code, 200)
 
     def test_an_expired_cookie_is_refused(self) -> None:
         stale = issue_session_token(ALLOWED, ttl_s=-10, secret=SECRET)
@@ -169,7 +175,7 @@ class ProtectedPathTests(unittest.TestCase):
         self.assertEqual(_app().get("/api/runs", cookies=forged).status_code, 401)
 
     def test_a_valid_bearer_token_is_accepted_for_scripts(self) -> None:
-        async def ok(email):
+        async def ok(email, subject):
             return ALLOWED
 
         with patch.object(auth_mod, "authorize_email", ok):
@@ -242,48 +248,35 @@ class SecretValidationTests(unittest.TestCase):
         self.assertEqual(validate_session_secret("z" * 48), [])
 
 
-class AllowlistTests(unittest.IsolatedAsyncioTestCase):
-    async def test_an_unknown_email_is_refused(self) -> None:
-        async def none(_email):
-            return None
-
-        with patch.object(auth_mod.db, "get_app_user", none):
-            with self.assertRaises(AuthError) as ctx:
-                await auth_mod.authorize_email("stranger@x.co")
-        self.assertEqual(ctx.exception.code, "not_allowed")
-
-    async def test_a_disabled_user_is_told_access_was_revoked(self) -> None:
-        """They know they had an account; 'no such user' just confuses them."""
-
-        async def disabled(_email):
-            return {"email": "a@b.co", "role": "reviewer", "disabled": True}
-
-        with patch.object(auth_mod.db, "get_app_user", disabled):
-            with self.assertRaises(AuthError) as ctx:
-                await auth_mod.authorize_email("a@b.co")
-        self.assertEqual(ctx.exception.code, "access_revoked")
-
-    async def test_the_role_comes_from_the_allowlist_not_the_token(self) -> None:
-        """A Supabase token must never be able to claim its own role."""
-
-        async def admin(_email):
-            return {"email": "a@b.co", "role": "admin", "disabled": False}
-
-        with patch.object(auth_mod.db, "get_app_user", admin):
-            identity = await auth_mod.authorize_email("A@B.CO")
-        self.assertEqual(identity.email, "a@b.co", "email should be normalised")
+class WorkspaceAuthorizationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_a_verified_new_user_gets_only_their_workspace(self):
+        rpc = AsyncMock(return_value={"enabled": True})
+        client = type("Client", (), {"system_rpc": rpc})()
+        with patch.object(auth_mod.db, "get_pool", AsyncMock(return_value=client)):
+            identity = await auth_mod.authorize_email("A@B.CO", ALLOWED.subject)
+        self.assertEqual(identity.subject, ALLOWED.subject)
+        self.assertEqual(identity.email, "a@b.co")
         self.assertTrue(identity.is_admin)
+        rpc.assert_awaited_once_with("carousel_provision_workspace", {"owner":ALLOWED.subject,"address":"a@b.co"})
 
-    async def test_an_unreachable_allowlist_fails_closed(self) -> None:
-        """If we cannot check permission, we do not grant it."""
+    async def test_email_cannot_substitute_for_an_account_id(self):
+        with self.assertRaises(AuthError) as failure:
+            await auth_mod.authorize_email("a@b.co", "a@b.co")
+        self.assertEqual(failure.exception.code,"token_invalid")
 
-        async def boom(_email):
-            raise ConnectionError("db down")
+    async def test_a_disabled_workspace_is_refused(self):
+        client = type("Client", (), {"system_rpc":AsyncMock(return_value={"enabled":False})})()
+        with patch.object(auth_mod.db, "get_pool", AsyncMock(return_value=client)):
+            with self.assertRaises(AuthError) as failure:
+                await auth_mod.authorize_email("a@b.co", ALLOWED.subject)
+        self.assertEqual(failure.exception.code,"access_revoked")
 
-        with patch.object(auth_mod.db, "get_app_user", boom):
-            with self.assertRaises(AuthError) as ctx:
-                await auth_mod.authorize_email("a@b.co")
-        self.assertEqual(ctx.exception.code, "allowlist_unavailable")
+    async def test_unavailable_workspace_storage_fails_closed(self):
+        with patch.object(auth_mod.db, "get_pool", AsyncMock(side_effect=ConnectionError("private"))):
+            with self.assertRaises(AuthError) as failure:
+                await auth_mod.authorize_email("a@b.co", ALLOWED.subject)
+        self.assertEqual(failure.exception.code,"workspace_unavailable")
+        self.assertNotIn("private",failure.exception.detail)
 
 
 if __name__ == "__main__":

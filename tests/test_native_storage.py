@@ -159,7 +159,7 @@ class RevisionCacheTests(unittest.IsolatedAsyncioTestCase):
         async def fetch(): return ['small']
         await cache.read('a', revision, fetch)
         await cache.read('b', revision, fetch)
-        self.assertEqual(list(cache.entries), ['b'])
+        self.assertEqual(list(cache.entries), [('', 'b')])
         async def large(): return ['x' * 100]
         await cache.read('huge', revision, large)
         self.assertNotIn('huge', cache.entries)

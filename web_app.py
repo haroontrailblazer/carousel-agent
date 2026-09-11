@@ -134,27 +134,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     scheduler = None
     # Database RPCs use the same HTTPS URL and server key as native Storage.
     if settings.supabase_url and settings.supabase_storage_key:
-        # Order matters: reconcile first (which demotes killed runs out of
-        # "running"), THEN release queue items, so an item is only freed once
-        # nothing live still claims it.
-        await reconcile_on_startup()
-        await release_stuck_queue_items()
-        # Load whatever Telegram credentials the console stored, so the
-        # review dispatcher can send without a restart after someone connects
-        # a bot from the profile page.
-        await telegram_config.load()
-        # And the connected Instagram accounts, for the same reason plus one
-        # more: the slide renderer reads them SYNCHRONOUSLY from inside a
-        # worker thread, so the cache has to be warm before any run starts.
-        await instagram_accounts.load()
+        from app import tenancy
         try:
-            seeded = await db.seed_app_users(list(settings.auth_bootstrap_emails))
-            if seeded:
-                logger.warning(
-                    "Seeded %d bootstrap user(s) into an empty allowlist.", seeded
-                )
-        except Exception as exc:
-            logger.warning("Could not seed the user allowlist: %s", exc)
+            for owner in await tenancy.owners():
+                with tenancy.bind(owner):
+                    await reconcile_on_startup()
+                    await release_stuck_queue_items()
+        except Exception:
+            logger.exception("Workspace recovery unavailable; apply the private-workspace migration before serving users.")
         scheduler = await start_scheduler()
     else:
         logger.warning(

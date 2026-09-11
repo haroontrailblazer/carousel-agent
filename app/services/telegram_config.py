@@ -10,10 +10,25 @@ import logging
 from typing import Optional
 
 from app.services import db, secret_box
+from app import tenancy
 
 logger = logging.getLogger(__name__)
 CONFIG_KEY = "telegram"
 _cache: Optional[dict[str, dict]] = None
+_workspaces = tenancy.ScopedDict()
+
+
+def _current_cache():
+    return _workspaces if tenancy.current() else (_cache or {})
+
+
+def _store_cache(value):
+    global _cache
+    if tenancy.current():
+        _workspaces.clear()
+        _workspaces.update(value)
+    else:
+        _cache = value
 
 
 def _stored_bots(stored: object) -> dict[str, dict]:
@@ -43,7 +58,7 @@ def _decode_all(stored: object) -> dict[str, dict]:
 
 def all_credentials() -> list[dict]:
     """Snapshot of all destinations, including broken tokens for honest errors."""
-    return [dict(bot) for bot in (_cache or {}).values()]
+    return [dict(bot) for bot in _current_cache().values()]
 
 
 def credentials() -> dict:
@@ -68,7 +83,7 @@ async def load() -> dict:
     except Exception as exc:
         logger.warning("Could not load Telegram bots: %s", exc)
         return credentials()
-    _cache = _decode_all(stored)
+    _store_cache(_decode_all(stored))
     return credentials()
 
 
@@ -94,8 +109,8 @@ async def save(
         return {"bots": bots}
 
     stored = await db.update_config(CONFIG_KEY, update)
-    _cache = _decode_all(stored)
-    return dict(_cache[bot_id])
+    _store_cache(_decode_all(stored))
+    return dict(_current_cache()[bot_id])
 
 
 async def clear(bot_id: str = "") -> None:
@@ -111,4 +126,4 @@ async def clear(bot_id: str = "") -> None:
         return {"bots": bots}
 
     stored = await db.update_config(CONFIG_KEY, update)
-    _cache = _decode_all(stored)
+    _store_cache(_decode_all(stored))

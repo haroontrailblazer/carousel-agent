@@ -16,6 +16,7 @@ import re
 import httpx
 
 from app.config import settings
+from app import tenancy
 
 
 def normalize_sql(sql: str) -> str:
@@ -62,6 +63,16 @@ class SupabaseDatabase:
         self.catalog = json.loads(Path(__file__).with_name('db_operations.json').read_text())
 
     async def rpc(self, name, args=None):
+        return await self._request('carousel_tenant_rpc', {
+            'workspace': tenancy.require(), 'operation': name, 'arguments': args or {},
+        })
+
+    async def system_rpc(self, name, args=None):
+        if name not in ('carousel_workspace_owners', 'carousel_provision_workspace'):
+            raise PermissionError('Unknown system operation')
+        return await self._request(name, args)
+
+    async def _request(self, name, args=None):
         if not re.fullmatch(r'carousel_[a-z0-9_]+', name):
             raise ValueError('Unrecognized application RPC')
         # No automatic write retries: a lost response may follow a commit.

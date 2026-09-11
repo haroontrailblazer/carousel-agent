@@ -10,17 +10,23 @@ from google.adk.events import Event, EventActions
 from google.adk.sessions import Session
 from google.adk.errors._stale_session_error import StaleSessionError
 
+from app import tenancy
 from app.services import db
 from app.services.session_service import SupabaseSessionService
 from app.services.supabase_db import SupabaseDatabase, DatabaseAPIError, operation_id
 
 
 class TransportTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        scope = tenancy.bind("11111111-1111-4111-8111-111111111111")
+        scope.__enter__()
+        self.addCleanup(scope.__exit__, None, None, None)
+
     async def test_bound_values_and_typed_rows_without_sending_sql(self):
         value = "injection'); DROP TABLE runs; --"
         requests = []
         def handle(request):
-            requests.append(json.loads(request.content))
+            requests.append(json.loads(request.content)['arguments'])
             return httpx.Response(200, json={'rows':[{'created_at':'2026-09-10T00:00:00+00:00',
                 'run_id':value}], 'count':1})
         client = SupabaseDatabase(url='https://test.supabase.co', key='server', transport=httpx.MockTransport(handle))
@@ -52,7 +58,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_batch_is_one_atomic_request(self):
         requests=[]
         def handle(request):
-            requests.append(json.loads(request.content))
+            requests.append(json.loads(request.content)['arguments'])
             return httpx.Response(200, json=None)
         client = SupabaseDatabase(url='https://test.supabase.co', key='server', transport=httpx.MockTransport(handle))
         try:

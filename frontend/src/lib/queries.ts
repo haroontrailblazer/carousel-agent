@@ -12,6 +12,7 @@
  * a remembered list as a fresh one.
  */
 
+import { workspaceKey } from "@/lib/workspace"
 import { get } from "@/lib/api"
 import type { QueueResponse, RunSummary } from "@/lib/types"
 
@@ -27,7 +28,7 @@ export const QUEUE_KEY = ["queue"] as const
 const SNAPSHOT_VERSION = "v1"
 
 function snapshotKey(name: string): string {
-  return `carousel-snapshot-${SNAPSHOT_VERSION}-${name}`
+  return workspaceKey(`carousel-snapshot-${SNAPSHOT_VERSION}-${name}`)
 }
 
 /**

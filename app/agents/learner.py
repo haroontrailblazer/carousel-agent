@@ -397,9 +397,10 @@ async def store_feedback_and_distill(tool_context: ToolContext) -> dict:
         f"{_condense(feedback_text)}"
     )
     try:
-        appended, message = _append_learned_rule(rule_path, rule_line)
-    except OSError as exc:
-        logger.exception("Could not update skill file %s.", rule_path)
+        from app.services import workspace_rules
+        appended, message = await workspace_rules.append(rule_path.relative_to(settings.skills_dir).as_posix(), rule_line)
+    except Exception as exc:
+        logger.exception("Could not update workspace rules %s.", rule_path)
         appended, message = False, f"could not update {rule_path.name}: {exc}"
 
     result["rule_appended"] = appended

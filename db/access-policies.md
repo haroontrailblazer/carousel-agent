@@ -40,3 +40,23 @@ All existing application row counts were preserved when migration 009 committed.
 References: [PostgreSQL restrictive policies](https://www.postgresql.org/docs/current/sql-createpolicy.html),
 [Supabase Storage access control](https://supabase.com/docs/guides/storage/security/access-control),
 [S3 authentication](https://supabase.com/docs/guides/storage/s3/authentication).
+
+
+## Private workspaces (migration 012)
+
+`012_private_workspaces.sql` adds account UUID ownership to application data,
+composite uniqueness and session foreign keys, and tenant policies for the
+`carousel_worker` role. Fixed queries run as this non-owner, non-BYPASSRLS role.
+The service-only dispatcher validates an enabled workspace and sets its
+transaction-local scope; direct execution of old query RPCs is revoked.
+The browser still cannot query tables or call the dispatcher.
+
+The verified Auth UUID is bound for requests, SSE responses, worker tasks and
+scheduled jobs. Storage access is prefixed with `users/<UUID>/`, and caches
+are scoped by account. The privileged Supabase server key still bypasses
+Storage RLS, so the backend prefix enforcement remains necessary.
+
+For offline PostgreSQL isolation tests, install `@electric-sql/pglite` under
+`.work/tenant-db` and run `node scripts/test_workspace_isolation.cjs`.
+The Python suite also checks missing scopes, concurrent tasks, cache isolation,
+private media paths, stale browser accounts and cross-account cancellation.

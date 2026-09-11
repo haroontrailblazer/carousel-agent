@@ -40,6 +40,7 @@ import { compressAvatar } from "@/lib/image"
 import "./profile.css"
 import { AISettingsSection } from "./ai-settings"
 import { TracingSettingsSection } from "./tracing-settings"
+import { SourceSettingsSection } from "./source-settings"
 
 type InstagramAccount = {
   id: string
@@ -807,7 +808,7 @@ export function ProfileRoute() {
     const params = new URLSearchParams(window.location.search)
     return params.has("instagram") || params.has("instagram_error")
       ? "connections"
-      : params.get("view") === "tracing" ? "tracing" : params.get("view") === "ai" ? "ai" : "account"
+      : (["account", "appearance", "connections", "ai", "tracing"].includes(params.get("view") ?? "") ? params.get("view") as SettingsView : "account")
   })
 
   const views = [
@@ -849,6 +850,7 @@ export function ProfileRoute() {
       <TabPanel value="connections" selected={view === "connections"} className="profile-connections">
         <InstagramSection />
         <TelegramSection />
+        <SourceSettingsSection />
       </TabPanel>
     </div>
   )

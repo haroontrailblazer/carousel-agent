@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from functools import cached_property
 
 from app.services import db, secret_box
+from app import tenancy
 
 CONFIG_KEY = "ai"
 DEFAULT_MODELS = {
@@ -53,6 +54,7 @@ class AISettings:
 
 
 _cache: AISettings | None = None
+_scoped_cache: ContextVar[tuple[str, AISettings] | None] = ContextVar("workspace_ai_cache", default=None)
 _bound: ContextVar[AISettings | None] = ContextVar("ai_settings", default=None)
 
 
@@ -68,6 +70,9 @@ def _decode(stored: dict) -> AISettings:
 
 
 def current() -> AISettings:
+    if tenancy.current():
+        cached = _scoped_cache.get()
+        return _bound.get() or (cached[1] if cached and cached[0] == tenancy.current() else _decode({}))
     return _bound.get() or _cache or _decode({})
 
 
@@ -85,8 +90,12 @@ async def load() -> AISettings:
     """Refresh from shared storage. A failed read must not silently change keys."""
     global _cache
     stored = await db.get_config(CONFIG_KEY, {})
-    _cache = _decode(stored or {})
-    return _cache
+    decoded = _decode(stored or {})
+    if tenancy.current():
+        _scoped_cache.set((tenancy.current(), decoded))
+    else:
+        _cache = decoded
+    return decoded
 
 
 async def save(*, models: dict[str, str], api_key: str = "") -> AISettings:
@@ -101,8 +110,12 @@ async def save(*, models: dict[str, str], api_key: str = "") -> AISettings:
         return updated
 
     stored = await db.update_config(CONFIG_KEY, merge)
-    _cache = _decode(stored)
-    return _cache
+    decoded = _decode(stored)
+    if tenancy.current():
+        _scoped_cache.set((tenancy.current(), decoded))
+    else:
+        _cache = decoded
+    return decoded
 
 
 def public_status(config: AISettings) -> dict:

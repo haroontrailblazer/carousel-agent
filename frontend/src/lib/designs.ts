@@ -1,5 +1,7 @@
 import * as React from "react"
 
+import { useAuth } from "@/hooks/use-auth"
+
 import { get, put } from "@/lib/api"
 
 export type DesignPosition =
@@ -665,9 +667,9 @@ function withPrebuiltDesigns(saved: CarouselDesign[]): CarouselDesign[] {
   ]
 }
 
-function readDesigns(): CarouselDesign[] {
+function readDesigns(storageKey: string): CarouselDesign[] {
   try {
-    const stored = window.localStorage.getItem(STORAGE_KEY)
+    const stored = window.localStorage.getItem(storageKey)
     if (!stored) return PREBUILT_DESIGNS.map(cloneDesign)
     const parsed = JSON.parse(stored)
     if (!Array.isArray(parsed) || parsed.length === 0) {
@@ -681,7 +683,9 @@ function readDesigns(): CarouselDesign[] {
 }
 
 export function useCarouselDesigns() {
-  const [designs, setLocalDesigns] = React.useState<CarouselDesign[]>(readDesigns)
+  const { identity } = useAuth()
+  const storageKey = `${STORAGE_KEY}:${identity?.id ?? identity?.email ?? "signed-out"}`
+  const [designs, setLocalDesigns] = React.useState<CarouselDesign[]>(() => readDesigns(storageKey))
   const [syncStatus, setSyncStatus] = React.useState<DesignSyncStatus>("loading")
   const hydrated = React.useRef(false)
   const changedBeforeHydration = React.useRef(false)
@@ -697,8 +701,8 @@ export function useCarouselDesigns() {
 
   React.useEffect(() => {
     latestDesigns.current = designs
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(designs))
-  }, [designs])
+    window.localStorage.setItem(storageKey, JSON.stringify(designs))
+  }, [designs, storageKey])
 
   React.useEffect(() => {
     mounted.current = true
@@ -720,7 +724,7 @@ export function useCarouselDesigns() {
         setSyncStatus("saving")
         saveChain.current = saveChain.current
           .catch(() => undefined)
-          .then(() => put<DesignLibraryResponse>("/api/designs", {
+          .then(() => cancelled ? undefined : put<DesignLibraryResponse>("/api/designs", {
             items: current.map(designPayload),
           }))
         await saveChain.current
@@ -745,7 +749,7 @@ export function useCarouselDesigns() {
       setSyncStatus("saving")
       saveChain.current = saveChain.current
         .catch(() => undefined)
-        .then(() => put<DesignLibraryResponse>("/api/designs", { items: snapshot }))
+        .then(() => mounted.current ? put<DesignLibraryResponse>("/api/designs", { items: snapshot }) : undefined)
         .then(() => {
           if (mounted.current && latestDesigns.current === designs) setSyncStatus("synced")
         })

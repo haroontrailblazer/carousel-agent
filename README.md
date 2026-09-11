@@ -4,7 +4,7 @@ Carousel Factory turns AI/product news (a new model release, a Lovable or
 Supabase feature drop, a paper worth explaining) into finished Instagram
 carousels - planned, written, designed, QA-checked, and ready to download
 with optional approved Instagram publishing - using a Google ADK multi-agent pipeline. A fetcher pulls
-updates from Gmail newsletters, RSS feeds and YouTube channels into a queue;
+updates from RSS feeds and YouTube channels into a queue;
 each queued item drives one pipeline run: an Editorial Planner decides
 structure (points vs prose, slide count, hook title), a First-Page Visual
 agent builds the cover as a **sourced** 4–8 s video (never AI-generated -
@@ -36,8 +36,9 @@ redirect. A connected-account run sends a Telegram review request and pauses.
 **Reject** (feedback compulsory) reworks the requested parts and asks for review
 again. Every piece of feedback is stored in
 long-term memory, and recurring feedback is distilled by the Learner agent
-into permanent edits to the instruction files under `skills/` - the pipeline's
-editable "harness" - so the system permanently improves from review to review.
+into account-owned learned rules in the database. The shared `skills/` files
+remain the base instructions; one person's feedback never changes another
+person's agent instructions.
 State and the run ledger live in Supabase Postgres; media artifacts live in
 Supabase Storage. The architecture is modeled in `architecture/carousel.c4`
 (LikeC4 - views: `index`, `containers`, `agentPipeline`, `happyPath`,
@@ -70,7 +71,7 @@ Supabase Storage. The architecture is modeled in `architecture/carousel.c4`
 
 Prerequisites: Python 3.11+ (developed on 3.13), FFmpeg, a Supabase project,
 an OpenAI API key saved through Profile > AI & models, and optional feed
-integrations. Gmail ingestion needs the Gmail API; Telegram notifications
+integrations. Telegram notifications
 need a bot connected through Profile. Instagram publishing optionally
 uses a Professional account token with content-publishing permissions.
 
@@ -96,7 +97,8 @@ point `FFMPEG_BIN` in `.env` at the executable.
 copy .env.example .env            # macOS/Linux: cp .env.example .env
 ```
 
-Use `.env` for infrastructure, Supabase, encryption and feed configuration.
+Use `.env` for server infrastructure, Supabase and encryption configuration.
+Personal RSS and YouTube sources live in **Profile > Connections > Your newsroom sources**.
 Save the OpenAI key and model choices in **Profile > AI & models**. Model
 dropdowns load from that key. Existing OpenAI credentials in `.env` are kept
 for copying but are never a runtime fallback. Never commit `.env`.
@@ -143,15 +145,42 @@ values are ignored.
 Media stays private; external publishers receive expiring signed download URLs.
 See [database and egress notes](db/egress.md) for validation and rollout steps.
 
-### 6. Gmail OAuth (first run is interactive)
+### 6. Private accounts and migration
 
-1. In Google Cloud Console create **OAuth client ID → Desktop app**
-   credentials and download the JSON to `secrets/gmail-credentials.json`
-   (path configurable via `GMAIL_CREDENTIALS_PATH`).
-2. The first time anything touches Gmail (fetching newsletters or sending a
-   review mail) a browser consent window opens; approve it once. The token is
-   cached at `secrets/gmail-token.json` and refreshes itself afterwards.
-   Do this first run on a machine with a browser - not on a headless server.
+People can choose **Create your account**, confirm their email, then sign in.
+Configure [custom SMTP in Supabase Auth](https://supabase.com/docs/guides/auth/auth-smtp)
+before opening signup to the public. Supabase's default email service only
+sends to project team addresses; confirmation and password recovery need
+a production email provider. Keep email confirmation enabled.
+
+Each account owns its designs, newsroom, runs, chat/session history, learned
+feedback, integration keys and settings. New accounts start without another
+person's data or credentials; shared starter design templates and public RSS
+suggestions remain available.
+
+Migration `012` assigns the existing shared workspace to
+**haroon@closefuture.io** and preserves confirmed users' existing personal
+design libraries. Media is stored in the private `corousel-media` bucket under
+`users/<Supabase user UUID>/`. The backend derives that prefix from the verified
+session; callers cannot supply a different owner's path. Browsers cannot list
+the bucket or access database tables directly. Preview/publishing URLs expire.
+
+For an existing deployment, run `scripts/migrate_private_workspaces.py` with
+`--token-file <temporary-management-token-file>` to prepare and verify media
+copies. After active runs finish, run it with `--apply` and deploy the matching
+application immediately. It preserves original objects, checks row counts in
+the migration transaction, and updates Auth email redirects to the production
+URL. Metadata and copy manifests remain under ignored `.work/`; remove the
+temporary token file afterwards. Existing sessions must sign in again.
+
+Database RPCs enforce tenant policies using a restricted worker role. Only the
+server can dispatch a request for a verified workspace. Keep server credentials,
+`SECRETS_KEY` and `SESSION_SECRET` in the deployment environment; those are
+infrastructure secrets, not personal integration settings.
+
+This supports separate accounts on one application instance. Agent task queues
+and live event subscriptions remain process-local: use one application worker
+until a distributed job worker/event bus is introduced for horizontal scaling.
 
 ---
 
@@ -216,12 +245,11 @@ localhost. (Terminal alternative without the UI: `adk run app`.)
 ### Fetching news
 
 ```powershell
-python -m fetcher.fetch_news --fetch     # pull newsletters + RSS + YouTube, dedupe into news_queue
-python -m fetcher.fetch_news --run-one   # pop the next queued item and start one pipeline run
+python -m fetcher.fetch_news --owner <Supabase-user-UUID> --fetch     # pull newsletters + RSS + YouTube, dedupe into news_queue
+python -m fetcher.fetch_news --owner <Supabase-user-UUID> --run-one   # pop the next queued item and start one pipeline run
 ```
 
-`--fetch` reads Gmail (query `NEWSLETTER_QUERY`), the `RSS_FEEDS` list and
-`YOUTUBE_CHANNELS` feeds, dedupes by URL hash, and enqueues. `--run-one`
+`--fetch` reads the selected account's RSS and YouTube sources from the database, dedupes by URL hash, and enqueues. `--run-one`
 starts a run via `build_runner()` - the run executes generate → qa → review
 and then **pauses**, waiting for the email verdict. In production these are a
 Cloud Scheduler → Cloud Run job; locally you run them by hand.

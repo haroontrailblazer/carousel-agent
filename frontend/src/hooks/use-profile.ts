@@ -189,7 +189,7 @@ export function useProfile() {
       // signed in at that point - our own cookie says so. The right outcome is
       // the generated monogram, not a query stuck in an error state retrying
       // something that will never work.
-      let user: { user_metadata?: unknown } | null = null
+      let user: { id?: string; email?: string; user_metadata?: unknown } | null = null
       try {
         const { data, error } = await supabase.auth.getUser()
         if (error) throw error
@@ -203,6 +203,8 @@ export function useProfile() {
         }
       }
 
+      // Supabase tokens can change in another tab before this cookie does.
+      if (user && ((identity?.id && user.id !== identity.id) || user.email?.toLowerCase() !== email.toLowerCase())) user = null
       const { name, avatarUrl } = metadataOf(user)
       // Only worth resolving when it will actually be used - a Gravatar miss
       // is still a request to a third party.

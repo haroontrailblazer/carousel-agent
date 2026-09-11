@@ -22,6 +22,7 @@ import logging
 from typing import Any, Optional
 
 from app.services import db, instagram_accounts, instagram_oauth
+from app import tenancy
 from app.services.job_lease import job_lease
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ _scheduler: Any = None
 #: tick, and a flag would be cleared by whichever finished first while the
 #: other was still working - so the console would stop showing "checking"
 #: while a check was still running.
-_fetch_in_flight = 0
+_fetch_counts = tenancy.ScopedDict()
 
 
 def fetch_in_progress() -> bool:
@@ -57,7 +58,7 @@ def fetch_in_progress() -> bool:
     are being polled. Note this is NOT ``scheduler_state()["running"]``, which
     says whether the timer itself is alive - a very different question.
     """
-    return _fetch_in_flight > 0
+    return _fetch_counts.get("active", 0) > 0
 
 
 async def load_schedule() -> dict:
@@ -86,8 +87,7 @@ async def run_fetch_once() -> dict:
     Returns a summary rather than raising: this runs on a timer with nobody
     watching, and a feed being down for an hour is not an incident.
     """
-    global _fetch_in_flight
-    _fetch_in_flight += 1
+    _fetch_counts["active"] = _fetch_counts.get("active", 0) + 1
     try:
         async with job_lease("news-fetch") as acquired:
             if not acquired:
@@ -101,6 +101,8 @@ async def run_fetch_once() -> dict:
             # discard everything it found.
             from fetcher.fetch_news import enqueue_items, fetch_all
 
+            from app.services import source_config
+            await source_config.load()
             payloads = await asyncio.to_thread(fetch_all)
             enqueued, skipped = await enqueue_items(payloads)
             summary = {"fetched": len(payloads), "enqueued": enqueued, "duplicates": skipped}
@@ -115,7 +117,7 @@ async def run_fetch_once() -> dict:
         logger.exception("Scheduled fetch failed: %s", exc)
         return {"error": str(exc)}
     finally:
-        _fetch_in_flight -= 1
+        _fetch_counts["active"] -= 1
 
 
 async def refresh_instagram_tokens() -> dict:
@@ -174,118 +176,67 @@ async def _refresh_instagram_tokens_locked() -> None:
         logger.exception("Scheduled Instagram refresh failed.")
 
 
-async def start_scheduler() -> Optional[Any]:
-    """Start the scheduler, or return ``None`` if it cannot run.
-
-    Missing APScheduler or a disabled schedule are both normal, non-fatal
-    states: the console works fine without automatic fetching, and someone
-    running locally usually does not want it.
-    """
-    global _scheduler
-    try:
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from apscheduler.triggers.cron import CronTrigger
-    except ImportError:
-        logger.warning(
-            "APScheduler is not installed; automatic news fetching is off. "
-            "Add apscheduler to requirements.txt to enable it."
-        )
-        return None
-
-    schedule = await load_schedule()
-    fetching = bool(schedule.get("enabled", True))
-    if not fetching:
-        # NOT an early return any more. Instagram tokens expire on their own
-        # schedule and have nothing to do with whether the newsroom polls its
-        # feeds; returning here left them to lapse on any console with
-        # fetching switched off.
-        logger.info("Scheduled fetching is disabled in app_config.")
-
-    scheduler = AsyncIOScheduler(
-        job_defaults={
-            # coalesce: after a redeploy, run the missed tick ONCE rather than
-            # once per hour of downtime.
-            "coalesce": True,
-            "max_instances": 1,
-            "misfire_grace_time": 3600,
-        }
-    )
-    try:
-        trigger = CronTrigger.from_crontab(str(schedule["fetch_cron"]))
-    except Exception as exc:
-        logger.error(
-            "Invalid fetch_cron %r (%s); falling back to %r.",
-            schedule.get("fetch_cron"),
-            exc,
-            DEFAULT_SCHEDULE["fetch_cron"],
-        )
-        trigger = CronTrigger.from_crontab(DEFAULT_SCHEDULE["fetch_cron"])
-
-    if fetching:
-        scheduler.add_job(
-            run_fetch_once, trigger, id="fetch_news", replace_existing=True
-        )
-    scheduler.add_job(
-        _refresh_instagram_tokens_locked,
-        CronTrigger.from_crontab(IG_REFRESH_CRON),
-        id="refresh_instagram_tokens",
-        replace_existing=True,
-    )
-    scheduler.start()
-    _scheduler = scheduler
-    logger.info(
-        "Scheduler started: fetching %s, Instagram tokens on %r.",
-        f"on {schedule['fetch_cron']!r}" if fetching else "off",
-        IG_REFRESH_CRON,
-    )
-    return scheduler
+async def _for_owner(owner: str, action: str):
+    with tenancy.bind(owner):
+        if action == "fetch":
+            await run_fetch_once()
+        else:
+            await instagram_accounts.load()
+            await _refresh_instagram_tokens_locked()
 
 
-async def reschedule() -> None:
-    """Apply a changed schedule to the running scheduler."""
-    global _scheduler
+async def refresh_workspace_jobs():
     if _scheduler is None:
-        await start_scheduler()
+        return
+    try:
+        owners = await tenancy.owners()
+        for owner in owners:
+            with tenancy.bind(owner):
+                await reschedule()
+        valid = {f"{kind}:{owner}" for owner in owners for kind in ("fetch_news", "refresh_instagram")}
+        for job in _scheduler.get_jobs():
+            if job.id != "workspaces" and job.id not in valid:
+                _scheduler.remove_job(job.id)
+    except Exception:
+        logger.exception("Could not refresh workspace schedules")
+
+
+async def start_scheduler():
+    global _scheduler
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    _scheduler = AsyncIOScheduler(job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 60})
+    _scheduler.add_job(refresh_workspace_jobs, "interval", minutes=1, id="workspaces")
+    _scheduler.start()
+    await refresh_workspace_jobs()
+    return _scheduler
+
+
+async def reschedule():
+    if _scheduler is None:
         return
     from apscheduler.triggers.cron import CronTrigger
-
+    owner = tenancy.require()
     schedule = await load_schedule()
+    job_id = f"fetch_news:{owner}"
+    previous = _scheduler.get_job(job_id)
+    cron = str(schedule["fetch_cron"])
+    trigger = CronTrigger.from_crontab(cron)
     if not schedule.get("enabled", True):
-        # Only the fetch job. remove_all_jobs() used to be right when fetching
-        # was the only thing scheduled; it now also deletes the Instagram
-        # token refresh, which would quietly let every connected account lapse
-        # sixty days after somebody turned fetching off.
-        try:
-            _scheduler.remove_job("fetch_news")
-        except Exception:  # noqa: BLE001 - already absent
-            pass
-        logger.info("Scheduled fetching disabled; fetch job removed.")
-        return
-    _scheduler.add_job(
-        run_fetch_once,
-        CronTrigger.from_crontab(str(schedule["fetch_cron"])),
-        id="fetch_news",
-        replace_existing=True,
-    )
-    logger.info("Scheduler updated: fetching on %r.", schedule["fetch_cron"])
+        if previous:
+            _scheduler.remove_job(job_id)
+    elif previous is None or str(previous.trigger) != str(trigger):
+        _scheduler.add_job(_for_owner, trigger, args=[owner, "fetch"], id=job_id, replace_existing=True)
+    refresh_id = f"refresh_instagram:{owner}"
+    if not _scheduler.get_job(refresh_id):
+        _scheduler.add_job(_for_owner, CronTrigger.from_crontab(IG_REFRESH_CRON), args=[owner, "instagram"], id=refresh_id)
 
 
-def scheduler_state() -> dict:
-    """Whether the scheduler is live, and when it next fires.
-
-    Worth exposing rather than inferring from config: "enabled: true" in a
-    table says what was ASKED for, not what is actually running. If APScheduler
-    is missing or the job failed to schedule, the config still reads enabled
-    and nothing ever fetches.
-    """
+def scheduler_state():
     if _scheduler is None:
         return {"running": False, "next_run": None}
-    job = _scheduler.get_job("fetch_news")
+    job = _scheduler.get_job(f"fetch_news:{tenancy.current()}")
     next_run = getattr(job, "next_run_time", None) if job else None
-    return {
-        "running": bool(getattr(_scheduler, "running", False)),
-        "next_run": next_run.isoformat() if next_run else None,
-    }
+    return {"running": bool(_scheduler.running), "next_run": next_run.isoformat() if next_run else None}
 
 
 def shutdown_scheduler() -> None:

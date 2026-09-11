@@ -36,6 +36,7 @@ def test_deployed_app_starts_and_shuts_down(monkeypatch, url, key, configured):
     ))
     monkeypatch.setattr(web_app, "init_observability", Mock())
     monkeypatch.setattr(web_app, "shutdown_observability", Mock())
+    monkeypatch.setattr("app.tenancy.owners", AsyncMock(return_value=["11111111-1111-4111-8111-111111111111"]))
     calls = Mock()
     operations = [
         (web_app, "reconcile_on_startup", "reconcile", []),
@@ -62,10 +63,9 @@ def test_deployed_app_starts_and_shuts_down(monkeypatch, url, key, configured):
         response = client.get("/healthz")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
-        expected_boot = ["reconcile", "release", "telegram", "instagram", "seed", "start_scheduler"] if configured else []
+        expected_boot = ["reconcile", "release", "start_scheduler"] if configured else []
         assert [call[0] for call in calls.mock_calls] == expected_boot
-        if configured:
-            calls.seed.assert_awaited_once_with(["startup@example.test"])
+        calls.seed.assert_not_awaited()
 
     expected_shutdown = (["stop_scheduler"] if configured else []) + [
         "drain_resume", "drain_runs", "close_services", "close_db",

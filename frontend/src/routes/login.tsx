@@ -6,7 +6,7 @@ import { BrandLogo } from "@/components/layout/brand-logo"
 import { StudioArtwork } from "@/components/layout/studio-artwork"
 import { Input, Label } from "@/components/ui/input"
 import { useAuth } from "@/hooks/use-auth"
-import { loadAuthConfig } from "@/lib/supabase"
+import { loadAuthConfig, supabase } from "@/lib/supabase"
 
 /**
  * GoTrue's raw messages are not always the truth a user needs.
@@ -63,6 +63,8 @@ export function LoginRoute() {
   const [password, setPassword] = React.useState("")
   const [error, setError] = React.useState("")
   const [busy, setBusy] = React.useState(false)
+  const [signup, setSignup] = React.useState(false)
+  const [notice, setNotice] = React.useState("")
   const [configured, setConfigured] = React.useState<boolean | null>(null)
 
   React.useEffect(() => {
@@ -80,7 +82,19 @@ export function LoginRoute() {
     event.preventDefault()
     setBusy(true)
     setError("")
+    setNotice("")
     try {
+      if (signup) {
+        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password,
+          options: { emailRedirectTo: window.location.origin + "/login" } })
+        if (error) throw error
+        if (!data.session) {
+          setNotice("Check your email to confirm your account, then sign in here.")
+          setSignup(false)
+          setPassword("")
+          return
+        }
+      }
       await signIn(email.trim(), password)
       const from = (location.state as { from?: string } | null)?.from
       navigate(redirectTarget(location.search, from), { replace: true })
@@ -105,8 +119,8 @@ export function LoginRoute() {
       </section>
       <div className="studio-login-form">
       <div>
-        <h1>Welcome to your studio.</h1>
-        <p className="studio-login-subtitle">Sign in to create something worth sharing.</p>
+        <h1>{signup ? "Your own creative studio." : "Welcome to your studio."}</h1>
+        <p className="studio-login-subtitle">{signup ? "Create an account. Your designs, media and settings stay yours." : "Sign in to create something worth sharing."}</p>
 
         {configured === false && (
           <p className="mb-4 rounded-[var(--radius-md)] bg-[var(--phase-failed-soft)] px-3 py-2 text-sm"
@@ -134,13 +148,15 @@ export function LoginRoute() {
             <Input
               id="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete={signup ? "new-password" : "current-password"}
+              minLength={signup ? 8 : undefined}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 
+          {notice && <p role="status" className="text-sm text-[var(--muted-foreground)]">{notice}</p>}
           {error && (
             <p
               className="rounded-[var(--radius-md)] px-3 py-2 text-sm"
@@ -160,12 +176,13 @@ export function LoginRoute() {
             className="w-full"
             disabled={busy || configured === false}
           >
-            {busy ? "Signing in…" : "Sign in"}
+            {busy ? (signup ? "Creating account…" : "Signing in…") : signup ? "Create account" : "Sign in"}
           </Button>
         </form>
 
         <p className="mt-5 text-center text-xs text-[var(--muted-foreground)]">
-          Accounts are invite-only. Ask an admin to add you.
+          {signup ? "Already have an account? " : "New here? "}
+          <button type="button" className="underline underline-offset-4" disabled={busy} onClick={() => { setSignup(!signup); setError(""); setNotice("") }}>{signup ? "Sign in" : "Create your account"}</button>
         </p>
       </div>
       </div>

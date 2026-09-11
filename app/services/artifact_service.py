@@ -412,7 +412,8 @@ class SupabaseArtifactService(BaseArtifactService):
         key = self._object_key(app_name, user_id, filename, version, session_id)
         # Reusing a version's URL lets the browser/CDN reuse its download.
         # Renew early, and keep publishing and preview lifetimes separate.
-        cache_key = (key, expires_in)
+        from app import tenancy
+        cache_key = (key, expires_in, tenancy.current())
         with self._sign_lock:
             now = time.monotonic()
             cached = self._signed_urls.get(cache_key)

@@ -8,6 +8,7 @@ import asyncio
 from collections import OrderedDict
 from copy import deepcopy
 import json
+from app import tenancy
 from weakref import WeakValueDictionary
 
 
@@ -20,6 +21,7 @@ class RevisionCache:
         self.bytes = 0
 
     async def read(self, key, revision, fetch):
+        key = (tenancy.current(), key)
         lock = self.locks.setdefault(key, asyncio.Lock())
         async with lock:
             stamp = await revision()

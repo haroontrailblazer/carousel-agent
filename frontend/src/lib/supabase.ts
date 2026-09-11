@@ -14,7 +14,8 @@
  * bundle; the only server is FastAPI, and it verifies tokens itself.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient, User } from "@supabase/supabase-js"
+import { workspaceScope } from "@/lib/workspace"
 
 export type AuthConfig = {
   supabase_url: string
@@ -84,6 +85,10 @@ export async function getSupabase(): Promise<SupabaseClient> {
  */
 export const supabase = {
   auth: {
+    async signUp(credentials: { email: string; password: string; options?: { emailRedirectTo?: string } }) {
+      const c = await getSupabase()
+      return c.auth.signUp(credentials)
+    },
     async signOut(options?: { scope?: "global" | "local" | "others" }) {
       try {
         const c = await getSupabase()
@@ -124,8 +129,26 @@ export const supabase = {
       /** user_metadata - where the display name and avatar live. */
       data?: Record<string, unknown>
     }) {
+      const expected = workspaceScope()
       const c = await getSupabase()
-      return c.auth.updateUser(attributes)
+      // Recovery outside the console uses the SDK's recovery session.
+      if (!expected) return c.auth.updateUser(attributes)
+      const { data } = await c.auth.getSession()
+      const session = data.session
+      if (!session || session.user.id !== expected || expected !== workspaceScope()) {
+        throw new Error("Account changed. Reload before editing your profile.")
+      }
+      const config = await loadAuthConfig()
+      // Capture the matching token: another tab must not retarget this write.
+      const response = await fetch(config.supabase_url + "/auth/v1/user", {
+        method: "PUT",
+        headers: { apikey: config.supabase_anon_key, Authorization: "Bearer " + session.access_token, "Content-Type": "application/json" },
+        body: JSON.stringify(attributes),
+      })
+      const updated = await response.json()
+      if (!response.ok) throw new Error(updated.msg ?? updated.message ?? "Could not update your profile.")
+      if (expected !== workspaceScope()) throw new Error("Account changed. Reload this page.")
+      return { data: { user: updated as User }, error: null }
     },
     /**
      * Subscribe to auth changes.

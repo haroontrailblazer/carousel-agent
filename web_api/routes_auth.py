@@ -2,7 +2,7 @@
 
 The exchange is deliberately small. The browser does the Supabase sign-in
 itself with supabase-js; all this does is take the resulting access token,
-verify it, check the allowlist, and hand back our own session cookie. Passwords
+verify it, provision the private workspace, and hand back our own session cookie. Passwords
 never touch this service.
 """
 
@@ -71,7 +71,7 @@ async def create_session(payload: SessionRequest, request: Request) -> Response:
     verifier = build_verifier()
     try:
         verified = verifier.verify(payload.access_token)
-        identity = await authorize_email(verified["email"])
+        identity = await authorize_email(verified["email"], verified["subject"])
     except AuthError as exc:
         # 403 when we know who they are but will not let them in; 401 when the
         # credential itself is the problem. The SPA shows a different message
@@ -133,6 +133,7 @@ async def whoami(identity: Identity = Depends(current_identity)) -> dict:
     """Who the current session belongs to."""
     return {
         "email": identity.email,
+        "id": identity.subject,
         "role": identity.role,
         "is_admin": identity.is_admin,
         "source": identity.source,

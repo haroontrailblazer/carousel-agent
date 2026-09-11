@@ -214,6 +214,8 @@ async def get_avatar(
     """Serve a stored avatar from the private bucket."""
     if not digest.isalnum() or len(digest) != 64:
         raise HTTPException(404, {"code": "not_found", "message": "No such avatar."})
+    if avatar_store.key_for(_identity.email).rsplit("/", 1)[-1] != f"{digest}.webp":
+        raise HTTPException(404, {"code": "not_found", "message": "No such avatar."})
     try:
         payload = await avatar_store.load(f"{avatar_store.PREFIX}/{digest}.webp")
     except Exception as exc:
@@ -512,3 +514,20 @@ async def instagram_disconnect(
 
 __all__ = ["router"]
 
+
+
+@router.get("/settings/sources")
+async def newsroom_sources(_identity: Identity = Depends(current_identity)):
+    from app.services import source_config
+    return await source_config.load()
+
+
+@router.put("/settings/sources")
+async def save_newsroom_sources(request: Request, _identity: Identity = Depends(current_identity)):
+    from app.services import source_config
+    try:
+        return await source_config.save(await request.json())
+    except ValueError as exc:
+        raise HTTPException(422, {"message": str(exc)}) from None
+    except (TypeError, AttributeError):
+        raise HTTPException(422, {"message": "Enter HTTPS feed URLs or YouTube channel IDs, one per line (up to 30 each)."}) from None

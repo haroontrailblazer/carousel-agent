@@ -151,8 +151,8 @@ class Settings:
     # --- fetcher sources ---
     # Two, not three. NEWSLETTER_QUERY and the Gmail source it drove are gone;
     # see the mail note above.
-    rss_feeds: list[str] = field(default_factory=lambda: _csv("RSS_FEEDS"))
-    youtube_channels: list[str] = field(default_factory=lambda: _csv("YOUTUBE_CHANNELS"))
+    # Newsroom sources are saved per user in Profile & settings.
+
 
     # --- web console + auth ---
     # The anon key is PUBLIC by design - it ships inside the browser bundle, so
@@ -222,7 +222,8 @@ def agent_instructions(name: str) -> str:
     """
     path = settings.skills_dir / "agents" / f"{name}.md"
     if path.exists():
-        return path.read_text(encoding="utf-8")
+        from app.services import workspace_rules
+        return workspace_rules.content(str(path.relative_to(settings.skills_dir)).replace("\\", "/"), path.read_text(encoding="utf-8"))
     return ""
 
 
@@ -230,5 +231,6 @@ def load_skill(filename: str) -> str:
     """Load a shared skill file from skills/ (e.g. 'cover-style.md')."""
     path = settings.skills_dir / filename
     if path.exists():
-        return path.read_text(encoding="utf-8")
+        from app.services import workspace_rules
+        return workspace_rules.content(str(path.relative_to(settings.skills_dir)).replace("\\", "/"), path.read_text(encoding="utf-8"))
     return ""

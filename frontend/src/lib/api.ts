@@ -26,6 +26,7 @@
  * message string.
  */
 
+import { workspaceScope } from "@/lib/workspace"
 import { supabase } from "@/lib/supabase"
 
 /** Same-origin in production (FastAPI serves this bundle) and in dev (Vite
@@ -138,6 +139,7 @@ async function parseError(response: Response): Promise<ApiError> {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const owner = workspaceScope()
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     // The session lives in an httpOnly cookie, so it must be sent explicitly.
@@ -157,6 +159,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       Accept: "application/json",
       ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(init.headers ?? {}),
+      ...(owner ? { "X-Workspace-ID": owner } : {}),
     },
   })
 
@@ -167,23 +170,28 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) throw await parseError(response)
 
+  if (owner !== workspaceScope()) throw new ApiError("Account changed; reload this page.", 409, "account_changed")
   if (response.status === 204) return undefined as T
-  return (await response.json()) as T
+  const data = (await response.json()) as T
+  return data
 }
 
 /** Download an authenticated binary response with the same API error handling. */
 export async function downloadFile(path: string, filename: string): Promise<void> {
+  const owner = workspaceScope()
   const response = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
     cache: "no-store",
-    headers: { Accept: "application/zip" },
+    headers: { Accept: "application/zip", ...(owner ? { "X-Workspace-ID": owner } : {}) },
   })
   if (response.status === 401) {
     void redirectToLogin()
     throw new ApiError("Your session has expired.", 401, "unauthenticated")
   }
   if (!response.ok) throw await parseError(response)
-  const url = URL.createObjectURL(await response.blob())
+  const blob = await response.blob()
+  if (owner !== workspaceScope()) throw new ApiError("Account changed; reload this page.", 409, "account_changed")
+  const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.href = url
   link.download = filename
@@ -234,5 +242,6 @@ export async function probe<T>(path: string): Promise<T | null> {
   })
   if (response.status === 401 || response.status === 403) return null
   if (!response.ok) return null
-  return (await response.json()) as T
+  const data = (await response.json()) as T
+  return data
 }

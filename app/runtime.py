@@ -43,7 +43,10 @@ def _build_artifact_service() -> BaseArtifactService:
     legacy = settings.s3_endpoint and settings.s3_access_key and settings.s3_secret_key
     if native or legacy:
         try:
-            return SupabaseArtifactService()
+            from app.services.tenant_storage import TenantStorageClient
+            service = SupabaseArtifactService()
+            service._client = TenantStorageClient(service._client)
+            return service
         except Exception as exc:
             if native:
                 raise RuntimeError(

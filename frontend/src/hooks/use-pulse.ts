@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
+import { workspaceKey } from "@/lib/workspace"
 import { get } from "@/lib/api"
 import type { Pulse } from "@/lib/types"
 
@@ -17,13 +18,11 @@ const STORAGE_KEY = "carousel-pulse"
  * and correcting it when the answer arrives is the difference between "the
  * sidebar tells me what is happening" and "the sidebar catches up eventually".
  *
- * These are four integers about a pipeline every signed-in user shares, so
- * there is nothing here worth protecting from the next person at this
- * browser.
+ * The snapshot is scoped to the verified account, like tasks and designs.
  */
 function remembered(): Pulse | undefined {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(workspaceKey(STORAGE_KEY))
     if (!raw) return undefined
     const parsed = JSON.parse(raw) as Partial<Pulse>
     const num = (v: unknown) => (typeof v === "number" && v >= 0 ? v : 0)
@@ -43,7 +42,7 @@ function remembered(): Pulse | undefined {
 
 function remember(pulse: Pulse): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pulse))
+    localStorage.setItem(workspaceKey(STORAGE_KEY), JSON.stringify(pulse))
   } catch {
     /* not worth a word to the user */
   }

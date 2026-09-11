@@ -139,6 +139,12 @@ class ConfiguredRunner(Runner):
 
 
 async def build_configured_runner() -> Runner:
+    from app.services import workspace_rules, instagram_accounts, telegram_config
+    from app import tenancy
+    if tenancy.current():
+        await workspace_rules.load()
+        await instagram_accounts.load()
+        await telegram_config.load()
     config = await ai_config.load()
     config.require_key()
     return build_runner()

@@ -4,10 +4,10 @@ Two source types are polled and normalized into :class:`app.schemas.NewsItem`
 payloads, deduped by URL hash, and enqueued into the ``news_queue`` table via
 :func:`app.services.db.enqueue_news`:
 
-* **RSS feeds** - ``settings.rss_feeds`` parsed with ``feedparser`` (bytes are
+* **RSS feeds** - ``source_config.current()["rss_feeds"]`` parsed with ``feedparser`` (bytes are
   downloaded first with ``requests`` so every network call has an explicit
   timeout; ``feedparser.parse(url)`` itself has none).
-* **YouTube channels** - ``settings.youtube_channels`` via the public channel
+* **YouTube channels** - ``source_config.current()["youtube_channels"]`` via the public channel
   feed ``https://www.youtube.com/feeds/videos.xml?channel_id=<id>``; the watch
   URL is put first in ``media_urls`` so the First-Page Visual agent can clip it.
 
@@ -41,6 +41,7 @@ import requests
 from pydantic import ValidationError
 
 from app.config import settings
+from app.services import source_config
 from app.observability import init_observability, shutdown_observability
 from app.schemas import NewsItem
 from app.news_media import feed_thumbnail
@@ -238,13 +239,13 @@ def _entry_payload(
 
 
 def fetch_rss_feeds() -> list[dict]:
-    """Fetch every feed in ``settings.rss_feeds``.
+    """Fetch every feed in ``source_config.current()["rss_feeds"]``.
 
     Returns:
         Enqueue-ready payload dicts; per-feed failures are logged and skipped.
     """
     payloads: list[dict] = []
-    for url in settings.rss_feeds:
+    for url in source_config.current()["rss_feeds"]:
         try:
             parsed = _download_feed(url)
         except Exception as exc:
@@ -257,7 +258,7 @@ def fetch_rss_feeds() -> list[dict]:
             except Exception as exc:
                 logger.warning("Skipping RSS entry from %s: %s", url, exc)
     logger.info(
-        "RSS: %d item(s) from %d feed(s).", len(payloads), len(settings.rss_feeds)
+        "RSS: %d item(s) from %d feed(s).", len(payloads), len(source_config.current()["rss_feeds"])
     )
     return payloads
 
@@ -287,14 +288,14 @@ def _youtube_feed_url(channel: str) -> str:
 
 
 def fetch_youtube_feeds() -> list[dict]:
-    """Fetch the channel feeds for ``settings.youtube_channels``.
+    """Fetch the channel feeds for ``source_config.current()["youtube_channels"]``.
 
     Returns:
         Enqueue-ready payload dicts; each entry's watch URL leads
         ``media_urls`` so the cover agent can source the clip from it.
     """
     payloads: list[dict] = []
-    for channel in settings.youtube_channels:
+    for channel in source_config.current()["youtube_channels"]:
         try:
             feed_url = _youtube_feed_url(channel)
             parsed = _download_feed(feed_url)
@@ -318,7 +319,7 @@ def fetch_youtube_feeds() -> list[dict]:
     logger.info(
         "YouTube: %d item(s) from %d channel(s).",
         len(payloads),
-        len(settings.youtube_channels),
+        len(source_config.current()["youtube_channels"]),
     )
     return payloads
 
@@ -557,12 +558,14 @@ def _build_parser() -> argparse.ArgumentParser:
             "run pauses at human review (the review mail is out) - expected"
         ),
     )
+    parser.add_argument("--owner", required=True, help="Supabase account UUID whose workspace to use")
     return parser
 
 
 async def _amain(args: argparse.Namespace) -> int:
     """Async entrypoint: run the requested actions, then close the DB pool."""
     try:
+        await source_config.load()
         if args.fetch:
             payloads = await asyncio.to_thread(fetch_all)
             enqueued, skipped = await enqueue_items(payloads)
@@ -590,7 +593,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     init_observability()
     try:
-        return asyncio.run(_amain(args))
+        from app import tenancy
+        with tenancy.bind(args.owner):
+            return asyncio.run(_amain(args))
     finally:
         shutdown_observability()  # flush buffered Langfuse spans before exit
 

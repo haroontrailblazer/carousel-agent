@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.services import db, secret_box
+from app.tenancy import ScopedDict
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ DEFAULT_AUTH_KIND = "instagram_login"
 #: unnoticed before anything breaks.
 REFRESH_WINDOW_DAYS = 14
 
-_cache: dict[str, "Account"] = {}
+_cache: dict[str, "Account"] = ScopedDict()
 
 
 @dataclass(frozen=True)

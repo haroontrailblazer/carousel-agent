@@ -250,6 +250,7 @@ export type InstagramAccountSummary = {
 }
 
 export type Identity = {
+  id?: string
   email: string
   role: string
   is_admin: boolean

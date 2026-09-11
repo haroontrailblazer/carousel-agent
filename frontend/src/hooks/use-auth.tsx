@@ -6,7 +6,7 @@
  *  1. supabase-js does the actual sign-in in the browser. Passwords never
  *     touch our server.
  *  2. The resulting access token is posted ONCE to /api/auth/session, which
- *     verifies it, checks the allowlist, and sets an httpOnly cookie. Every
+ *     verifies it, provisions the private workspace, and sets an httpOnly cookie. Every
  *     request after that rides the cookie.
  *
  * The cookie exists because our SPA is not the only thing that needs to
@@ -19,8 +19,10 @@
  */
 
 import * as React from "react"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { del, onSessionExpired, probe } from "@/lib/api"
+import { setWorkspaceScope } from "@/lib/workspace"
 import { supabase } from "@/lib/supabase"
 import type { Identity } from "@/lib/types"
 
@@ -74,6 +76,8 @@ type AuthValue = {
 const AuthContext = React.createContext<AuthValue | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient()
+  const account = React.useRef("")
   const [status, setStatus] = React.useState<AuthStatus>("pending")
   const [identity, setIdentity] = React.useState<Identity | null>(null)
 
@@ -83,6 +87,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // triggered a redirect to /login - and on /login that redirect fired
     // again on every mount, reloading the page forever.
     const me = await probe<Identity>("/api/auth/me")
+    const owner = me?.id ?? me?.email ?? ""
+    if (account.current !== owner) {
+      await queryClient.cancelQueries()
+      queryClient.clear()
+      account.current = owner
+      setWorkspaceScope(owner)
+    }
     if (me) {
       setIdentity(me)
       setStatus("in")
@@ -95,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // gets the console's layout on every load right up to the redirect.
       rememberSession(false)
     }
-  }, [])
+  }, [queryClient])
 
   React.useEffect(() => {
     void refresh()
@@ -105,6 +116,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIdentity(null)
       setStatus("out")
       rememberSession(false)
+      account.current = ""
+      setWorkspaceScope("")
+      void queryClient.cancelQueries().then(() => queryClient.clear())
     })
   }, [refresh])
 
@@ -118,9 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = data.session?.access_token
       if (!token) throw new Error("Sign-in did not return a session.")
 
-      // Exchange it for our cookie. A 403 here means Supabase knows them but
-      // the console's allowlist does not - a different problem, and the error
-      // message from the server says so.
+      // Exchange the verified account token for our server session cookie.
       const response = await fetch("/api/auth/session", {
         method: "POST",
         credentials: "include",
@@ -137,6 +149,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   const signOut = React.useCallback(async () => {
+    setIdentity(null)
+    setStatus("out")
+    await queryClient.cancelQueries()
+    queryClient.clear()
+    account.current = ""
+    setWorkspaceScope("")
     try {
       await del("/api/auth/session")
     } catch {
@@ -148,14 +166,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIdentity(null)
     setStatus("out")
     rememberSession(false)
-  }, [])
+  }, [queryClient])
 
   const value = React.useMemo(
     () => ({ status, identity, signIn, signOut, refresh }),
     [status, identity, signIn, signOut, refresh],
   )
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={value}><React.Fragment key={identity?.id ?? identity?.email ?? "signed-out"}>{children}</React.Fragment></AuthContext.Provider>
 }
 
 export function useAuth(): AuthValue {

@@ -12,9 +12,9 @@ curl, CI and scripts.
 
 **Why our own cookie rather than storing Supabase's token in one.** Supabase
 access tokens last an hour and are refreshed client-side, so we would be
-re-minting constantly; ours carries the role from ``app_users`` so
-authorisation needs no database round trip per request; and verifying our own
-HS256 token is local work rather than a JWKS fetch on the hot path.
+re-minting constantly. Our cookie carries the verified account UUID, and
+each request rechecks that its workspace is enabled before binding the
+database and storage scope.
 
 **Why raw ASGI and not BaseHTTPMiddleware.** BaseHTTPMiddleware pulls the
 response body through a memory stream, which defeats incremental flushing - the
@@ -35,6 +35,8 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.config import settings
 from app.services import db
+from app import tenancy
+from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -332,35 +334,22 @@ def clear_cookie_headers(*, secure: bool) -> list[tuple[bytes, bytes]]:
     return [(b"set-cookie", "; ".join(attrs).encode("latin-1"))]
 
 
-async def authorize_email(email: str) -> Identity:
-    """Check the allowlist and build the identity to put in the cookie.
-
-    The primary gate is Supabase itself, where public signup is off and users
-    are created by invite. This is the second gate: even a valid Supabase token
-    from a stranger gets nothing here. A disabled user is told their access was
-    revoked rather than that they do not exist - they know they had an account,
-    and pretending otherwise just generates a support message.
-    """
+async def authorize_email(email: str, subject: str = "") -> Identity:
+    """Open only the verified Supabase account's personal workspace."""
     clean = (email or "").strip().lower()
     try:
-        row = await db.get_app_user(clean)
-    except Exception as exc:
-        logger.warning("Allowlist lookup failed for %s: %s", clean, exc)
-        raise AuthError(
-            "allowlist_unavailable",
-            "Could not check access rights right now. Try again shortly.",
-        ) from exc
-
-    if row is None:
-        raise AuthError(
-            "not_allowed",
-            f"{clean} is not on the access list for this console.",
-        )
-    if row.get("disabled"):
-        raise AuthError("access_revoked", "Your access to this console was revoked.")
-    return Identity(
-        email=clean, subject=clean, role=str(row.get("role") or "reviewer")
-    )
+        owner = str(UUID(subject))
+    except (ValueError, TypeError):
+        raise AuthError("token_invalid", "Sign in again to open your workspace.") from None
+    try:
+        client = await db.get_pool()
+        row = await client.system_rpc("carousel_provision_workspace", {"owner": owner, "address": clean})
+    except Exception:
+        raise AuthError("workspace_unavailable", "Could not open your workspace. Try again shortly.") from None
+    if not row or not row.get("enabled"):
+        raise AuthError("access_revoked", "Your account is disabled.")
+    # Each account administers only its own rows; this is not a platform role.
+    return Identity(email=clean, subject=owner, role="admin")
 
 
 def _cookie_value(scope: Scope, name: str) -> str:
@@ -439,14 +428,18 @@ class AuthMiddleware:
         cookie = _cookie_value(scope, COOKIE_NAME)
         identity = read_session_token(cookie, secret=self._secret)
         if identity is not None:
-            return identity
+            try:
+                UUID(identity.subject)
+                return await authorize_email(identity.email, identity.subject)
+            except (ValueError, AuthError):
+                return None
 
         header = _header(scope, b"authorization")
         if header.lower().startswith("bearer "):
             token = header[7:].strip()
             try:
                 verified = self._verifier.verify(token)
-                identity = await authorize_email(verified["email"])
+                identity = await authorize_email(verified["email"], verified["subject"])
                 return Identity(
                     email=identity.email,
                     subject=identity.subject,
@@ -469,8 +462,20 @@ class AuthMiddleware:
 
         identity = await self._identify(scope)
         if identity is not None:
+            expected = _header(scope, b"x-workspace-id")
+            if expected and expected != identity.subject:
+                if scope["type"] == "websocket":
+                    await send({"type": "websocket.close", "code": 1008})
+                else:
+                    await JSONResponse({"error": "Account changed. Sign in again.", "code": "account_changed"}, status_code=401)(scope, receive, send)
+                return
             scope["carousel_identity"] = identity
-            await self.app(scope, receive, send)
+            with tenancy.bind(identity.subject):
+                # Sync renderers and review senders need this account's caches.
+                from app.services import instagram_accounts, telegram_config
+                await instagram_accounts.load()
+                await telegram_config.load()
+                await self.app(scope, receive, send)
             return
 
         if scope["type"] == "websocket":
