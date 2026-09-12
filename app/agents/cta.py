@@ -28,6 +28,7 @@ from google.genai import types
 
 from app.config import agent_instructions, load_skill, settings
 from app.llm import resolve_role_model
+from app.editorial_voice import with_editorial_voice
 from app.schemas import CTASlide, CarouselDesign
 from app.state import AGENT_CTA, K_CTA_SLIDE, K_DESIGN, K_RUN_ID, get_model, set_model
 from app.text_rules import require_no_em_dash
@@ -74,15 +75,16 @@ Start from the planner's hint (carousel plan below) but apply judgment:
 
 ## Writing the CTA copy
 
-- Headline: at most 6 words, punchy, imperative, reads naturally in uppercase
-  (for example "FOLLOW FOR DAILY AI NEWS").
+- Headline: at most 6 words in simple English, with one friendly invitation
+  or clear next step. It should read naturally in uppercase. Do not promise
+  daily posts unless that schedule is actually established.
 - Supporting lines: at most 3 short lines, one thought per line - a value
   promise, a question (compulsory for "comment"), or what the reader gets at
   the destination (for "redirect").
 - Never use an em dash. Use a period, comma, colon, or parentheses instead.
 - Use only complete, correctly spelled, understandable words. Never use
   invented words, placeholder copy, keyboard mash, corrupted characters, or
-  decorative pseudo-writing.
+  decorative strings that merely resemble language.
 - NEVER write a handle, username, URL or link in the headline or supporting
   lines - the tool appends the correct one from configuration and any you
   invent would be wrong.
@@ -386,7 +388,7 @@ follow or comment and update the copy to match before rendering again.
             "its copy, and renders the closing CTA slide as a PNG artifact "
             "with the configured handle or link."
         ),
-        instruction=instruction,
+        instruction=with_editorial_voice(instruction),
         tools=[FunctionTool(render_cta_slide)],
         # Orchestrator-driven pipeline node: never LLM-transfer elsewhere.
         # See the same block in template_design - without both flags,

@@ -20,8 +20,9 @@ Start from the planner's hint (carousel plan below) but apply judgment:
 
 ## Writing the CTA copy
 
-- Headline: at most 6 words, punchy, imperative, reads naturally in uppercase
-  (for example "FOLLOW FOR DAILY AI NEWS").
+- Headline: at most 6 words in simple English, with one friendly invitation
+  or clear next step. It should read naturally in uppercase. Do not promise
+  daily posts unless that schedule is actually established.
 - Supporting lines: at most 3 short lines, one thought per line - a value
   promise, a question (compulsory for "comment"), or what the reader gets at
   the destination (for "redirect").

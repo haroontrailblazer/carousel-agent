@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from google.adk.agents import LlmAgent
 from app.llm import resolve_role_model
+from app.editorial_voice import with_editorial_voice
 
 from app.config import agent_instructions, settings
 from app.schemas import CopySet
@@ -83,46 +84,56 @@ also yours to use - prefer their exact numbers over vaguer news text:
    (body slides start at index 2; slide 1 is the cover and the last slide is
    the CTA - you write neither).
 2. Respect the plan's style field exactly:
-   - style "points": each line is a short, self-contained statement. No filler
-     words, no connectives carrying over between lines.
-   - style "prose": lines form a smooth mini-paragraph, but each line must
-     still stand on its own when read alone.
-3. Treat the first line as the headline. Make it 3-7 words and no more than
-   42 characters, specific, and useful on its own.
+   - style "points": each line is a short, complete statement, arranged in
+     a useful order. Keep the overall story connected across slides.
+   - style "prose": write short, natural sentences that follow one another.
+     A line can build on the previous thought; make references clear.
+3. Treat the first line as the slide headline. Make it 3-7 words and no more
+   than 42 characters, specific, and easy to understand on the first read.
+   State the next part of the story in everyday words, rather than labels like
+   "KEY FEATURES" or "WHAT IT MEANS".
 4. Line budget: at most the plan's max_lines_per_slide lines per slide - never
-   more. Prefer a headline plus 1-2 body lines. Use a third body line only for
-   an essential sourced fact. Fewer lines are fine when the content is covered.
+   more. Prefer one headline plus 1-2 body lines; use the fourth line only when
+   an essential sourced fact would otherwise be lost.
 5. One thought per line. Never split a single thought across two lines and
    never cram two facts into one line.
 6. Finalize every sentence: complete, publish-ready wording. No placeholders,
    no trailing ellipses used as teasers, no "TBD", no notes to other agents.
-7. Punchy but factual: short, concrete, confident wording. Use only facts from
-   the news item and research brief above. Keep names, product names, versions and numbers exactly
-   as the source states them. Never invent statistics, quotes or dates. No
-   hype adjectives ("insane", "mind-blowing"), no clickbait.
-8. Cover the plan's key_points for each slide in the plan's given intent -
-   rephrase for punch, but do not drop or add facts.
-9. Plain text only: no markdown syntax, no leading bullet characters or dashes
+7. Natural and factual: short, concrete, everyday wording. Use only facts from
+   the news item and research brief above. Keep names, product names, versions,
+   dates, units, prices, and numbers exactly as the source states them. Never
+   turn an inference into a fact or merge figures from different sources into
+   one unsupported claim. No hype adjectives ("insane", "mind-blowing"), no
+   clickbait.
+8. Make the slides progress. Do not restate the cover or repeat a fact from the
+   previous slide. Each slide must add evidence, explain a mechanism, sharpen a
+   comparison, or land an implication.
+9. Cover the plan's key_points for each slide in the plan's given intent -
+   explain the facts simply without inventing or changing their meaning.
+10. Plain text only: no markdown syntax, no leading bullet characters or dashes
    (the slide template adds visual bullets), no hashtags inside slide lines,
    no emoji on slides.
-10. Never use an em dash in slide copy or captions. Use a period, comma, colon,
+11. Never use an em dash in slide copy or captions. Use a period, comma, colon,
    or parentheses instead. This rule has no exceptions, including quotations.
-11. Keep body lines short enough to render large: no more than 8 words or
-   48 characters per line, and keep the whole slide at or below 150 visible
-   characters.
-12. Use only complete, correctly spelled, understandable words. Prefer plain
-   English. Never output invented words, keyboard mash, pseudo-Latin,
-   placeholder text, corrupted characters, or decorative pseudo-writing.
-13. Slide copy must use Latin-script English transliterations only. Do not add
+12. Keep body lines short enough to render large: no more than 8 words or
+   48 characters per line. Prefer a headline plus 1-2 body lines. Use a third
+   body line only for an essential sourced fact, and keep the whole slide at
+   or below 150 visible characters.
+13. Use only complete, correctly spelled, understandable words. Prefer plain
+   English. Keep a technical term, acronym, product name, or person's name only
+   when it appears in the source, and make its meaning clear from the sentence.
+   Never output invented words, keyboard mash, pseudo-Latin, placeholder text,
+   corrupted characters, or decorative strings that only look like language.
+14. Slide copy must use Latin-script English transliterations only. Do not add
    Chinese characters or alternate-script names in parentheses.
-14. Proofread every line before returning it. Readers must never have to guess
-   what a malformed or shortened word was meant to say.
+15. Proofread every line before returning it. Each line must make sense to a
+   reader without guessing what a malformed or shortened word was meant to say.
 
 ## Caption rules
 
 1. Build the Instagram caption FROM the plan's caption_seed - expand it, do not
    discard it.
-2. Shape: a scroll-stopping first line, then 1-3 short sentences adding context
+2. Shape: a clear, interesting first line, then 1-3 natural sentences adding context
    or a takeaway, then a call-to-action line consistent with the plan's
    cta_hint, then hashtags.
 3. End the caption with 3 to 5 relevant hashtags - never fewer than 3, never
@@ -165,7 +176,7 @@ def build_phrasing_agent() -> LlmAgent:
             "line budget from the carousel plan) and the Instagram caption "
             "with 3-5 hashtags; outputs a CopySet."
         ),
-        instruction=instruction,
+        instruction=with_editorial_voice(instruction),
         output_schema=CopySet,
         output_key=K_COPY,
         # Leaf pipeline agent driven by the orchestrator - never delegates.

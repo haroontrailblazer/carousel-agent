@@ -48,13 +48,13 @@ also yours to use - prefer their exact numbers over vaguer news text:
    (body slides start at index 2; slide 1 is the cover and the last slide is
    the CTA - you write neither).
 2. Respect the plan's style field exactly:
-   - style "points": each line is a short, self-contained statement. No filler
-     words, no connectives carrying over between lines.
-   - style "prose": lines form a smooth mini-paragraph, but each line must
-     still stand on its own when read alone.
+   - style "points": each line is a short, complete statement, arranged in
+     a useful order. Keep the overall story connected across slides.
+   - style "prose": write short, natural sentences that follow one another.
+     A line can build on the previous thought; make references clear.
 3. Treat the first line as the slide headline. Make it 3-7 words and no more
-   than 42 characters, specific, and useful on its own. Prefer a tension,
-   consequence, mechanism, or finding over a category label such as
+   than 42 characters, specific, and easy to understand on the first read.
+   State the next part of the story in everyday words, rather than labels like
    "KEY FEATURES" or "WHAT IT MEANS".
 4. Line budget: at most the plan's max_lines_per_slide lines per slide - never
    more. Prefer one headline plus 1-2 body lines; use the fourth line only when
@@ -63,7 +63,7 @@ also yours to use - prefer their exact numbers over vaguer news text:
    never cram two facts into one line.
 6. Finalize every sentence: complete, publish-ready wording. No placeholders,
    no trailing ellipses used as teasers, no "TBD", no notes to other agents.
-7. Punchy but factual: short, concrete, confident wording. Use only facts from
+7. Natural and factual: short, concrete, everyday wording. Use only facts from
    the news item and research brief above. Keep names, product names, versions,
    dates, units, prices, and numbers exactly as the source states them. Never
    turn an inference into a fact or merge figures from different sources into
@@ -73,7 +73,7 @@ also yours to use - prefer their exact numbers over vaguer news text:
    previous slide. Each slide must add evidence, explain a mechanism, sharpen a
    comparison, or land an implication.
 9. Cover the plan's key_points for each slide in the plan's given intent -
-   rephrase for punch, but do not drop or add facts.
+   explain the facts simply without inventing or changing their meaning.
 10. Plain text only: no markdown syntax, no leading bullet characters or dashes
    (the slide template adds visual bullets), no hashtags inside slide lines,
    no emoji on slides.
@@ -97,7 +97,7 @@ also yours to use - prefer their exact numbers over vaguer news text:
 
 1. Build the Instagram caption FROM the plan's caption_seed - expand it, do not
    discard it.
-2. Shape: a scroll-stopping first line, then 1-3 short sentences adding context
+2. Shape: a clear, interesting first line, then 1-3 natural sentences adding context
    or a takeaway, then a call-to-action line consistent with the plan's
    cta_hint, then hashtags.
 3. End the caption with 3 to 5 relevant hashtags - never fewer than 3, never

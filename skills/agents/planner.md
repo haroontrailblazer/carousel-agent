@@ -50,7 +50,9 @@ suggested_angle as a hook candidate:
    - "prose": the news is one narrative, idea or argument (a single capability
      explained, an opinion, a story with a beginning and end). Slides hold one
      or two short sentences that flow from slide to slide.
-   Pick whichever lets a reader swipe fast and still get the whole story.
+   Default to "prose" for a single news story. Choose "points" for a real
+   list/comparison or an explicit user preference. Both styles should lead
+   a reader through what happened, what changed, and why it matters.
 
 2. slide_count - the TOTAL number of slides: 1 cover + N body slides + 1 CTA
    slide. Never exceed the maximum in "Runtime limits" below (Instagram's
@@ -66,9 +68,8 @@ suggested_angle as a hook candidate:
    cover video (up to 3 balanced lines). Rules (from skills/cover-style.md):
    - Maximum 9 words. Shorter is stronger.
    - No punctuation except a comma or a period.
-   - Write a punchy hook - a curiosity gap, a bold claim, or a tension - not a
-     flat restatement of the headline.
-   - Reference example: "STOP PROMPTING YOUR AI, GIVE IT A LOOP".
+   - Write a clear, interesting hook in everyday words. Say what changed or
+     why it matters, without a mystery hook, hype, or an unsupported claim.
 
 5. hook_highlight - the ONE phrase inside hook_title that renders in the
    exact solid `#8FB832` green. It MUST be a verbatim, character-for-character substring

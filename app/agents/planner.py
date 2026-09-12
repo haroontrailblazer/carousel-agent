@@ -28,6 +28,7 @@ from google.adk.utils.instructions_utils import inject_session_state
 
 from app.config import agent_instructions, load_skill, settings
 from app.llm import resolve_role_model
+from app.editorial_voice import with_editorial_voice
 from app.design_limits import MAX_SUPPORTED_SLIDES, design_slide_limit
 from app.schemas import CarouselPlan
 from app.state import (
@@ -95,7 +96,9 @@ suggested_angle as a hook candidate:
    - "prose": the news is one narrative, idea or argument (a single capability
      explained, an opinion, a story with a beginning and end). Slides hold one
      or two short sentences that flow from slide to slide.
-   Pick whichever lets a reader swipe fast and still get the whole story.
+   Default to "prose" for a single news story. Choose "points" for a real
+   list/comparison or an explicit user preference. Both styles should lead
+   a reader through what happened, what changed, and why it matters.
 
 2. slide_count - the TOTAL number of slides: 1 cover + N body slides + 1 CTA
    slide. Never exceed the maximum in "Runtime limits" below (Instagram's
@@ -111,12 +114,11 @@ suggested_angle as a hook candidate:
    cover video (up to 3 balanced lines). Rules (from skills/cover-style.md):
    - Maximum 9 words. Shorter is stronger.
    - No punctuation except a comma or a period.
-   - Write a punchy hook - a curiosity gap, a bold claim, or a tension - not a
-     flat restatement of the headline.
-   - Reference example: "STOP PROMPTING YOUR AI, GIVE IT A LOOP".
+   - Write a clear, interesting hook in everyday words. Say what changed or
+     why it matters, without a mystery hook, hype, or an unsupported claim.
 
 5. hook_highlight - the ONE phrase inside hook_title that renders in the
-   selected design's exact highlight text color. It MUST be a verbatim, character-for-character substring
+   exact solid `#8FB832` green. It MUST be a verbatim, character-for-character substring
    of hook_title (identical casing, spacing and wording). Choose the 2-5 word
    payoff phrase - the part the eye should land on (e.g. "GIVE IT A LOOP").
 
@@ -153,6 +155,11 @@ suggested_angle as a hook candidate:
 - Ground every key_point in the given news item or the research brief. NEVER
   invent facts, numbers or quotes. If both are thin, plan fewer slides rather
   than padding.
+- Plan visual proof, not just topics. Across the body slides, deliberately vary
+  their purpose so the design system can use an editorial explainer, data
+  proof, process/mechanism, comparison, dark technical proof, and statement
+  pause when the facts support them. Never request a chart without source
+  values or repeat the same evidence format on consecutive slides.
 - hook_highlight must be a verbatim substring of hook_title.
 - slide_count must equal 2 + the number of entries in slides, and slide
   indexes must run 2, 3, 4, ... with no gaps or duplicates.
@@ -162,7 +169,7 @@ suggested_angle as a hook candidate:
 - Use only complete, correctly spelled, understandable words in every
   audience-facing field. Keep sourced names and technical terms exact, but
   never produce invented words, placeholder text, keyboard mash, corrupted
-  characters, or decorative pseudo-writing.
+  characters, or decorative strings that merely resemble language.
 - Apply rework feedback and recent feedback notes as described above.
 """
 
@@ -209,7 +216,7 @@ def _build_instruction(max_slides: int = MAX_SUPPORTED_SLIDES) -> str:
             "\n## Shared skill: cover-style.md (hook/title authority)\n\n"
             + safe_cover_style
         )
-    return instruction
+    return with_editorial_voice(instruction)
 
 
 async def _instruction_provider(ctx: ReadonlyContext) -> str:
