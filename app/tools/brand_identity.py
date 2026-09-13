@@ -86,10 +86,10 @@ def current(design: "CarouselDesign | None" = None) -> Optional[BrandIdentity]:
     identity = _current.get()
     if design is None or not (design.handle_text or design.logo_data_url):
         return identity
-    from app.design_branding import decode_logo
+    from app.design_branding import decode_logo, logo_with_background
     return BrandIdentity(
         handle=design.handle_text or (identity.handle if identity else ""),
-        favicon_png=decode_logo(design.logo_data_url) if design.logo_data_url else (identity.favicon_png if identity else b""),
+        favicon_png=logo_with_background(decode_logo(design.logo_data_url), design.logo_background) if design.logo_data_url else (identity.favicon_png if identity else b""),
         account_id=identity.account_id if identity else "",
     )
 

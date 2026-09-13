@@ -32,7 +32,7 @@ export function constrainLogoCrop(image: HTMLImageElement, crop: LogoCrop): Logo
 }
 
 /** One geometry and alpha mask for the crop dialog, previews and saved logo. */
-export function drawDesignLogo(canvas: HTMLCanvasElement, image: HTMLImageElement, crop: LogoCrop, side: number) {
+export function drawDesignLogo(canvas: HTMLCanvasElement, image: HTMLImageElement, crop: LogoCrop, side: number, background = "") {
   const context = canvas.getContext("2d")
   if (!context) throw new Error("Your browser could not prepare this image.")
   const { x, y, zoom } = constrainLogoCrop(image, crop)
@@ -44,6 +44,7 @@ export function drawDesignLogo(canvas: HTMLCanvasElement, image: HTMLImageElemen
   context.beginPath()
   context.arc(side / 2, side / 2, side / 2, 0, Math.PI * 2)
   context.clip()
+  if (background) { context.fillStyle = background; context.fillRect(0, 0, side, side) }
   context.drawImage(image, x * image.naturalWidth - edge / 2, y * image.naturalHeight - edge / 2, edge, edge, 0, 0, side, side)
   context.restore()
 }

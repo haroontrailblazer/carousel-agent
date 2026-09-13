@@ -6,7 +6,7 @@ import base64
 import binascii
 import io
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 MAX_LOGO_BYTES = 48 * 1024
 MAX_LOGO_SIDE = 512
@@ -33,3 +33,20 @@ def decode_logo(value: str) -> bytes:
         return payload
     except (binascii.Error, OSError, Image.DecompressionBombError) as exc:
         raise ValueError("That logo is not a valid image.") from exc
+
+
+def logo_with_background(payload: bytes, color: str) -> bytes:
+    """Composite a circle beneath the original pixels, preserving outer corners."""
+    if not color:
+        return payload
+    with Image.open(io.BytesIO(payload)) as source:
+        mark = source.convert("RGBA")
+    side = max(mark.size)
+    mask = Image.new("L", (side * 4, side * 4))
+    ImageDraw.Draw(mask).ellipse((0, 0, side * 4 - 1, side * 4 - 1), fill=255)
+    tile = Image.new("RGBA", (side, side), color)
+    tile.putalpha(mask.resize((side, side), Image.Resampling.LANCZOS))
+    tile.alpha_composite(mark, ((side - mark.width) // 2, (side - mark.height) // 2))
+    output = io.BytesIO()
+    tile.save(output, format="PNG")
+    return output.getvalue()

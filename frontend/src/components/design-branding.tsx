@@ -3,6 +3,7 @@ import { ImagePlus, Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { type CarouselDesign } from "@/lib/designs"
 import { loadDesignLogo } from "@/lib/design-logo"
 import { DesignLinks } from "./design-links"
+import { DesignLogo, LogoBackground } from "./design-logo"
 import { LogoCropDialog } from "./logo-crop-dialog"
 import "./design-branding.css"
 
@@ -60,7 +61,7 @@ export function DesignBranding({ design, onChange, onBusy }: {
     <h2>Your branding <span>For this design</span></h2>
     <div className="branding-logo" aria-busy={working}>
       <button ref={picker} className="branding-logo-picker" type="button" disabled={working} onClick={() => input.current?.click()} aria-label={design.logoDataUrl ? "Replace logo" : "Upload logo"}>
-        <span className="branding-logo-preview">{design.logoDataUrl ? <img src={design.logoDataUrl} alt="Logo for this design" /> : <img src="/illustrations/carousel-sculpture-160.webp" alt="" />}</span>
+        <span className="branding-logo-preview">{design.logoDataUrl ? <DesignLogo src={design.logoDataUrl} background={design.logoBackground} label="Logo for this design" /> : <img src="/illustrations/carousel-sculpture-160.webp" alt="" />}</span>
         <span className="branding-logo-copy"><strong>{working ? "Preparing logo…" : design.logoDataUrl ? "Replace logo" : "Upload your logo"}</strong><span>{design.logoDataUrl ? "Choose an image and adjust the crop" : "Upload, crop and preview your logo"}</span></span>
         <span className="branding-logo-action" aria-hidden="true">{working ? <Loader2 className="animate-spin" /> : design.logoDataUrl ? <RefreshCw /> : <ImagePlus />}</span>
       </button>
@@ -69,8 +70,9 @@ export function DesignBranding({ design, onChange, onBusy }: {
       </div>
       <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload design logo" className="sr-only" tabIndex={-1} onChange={pickLogo} disabled={working} />
     </div>
-    {cropSource && <LogoCropDialog image={cropSource} design={design} onClose={() => setCropSource(null)} restoreFocus={() => picker.current?.focus()} onApply={logoDataUrl => {
-      onChange(current => ({ ...current, logoDataUrl, logoVisible: true,
+    {design.logoDataUrl && <LogoBackground value={design.logoBackground ?? ""} onChange={logoBackground => onChange(current => ({ ...current, logoBackground }))} />}
+    {cropSource && <LogoCropDialog image={cropSource} design={design} onClose={() => setCropSource(null)} restoreFocus={() => picker.current?.focus()} onApply={(logoDataUrl, logoBackground) => {
+      onChange(current => ({ ...current, logoDataUrl, logoBackground, logoVisible: true,
         cover: { ...current.cover, logoVisible: true }, inside: { ...current.inside, logoVisible: true }, cta: { ...(current.cta ?? current.inside), logoVisible: true },
       }))
       setCropSource(null)

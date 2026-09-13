@@ -67,6 +67,7 @@ export type CarouselDesign = {
   name: string
   handleText?: string
   logoDataUrl?: string
+  logoBackground?: string
   substackUrl?: string
   youtubeUrl?: string
   maxSlides?: number
@@ -602,6 +603,7 @@ type PersistedCarouselDesign = {
   name: string
   handle_text?: string
   logo_data_url?: string
+  logo_background?: string
   substack_url?: string
   youtube_url?: string
   max_slides?: number
@@ -659,6 +661,7 @@ function fromPersistedDesign(value: PersistedCarouselDesign): CarouselDesign {
     name: value.name,
     handleText: value.handle_text ?? "",
     logoDataUrl: value.logo_data_url ?? "",
+    logoBackground: value.logo_background ?? "",
     substackUrl: value.substack_url ?? "",
     youtubeUrl: value.youtube_url ?? "",
     maxSlides: value.max_slides ?? 10,
@@ -804,6 +807,7 @@ export function designPayload(design: CarouselDesign) {
     name: design.name,
     handle_text: design.handleText ?? "",
     logo_data_url: design.logoDataUrl ?? "",
+    logo_background: design.logoBackground ?? "",
     substack_url: design.substackUrl ?? "",
     youtube_url: design.youtubeUrl ?? "",
     max_slides: design.maxSlides ?? 10,

@@ -34,7 +34,7 @@ def test_branding_survives_api_save_and_load_for_its_owner():
     app.include_router(router, prefix="/api")
     app.dependency_overrides[current_identity] = lambda: Identity(email="designer@example.com", subject="designer@example.com")
     client = TestClient(app)
-    payload = branded_design().model_dump(mode="json")
+    payload = branded_design(logo_background="#123456").model_dump(mode="json")
     with patch("web_api.routes_designs.db.replace_carousel_designs", AsyncMock()) as saved:
         response = client.put("/api/designs", json={"items": [payload]})
     assert response.status_code == 200
@@ -53,6 +53,41 @@ def test_invalid_handle_is_rejected(value):
 def test_invalid_logo_is_rejected(value):
     with pytest.raises(ValidationError):
         CarouselDesign(logo_data_url=value)
+
+
+@pytest.mark.parametrize("color", ["red", "#fff", "#12345678", "url(example)"])
+def test_logo_background_requires_solid_hex_color(color):
+    with pytest.raises(ValidationError):
+        CarouselDesign(logo_background=color)
+
+
+@pytest.mark.parametrize("surface", ["cover", "inside", "cta"])
+@pytest.mark.parametrize("color", ["", "#123456"])
+def test_transparent_logo_background_reaches_every_surface(surface, color, tmp_path):
+    mark = Image.new("RGBA", (128, 128))
+    ImageDraw.Draw(mark).rectangle((48, 48, 80, 80), fill=(245, 0, 210, 255))
+    buffer = io.BytesIO()
+    mark.save(buffer, format="PNG")
+    layout = {"background": "#000000", "logo_visible": True,
+              "logo_transform": {"x": 8, "y": 88, "width": 6, "height": 5}}
+    design = CarouselDesign(
+        logo_data_url="data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(),
+        logo_background=color, handle_visible=False, cover=layout, inside=layout, cta=layout,
+    )
+    original = design.logo_data_url
+    if surface == "cover":
+        with Image.open(media_tools._build_overlay_png("Your next idea", "idea", tmp_path, design)) as image:
+            result = image.convert("RGB")
+    else:
+        renderer = brand_layout.apply_cta_brand_rail if surface == "cta" else brand_layout.apply_body_brand_rail
+        result = renderer(Image.new("RGB", (1080, 1350)), "", design=design)
+    assert result.getpixel((118, 1203)) == ((18, 52, 86) if color else (0, 0, 0))
+    assert result.getpixel((118, 1221)) == (245, 0, 210)
+    assert result.getpixel((86, 1189)) == (0, 0, 0)
+    assert design.logo_data_url == original
+    # Removing the background restores the original alpha, without re-uploading.
+    cleared = design.model_copy(update={"logo_background": ""})
+    assert brand_identity.require_favicon(128, cleared).getpixel((64, 20))[3] == 0
 
 
 def test_design_override_does_not_change_account_or_leak_to_another_design():

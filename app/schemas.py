@@ -92,6 +92,7 @@ class CarouselDesign(BaseModel):
     name: str = Field("Editorial Signal", min_length=1, max_length=120)
     handle_text: str = Field("", max_length=31)
     logo_data_url: str = Field("", max_length=65_558)
+    logo_background: str = Field("", pattern=r"^(#[0-9a-fA-F]{6})?$")
     substack_url: str = Field("", max_length=2048)
     youtube_url: str = Field("", max_length=2048)
     max_slides: int = Field(MAX_SUPPORTED_SLIDES, ge=MIN_CAROUSEL_SLIDES, le=MAX_SUPPORTED_SLIDES, strict=True)
