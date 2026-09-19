@@ -29,10 +29,67 @@ cover and CTA are unnumbered; body numbering starts at 01.
 
 ## Title rules
 
-- Prefer five to seven words, maximum nine, with a clear consequence or idea.
+The cover is the only slide most people will ever see. It has one job: make a
+stranger stop and understand, in a glance, what actually happened. It earns
+that by being specific, not by being loud and not by hiding the answer.
+
+### Length is a readability rule, not a style preference
+
+- Three to seven words. 7 words is the hard ceiling.
+- Aim for 30 characters or fewer. A hook at or under 30 characters renders at
+  the cover's full title size on two thick lines. Past that the renderer
+  shrinks the type to make it fit, and a shrunk hook is an unread hook.
+- Characters matter more than words here. A wide seven-word hook can render
+  smaller than a narrow eight-word one, so count the letters, not just the
+  spaces.
+
+### Say the real thing
+
+- Name the subject. A company, product, model, person or place the reader can
+  recognise. Never "the new update", "this AI tool", "a major breakthrough".
+- State what actually changed, in the title itself. Prefer the strongest
+  sourced number, price, speed or size the facts give you.
+- Put the payoff on the cover. Do not hold it back for slide two. The reader
+  swipes because the cover made them want the detail, not because it hid it.
+- One idea. If the hook needs "and", it is two hooks; pick the better one.
+
+### Sound like a person
+
+- Read it aloud. If you would not say it to a friend, rewrite it.
+- Everyday words, plain and direct. Contractions are fine.
+- No hype adjectives, no mystery hooks, no rhetorical questions, no commands,
+  no unsupported claims, no emoji, no hashtags, no em dashes.
+- Never these shapes: A GAME CHANGER, THE FUTURE IS HERE, HERE IS WHY,
+  YOU WON'T BELIEVE, EVERYTHING CHANGES NOW, THE TRUTH ABOUT X,
+  WHAT NOBODY IS TELLING YOU.
+
+### Write three, ship one
+
+Draft three candidate hooks before choosing. Keep the most concrete one: the
+one carrying a real name and a real number. If two are equally concrete, keep
+the shorter. Do not ship the first line you thought of.
+
+### Weak to strong
+
+    Vague:  A MAJOR AI UPDATE ARRIVES        ->  no subject, no change
+    Strong: OPENAI CUT GPT-5 PRICES 80%
+
+    Teasing: HERE IS WHY DEVELOPERS ARE WORRIED  ->  withholds the point
+    Strong:  AI NOW WRITES 30% OF THIS CODE
+
+    Abstract: DEMOCRATIZING ACCESS TO AI MODELS  ->  jargon, no picture
+    Strong:   THIS MODEL RUNS ON YOUR LAPTOP
+
+    Hyped:  AN ABSOLUTELY INSANE NEW BREAKTHROUGH  ->  says nothing
+    Strong: GOOGLE AI READS A BOOK IN 30s
+
+### Highlight
+
 - The highlight must be a verbatim substring of the title.
-- No emoji, hashtags or em dashes. Keep the title readable at feed size.
-- Do not alter the approved title unless the current review requests it.
+- Choose the two to four word payoff: the number, the name, or the
+  consequence. Highlight the part that makes the reader stop, not a
+  connecting phrase.
+- Do not alter an approved title unless the current review requests it.
 
 ## Identity and visual treatment
 

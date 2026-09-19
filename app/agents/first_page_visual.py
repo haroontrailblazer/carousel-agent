@@ -28,6 +28,11 @@ from google.adk.tools import FunctionTool, ToolContext
 from google.genai import types
 
 from app.config import agent_instructions, settings
+from app.design_limits import (
+    HOOK_MAX_CHARS,
+    HOOK_MAX_WORDS,
+    HOOK_MIN_READABLE_TITLE_SIZE,
+)
 from app.llm import resolve_role_model
 from app.schemas import CarouselDesign, CarouselPlan, CoverSpec, NewsItem
 from app.state import (
@@ -307,6 +312,53 @@ async def retrim_clip(
     }
 
 
+def hook_warnings(
+    title: str,
+    highlight: str,
+    design: CarouselDesign | None = None,
+) -> list[str]:
+    """Report everything wrong with a cover hook, without failing the run.
+
+    Three separate things can make a first page not work, and only the first
+    is visible in the text itself:
+
+    1. the highlight is not really in the title, so nothing turns green;
+    2. the hook runs past the word budget;
+    3. the hook is short in words but wide on screen, so the renderer shrinks
+       it. A seven-word hook can still fit at full size or land under 100 px
+       depending purely on its letters, which is why the fitted size is
+       measured here rather than inferred from the word count.
+
+    These are warnings, never errors. A weak hook is worth telling the agent
+    about; it is not worth losing the cover over.
+    """
+    clean = " ".join(str(title or "").split())
+    if not clean:
+        return []
+    found: list[str] = []
+    hl = " ".join(str(highlight or "").split())
+    if hl and hl.upper() not in clean.upper():
+        found.append(
+            f"highlight {hl!r} is not a verbatim substring of the title; it "
+            "was dropped (title rendered all-white)"
+        )
+    words = len(clean.split())
+    if words > HOOK_MAX_WORDS:
+        found.append(
+            f"hook is {words} words; the budget is {HOOK_MAX_WORDS} words "
+            "(skills/cover-style.md)"
+        )
+    else:
+        fitted = media_tools.fitted_title_size(clean, design)
+        if fitted < HOOK_MIN_READABLE_TITLE_SIZE:
+            found.append(
+                f"hook renders at only {fitted}px, under the {HOOK_MIN_READABLE_TITLE_SIZE}px "
+                f"readable floor: {len(clean)} characters is too wide. Aim for "
+                f"{HOOK_MAX_CHARS} characters or fewer (skills/cover-style.md)"
+            )
+    return found
+
+
 async def build_cover(
     media_path: str,
     is_video: bool,
@@ -361,14 +413,9 @@ async def build_cover(
         require_no_em_dash([final_title, final_highlight], "cover copy")
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
+    warnings.extend(hook_warnings(final_title, final_highlight, design))
     if final_highlight and final_highlight.upper() not in final_title.upper():
-        warnings.append(
-            f"highlight {final_highlight!r} is not a verbatim substring of the "
-            "title; it was dropped (title rendered all-white)"
-        )
         final_highlight = ""
-    if len(final_title.split()) > 9:
-        warnings.append("title exceeds the ~9 word hook budget (skills/cover-style.md)")
 
     workdir = _run_workdir(tool_context)
     try:
@@ -466,7 +513,10 @@ other slide, never write body copy or captions, and never AI-generate media.
 3. The title comes from the plan's hook_title and the highlighted phrase from
    hook_highlight. Only override them when rework feedback explicitly asks for
    a different title. The highlight must stay a VERBATIM substring of the
-   title; keep the title to ~9 words or fewer.
+   title; keep the title to 7 words or fewer, and aim for 30 characters or
+   fewer so it renders at full size. build_cover returns a warnings list -
+   read it; a hook flagged as too wide has been shrunk and will not read in
+   a feed.
 4. You MUST finish by calling build_cover successfully - that is what saves
    the cover artifacts and records the CoverSpec for the rest of the pipeline.
 

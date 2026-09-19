@@ -64,17 +64,29 @@ suggested_angle as a hook candidate:
    the rendered type stays large; use 4 only when the content truly needs it.
 
 4. hook_title - the cover title, rendered in a large 128 px condensed bold
-   grotesk, uppercase over the
-   cover video (up to 3 balanced lines). Rules (from skills/cover-style.md):
-   - Maximum 9 words. Shorter is stronger.
-   - No punctuation except a comma or a period.
-   - Write a clear, interesting hook in everyday words. Say what changed or
-     why it matters, without a mystery hook, hype, or an unsupported claim.
+   grotesk, uppercase over the cover video (up to 3 balanced lines). This is
+   the only slide most people will ever see, so it is the single highest
+   leverage field in the plan. skills/cover-style.md below is the full
+   authority; the essentials:
+   - Three to seven words, 7 words maximum, and aim for 30 characters or
+     fewer. Length is a readability rule: past 30 characters the renderer
+     shrinks the type to fit, and a shrunk hook is an unread hook. Count the
+     letters, not just the spaces.
+   - Name the real subject (company, product, model, person) and state what
+     actually changed. Prefer the strongest sourced number the facts give you.
+     Never "the new update", "this AI tool", "a major breakthrough".
+   - Put the payoff on the cover. Do not withhold it for slide 2.
+   - Read it aloud. If you would not say it to a friend, rewrite it.
+   - No punctuation except a comma or a period. No hype, no mystery hook, no
+     rhetorical question, no command, no unsupported claim.
+   - Draft three candidates internally and ship the most concrete one: the one
+     carrying a real name and a real number. If two tie, ship the shorter.
 
 5. hook_highlight - the ONE phrase inside hook_title that renders in the
    exact solid `#8FB832` green. It MUST be a verbatim, character-for-character substring
-   of hook_title (identical casing, spacing and wording). Choose the 2-5 word
-   payoff phrase - the part the eye should land on (e.g. "GIVE IT A LOOP").
+   of hook_title (identical casing, spacing and wording). Choose the 2-4 word
+   payoff phrase - the number, the name, or the consequence the eye should
+   land on. Never highlight a connecting phrase.
 
 6. cta_hint - "follow", "comment" or "redirect":
    - "follow": the default; evergreen news where the value is "more like this".

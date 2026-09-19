@@ -99,6 +99,8 @@ _TEXT_PRIMARY = (232, 228, 214, 255)  # #E8E4D6
 _ACCENT_GREEN = (*ACCENT_GREEN, 255)  # #8FB832
 _TITLE_MAX_LINES = HEADLINE_MAX_LINES
 _COVER_TITLE_FONT_SIZE = 128
+# The renderer will not shrink a hook past this; below it nothing reads.
+_TITLE_MIN_FONT_SIZE = 44
 _TITLE_MAX_WIDTH_FRAC = 0.78
 _TITLE_CENTER_Y_FRAC = 0.79  # matches the template's own title-block center
 
@@ -1141,6 +1143,89 @@ def _wrap_title(
     return fallback[1]
 
 
+@dataclass(frozen=True)
+class _TitleFit:
+    """How a cover hook ends up laid out inside the design's saved title box."""
+
+    size: int
+    lines: list[str]
+    font: Any
+    line_h: int
+    gap: int
+    total_h: int
+    max_w: float
+    fits: bool
+
+
+def _fit_title(text: str, slide: Any | None) -> _TitleFit:
+    """Find the largest size at which ``text`` fits the saved title box.
+
+    The cover starts at the design's ``title_size`` and steps down until the
+    hook fits its box in at most ``_TITLE_MAX_LINES`` lines. Every step down is
+    a readability cost the reader pays, which is why the word budget in
+    :mod:`app.design_limits` exists and why :func:`fitted_title_size` exposes
+    the result: an over-long hook should be reported to the agent that wrote
+    it, not silently shrunk.
+
+    A hook too long even at :data:`_TITLE_MIN_FONT_SIZE` is returned with
+    ``fits=False`` at that floor rather than raising. Losing the whole cover is
+    a worse outcome than a cramped one, and the caller has the flag.
+    """
+    width, height = settings.slide_width, settings.slide_height
+    safe_margin = slide.safe_margin if slide else round(width * (1 - _TITLE_MAX_WIDTH_FRAC) / 2)
+    title_transform = slide.title_transform if slide else None
+    max_w = (
+        max(1, round(width * title_transform.width / 100))
+        if title_transform is not None
+        else width - safe_margin * 2
+    )
+    letter_spacing = slide.letter_spacing if slide else 0
+    word_spacing = slide.word_spacing if slide else 0
+    title_size = slide.title_size if slide else _COVER_TITLE_FONT_SIZE
+    max_h = round(height * title_transform.height / 100) if title_transform else height
+    # Fit the real headline into its saved lower box, above the branding.
+    # A long headline must not spill down onto the logo or handle.
+    attempt: _TitleFit | None = None
+    for fitted_size in range(title_size, _TITLE_MIN_FONT_SIZE - 1, -1):
+        font = _load_title_font(fitted_size, slide.font_family if slide else "condensed")
+        lines = _wrap_title(text, font, max_w, letter_spacing, word_spacing)
+        ascent, descent = font.getmetrics()
+        line_h = ascent + descent
+        gap = int(line_h * 0.10)
+        if slide is not None:
+            line_h = round(fitted_size * slide.line_height / 100)
+            gap = 0
+        total_h = len(lines) * line_h + (len(lines) - 1) * gap
+        fits = len(lines) <= _TITLE_MAX_LINES and total_h <= max_h and all(
+            _line_width(font, line, letter_spacing, word_spacing) <= max_w for line in lines
+        )
+        attempt = _TitleFit(fitted_size, lines, font, line_h, gap, total_h, max_w, fits)
+        if fits:
+            return attempt
+    # Nothing fit. Render at the floor, trimmed to the line budget, so the
+    # cover still ships; `fits=False` tells the caller the hook was too long.
+    assert attempt is not None  # title_size >= _TITLE_MIN_FONT_SIZE by schema
+    clipped = attempt.lines[:_TITLE_MAX_LINES]
+    total_h = len(clipped) * attempt.line_h + (len(clipped) - 1) * attempt.gap
+    return _TitleFit(
+        attempt.size, clipped, attempt.font, attempt.line_h, attempt.gap,
+        total_h, attempt.max_w, False,
+    )
+
+
+def fitted_title_size(title: str, design: CarouselDesign | None = None) -> int:
+    """The font size the cover renderer would actually use for ``title``.
+
+    Lets the agent layer see the readability cost of a hook before the cover
+    is composed, without rendering anything.
+    """
+    text = re.sub(r"\s+", " ", str(title or "")).strip().upper()
+    slide = design.cover if design is not None else None
+    if not text:
+        return slide.title_size if slide else _COVER_TITLE_FONT_SIZE
+    return _fit_title(text, slide).size
+
+
 def _highlight_color() -> tuple[int, int, int, int]:
     """Return the one fixed brand green for every highlight character."""
     return _ACCENT_GREEN
@@ -1169,35 +1254,13 @@ def _render_title_block(
     hl_end = hl_start + len(hl) if hl_start >= 0 else -1
 
     slide = design.cover if design is not None else None
-    safe_margin = slide.safe_margin if slide else round(width * (1 - _TITLE_MAX_WIDTH_FRAC) / 2)
-    title_transform = slide.title_transform if slide else None
-    max_w = (
-        max(1, round(width * title_transform.width / 100))
-        if title_transform is not None
-        else width - safe_margin * 2
-    )
+    fit = _fit_title(text, slide)
+    lines, font = fit.lines, fit.font
+    line_h, gap, max_w, total_h = fit.line_h, fit.gap, fit.max_w, fit.total_h
     letter_spacing = slide.letter_spacing if slide else 0
     word_spacing = slide.word_spacing if slide else 0
-    title_size = slide.title_size if slide else _COVER_TITLE_FONT_SIZE
-    max_h = round(height * title_transform.height / 100) if title_transform else height
-    # Fit the real headline into its saved lower box, above the branding.
-    # A long headline must not spill down onto the logo or handle.
-    for fitted_size in range(title_size, 43, -1):
-        font = _load_title_font(fitted_size, slide.font_family if slide else "condensed")
-        lines = _wrap_title(text, font, max_w, letter_spacing, word_spacing)
-        ascent, descent = font.getmetrics()
-        line_h = ascent + descent
-        gap = int(line_h * 0.10)
-        if slide is not None:
-            line_h = round(fitted_size * slide.line_height / 100)
-            gap = 0
-        total_h = len(lines) * line_h + (len(lines) - 1) * gap
-        if len(lines) <= _TITLE_MAX_LINES and total_h <= max_h and all(
-            _line_width(font, line, letter_spacing, word_spacing) <= max_w for line in lines
-        ):
-            break
-    else:
-        raise ValueError("cover title does not fit in the saved title area; shorten the headline")
+    safe_margin = slide.safe_margin if slide else round(width * (1 - _TITLE_MAX_WIDTH_FRAC) / 2)
+    title_transform = slide.title_transform if slide else None
     draw = ImageDraw.Draw(canvas)
     vertical = slide.title_position.split("-", 1)[0] if slide else "bottom"
     if title_transform is not None:

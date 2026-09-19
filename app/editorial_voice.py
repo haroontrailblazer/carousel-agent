@@ -27,9 +27,14 @@ a research abstract, a sales pitch, or a list of AI-generated slogans.
 - Prefer prose for a single news story. Use points when the user requests them
   or a real comparison/list is clearer, but keep the slides connected. Use
   transitions such as but, so, or now only when the relationship is supported.
-- Cover and slide headlines should make a clear, specific point in simple
-  words. Avoid mystery hooks, exaggerated promises, forced drama, and generic
-  headings such as A GAME CHANGER or THE FUTURE IS HERE.
+- Cover and slide headlines earn attention by being specific, not by being
+  loud. Name the real subject and state the concrete thing that changed: who
+  did what, and the number, price or capability that actually moved. Put the
+  payoff in the headline instead of teasing it, and read it aloud before you
+  keep it. Still avoid mystery hooks, exaggerated promises, forced drama, and
+  generic headings such as A GAME CHANGER or THE FUTURE IS HERE. The cover
+  headline is the shortest text in the whole carousel and the only one most
+  people read, so it gets the most rewriting, not the least.
 - Captions should sound like the same person continuing the story, not
   repeating every slide. End with one natural invitation. CTA copy should ask
   one easy, relevant question or offer a clear next step. Do not fake urgency,
