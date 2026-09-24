@@ -30,7 +30,7 @@ other slide, never write body copy or captions, and never AI-generate media.
 4. You MUST finish by calling build_cover successfully - that is what saves
    the cover artifacts and records the CoverSpec for the rest of the pipeline.
 
-## Workflow - the sourcing ladder (NEVER stop before rung 5)
+## Workflow - the sourcing ladder (NEVER stop before rung 6)
 
 1. Call find_source_clip to pick the best sourced media (video preferred).
    It scans the news media_urls, the source page, every page LINKED in the
@@ -54,23 +54,39 @@ other slide, never write body copy or captions, and never AI-generate media.
    ranked image_candidates list from find_source_clip. Start with image_url,
    which is the highest-scoring candidate, then try the next candidate when
    download_image rejects a low-resolution, extreme-aspect, unreadable, or
-   unavailable asset. Try at most THREE ranked images. Prefer the newest
-   source-grounded launch/demo/keynote/news visual that directly depicts the
-   topic; reject generic stock art, logos, icons and merely available images.
-   Pass the original highest-resolution media into build_cover. Never shrink,
-   letterbox, pre-blur, or frame it yourself; build_cover evaluates multiple
-   subject signals and applies the edge-to-edge focal crop consistently.
-4. Only if there is NO image_url anywhere and downloads all failed: call
+   unavailable asset. Prefer the newest source-grounded launch/demo/keynote/
+   news visual that directly depicts the topic; reject generic stock art,
+   logos, icons and merely available images. Never shrink, letterbox,
+   pre-blur, or frame media yourself.
+4. LOOK before you use it. Call inspect_cover_media on every downloaded
+   candidate (for a video, pass source_path when download_and_trim returned
+   one, otherwise clip_path). URLs and page text cannot tell you what a
+   picture shows; this can. A playable video is not automatically a good
+   cover: a screen recording of a PDF, a web page, a slide deck or a news
+   anchor talking makes a weak cover even when it is "the official video".
+   - verdict "use": keep it. For a video whose best_start_s is not 0, call
+     retrim_clip on source_path with start_s=best_start_s so the chosen
+     moment opens the cover and becomes its poster.
+   - verdict "reject": move to the next candidate (the next video, then the
+     ranked images) and inspect that one. A strong still beats a weak video.
+   - You have at most 4 inspections per run. When they run out, or every
+     candidate was rejected, use the candidate with the highest score.
+   - If inspect_cover_media fails (ok false), continue with the best
+     candidate you have; the check is a help, never a blocker.
+5. Only if there is NO image_url anywhere and downloads all failed: call
    create_placeholder_background and use its path as the image.
-5. ALWAYS call build_cover with the local media path, is_video set
-   accordingly, and source_media_url set to the original URL for provenance
-   (empty for the placeholder). Leave title and highlight empty so the plan's
-   hook is used. The cover MUST be created on every run - a text-only cover
-   on the placeholder background is the worst acceptable outcome, no cover at
-   all is never acceptable.
-6. Finish with a one-paragraph summary: which media you used (URL and origin
+6. ALWAYS call build_cover with the local media path, is_video set
+   accordingly, source_media_url set to the original URL for provenance
+   (empty for the placeholder), and focus_x / focus_y / focus_w / focus_h
+   copied from the inspection of THAT media (all 0 when not inspected).
+   Leave title and highlight empty so the plan's hook is used. The cover
+   MUST be created on every run - a text-only cover on the placeholder
+   background is the worst acceptable outcome, no cover at all is never
+   acceptable.
+7. Finish with a one-paragraph summary: which media you used (URL and origin
    - media_urls / source_page / body_page / web_search / placeholder),
-   sourced clip vs image vs placeholder, final duration, and the artifact
+   sourced clip vs image vs placeholder, the inspection verdict and score
+   (and what you rejected and why), final duration, and the artifact
    filenames. If you used the placeholder, say so explicitly so the reviewer
    knows no sourced media existed.
 
@@ -93,7 +109,8 @@ instruction and rebuild the cover accordingly:
   highlight overrides (highlight must remain a verbatim substring).
 - "bad image / wrong media" - pick the next ranked image_candidates entry or
   rerun find_source_clip with a sharper topic + launch/demo/current query;
-  never reuse the same merely available image, then rebuild.
+  never reuse the same merely available image. Inspect the new candidate with
+  inspect_cover_media, then rebuild.
 - A video being playable is not proof that it is relevant. Reject search hits
   whose title has no distinctive person, company, product, or event term from
   the story (for example, unrelated trending anime for a hardware story).

@@ -46,7 +46,7 @@ from app.state import (
     set_model,
 )
 from app.text_rules import require_no_em_dash
-from app.tools import media_tools
+from app.tools import cover_vision, media_tools
 
 # Stable artifact filenames - the artifact service versions them per save, so
 # rework rounds simply create a new version under the same name.
@@ -54,6 +54,10 @@ COVER_VIDEO_ARTIFACT = "cover.mp4"
 COVER_POSTER_ARTIFACT = "cover-poster.png"
 
 _RETRIM_FFMPEG_TIMEOUT_S = 300
+# Each inspection is one small billed vision call; this caps a run's spend
+# even if the agent keeps rejecting candidates.
+_MAX_INSPECTIONS = 4
+_K_INSPECTIONS = "temp:cover_inspections"
 _MIN_COVER_S = float(settings.cover_clip_min_s)
 _MAX_COVER_S = float(settings.cover_clip_max_s)
 
@@ -362,12 +366,82 @@ def hook_warnings(
     return found
 
 
+async def inspect_cover_media(
+    media_path: str, is_video: bool, *, tool_context: ToolContext
+) -> dict:
+    """LOOK at a downloaded candidate before using it as the cover.
+
+    Lays out numbered frames (six across a video, or the still itself) and
+    has a vision model judge them as a cover: does it show the story's real
+    subject, or is it a document, slide, web page, screen recording, talking
+    head, logo or stock shot? Returns the best moment and where the subject
+    sits so build_cover can zoom to it.
+
+    For a video, pass the untrimmed source_path from download_and_trim when
+    there is one (it holds more footage to choose from), otherwise clip_path.
+
+    Args:
+        media_path: Local video or image path.
+        is_video: True for a video file.
+
+    Returns:
+        ok (bool), verdict ('use' | 'reject'), score (0-10), problems (list),
+        reason, best_start_s (video: where to retrim so the chosen frame opens
+        the cover and becomes its poster), focus_x / focus_y / focus_w /
+        focus_h (subject box as 0-1 fractions, all 0 when no crop helps; pass
+        them to build_cover), inspections_left. On failure ok is false and the
+        cover should be built the old way from the best candidate.
+    """
+    used = int(tool_context.state.get(_K_INSPECTIONS) or 0)
+    if used >= _MAX_INSPECTIONS:
+        return {
+            "ok": False,
+            "error": "inspection budget used up; build the cover from the best-scoring candidate so far",
+            "inspections_left": 0,
+        }
+    tool_context.state[_K_INSPECTIONS] = used + 1
+
+    news = get_model(tool_context.state, K_NEWS_ITEM, NewsItem)
+    plan = get_model(tool_context.state, K_PLAN, CarouselPlan)
+    story = ""
+    if news is not None:
+        story = f"{news.title}. {news.summary}"
+    hook = plan.hook_title if plan else ""
+    workdir = _run_workdir(tool_context)
+    try:
+        sheet = await asyncio.to_thread(cover_vision.contact_sheet, media_path, is_video, workdir)
+        verdict = await asyncio.to_thread(cover_vision.judge_cover_media, sheet, story, hook)
+    except (RuntimeError, OSError) as exc:
+        return {"ok": False, "error": str(exc), "inspections_left": _MAX_INSPECTIONS - used - 1}
+
+    focus = verdict["focus"] or {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}
+    best_start = sheet.timestamps[verdict["best_frame"] - 1] if is_video else 0.0
+    return {
+        "ok": True,
+        "verdict": verdict["verdict"],
+        "score": verdict["score"],
+        "problems": verdict["problems"],
+        "reason": verdict["reason"],
+        "best_start_s": round(best_start, 2),
+        "focus_x": round(focus["x"], 3),
+        "focus_y": round(focus["y"], 3),
+        "focus_w": round(focus["w"], 3),
+        "focus_h": round(focus["h"], 3),
+        "inspections_left": _MAX_INSPECTIONS - used - 1,
+        "error": "",
+    }
+
+
 async def build_cover(
     media_path: str,
     is_video: bool,
     source_media_url: str = "",
     title: str = "",
     highlight: str = "",
+    focus_x: float = 0.0,
+    focus_y: float = 0.0,
+    focus_w: float = 0.0,
+    focus_h: float = 0.0,
     *,
     tool_context: ToolContext,
 ) -> dict:
@@ -392,6 +466,10 @@ async def build_cover(
         highlight: Optional highlight-phrase override; must be a verbatim
             substring of the title or it is dropped. Leave empty to use the
             plan's hook_highlight.
+        focus_x, focus_y, focus_w, focus_h: The subject box returned by
+            inspect_cover_media for this media. When set, the cover zooms to
+            that subject and places it above the title. Leave all 0 for the
+            normal subject-aware crop.
 
     Returns:
         On success: ok (true), video_artifact, poster_artifact, duration_s,
@@ -421,6 +499,14 @@ async def build_cover(
         final_highlight = ""
 
     workdir = _run_workdir(tool_context)
+    if focus_w > 0 and focus_h > 0:
+        focus = {"x": focus_x, "y": focus_y, "w": focus_w, "h": focus_h}
+        try:
+            media_path = await asyncio.to_thread(
+                cover_vision.apply_focus, media_path, is_video, focus, workdir
+            )
+        except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+            warnings.append(f"focus crop skipped, used the normal crop: {exc}")
     try:
         result = await asyncio.to_thread(
             media_tools.compose_cover,
@@ -522,7 +608,7 @@ other slide, never write body copy or captions, and never AI-generate media.
 4. You MUST finish by calling build_cover successfully - that is what saves
    the cover artifacts and records the CoverSpec for the rest of the pipeline.
 
-## Workflow - the sourcing ladder (NEVER stop before rung 5)
+## Workflow - the sourcing ladder (NEVER stop before rung 6)
 
 1. Call find_source_clip to pick the best sourced media (video preferred).
    It scans the news media_urls, the source page, every page LINKED in the
@@ -546,23 +632,39 @@ other slide, never write body copy or captions, and never AI-generate media.
    ranked image_candidates list from find_source_clip. Start with image_url,
    which is the highest-scoring candidate, then try the next candidate when
    download_image rejects a low-resolution, extreme-aspect, unreadable, or
-   unavailable asset. Try at most THREE ranked images. Prefer the newest
-   source-grounded launch/demo/keynote/news visual that directly depicts the
-   topic; reject generic stock art, logos, icons and merely available images.
-   Pass the original highest-resolution media into build_cover. Never shrink,
-   letterbox, pre-blur, or frame it yourself; build_cover evaluates multiple
-   subject signals and applies the edge-to-edge focal crop consistently.
-4. Only if there is NO image_url anywhere and downloads all failed: call
+   unavailable asset. Prefer the newest source-grounded launch/demo/keynote/
+   news visual that directly depicts the topic; reject generic stock art,
+   logos, icons and merely available images. Never shrink, letterbox,
+   pre-blur, or frame media yourself.
+4. LOOK before you use it. Call inspect_cover_media on every downloaded
+   candidate (for a video, pass source_path when download_and_trim returned
+   one, otherwise clip_path). URLs and page text cannot tell you what a
+   picture shows; this can. A playable video is not automatically a good
+   cover: a screen recording of a PDF, a web page, a slide deck or a news
+   anchor talking makes a weak cover even when it is "the official video".
+   - verdict "use": keep it. For a video whose best_start_s is not 0, call
+     retrim_clip on source_path with start_s=best_start_s so the chosen
+     moment opens the cover and becomes its poster.
+   - verdict "reject": move to the next candidate (the next video, then the
+     ranked images) and inspect that one. A strong still beats a weak video.
+   - You have at most 4 inspections per run. When they run out, or every
+     candidate was rejected, use the candidate with the highest score.
+   - If inspect_cover_media fails (ok false), continue with the best
+     candidate you have; the check is a help, never a blocker.
+5. Only if there is NO image_url anywhere and downloads all failed: call
    create_placeholder_background and use its path as the image.
-5. ALWAYS call build_cover with the local media path, is_video set
-   accordingly, and source_media_url set to the original URL for provenance
-   (empty for the placeholder). Leave title and highlight empty so the plan's
-   hook is used. The cover MUST be created on every run - a text-only cover
-   on the placeholder background is the worst acceptable outcome, no cover at
-   all is never acceptable.
-6. Finish with a one-paragraph summary: which media you used (URL and origin
+6. ALWAYS call build_cover with the local media path, is_video set
+   accordingly, source_media_url set to the original URL for provenance
+   (empty for the placeholder), and focus_x / focus_y / focus_w / focus_h
+   copied from the inspection of THAT media (all 0 when not inspected).
+   Leave title and highlight empty so the plan's hook is used. The cover
+   MUST be created on every run - a text-only cover on the placeholder
+   background is the worst acceptable outcome, no cover at all is never
+   acceptable.
+7. Finish with a one-paragraph summary: which media you used (URL and origin
    - media_urls / source_page / body_page / web_search / placeholder),
-   sourced clip vs image vs placeholder, final duration, and the artifact
+   sourced clip vs image vs placeholder, the inspection verdict and score
+   (and what you rejected and why), final duration, and the artifact
    filenames. If you used the placeholder, say so explicitly so the reviewer
    knows no sourced media existed.
 
@@ -585,7 +687,8 @@ instruction and rebuild the cover accordingly:
   highlight overrides (highlight must remain a verbatim substring).
 - "bad image / wrong media" - pick the next ranked image_candidates entry or
   rerun find_source_clip with a sharper topic + launch/demo/current query;
-  never reuse the same merely available image, then rebuild.
+  never reuse the same merely available image. Inspect the new candidate with
+  inspect_cover_media, then rebuild.
 - A video being playable is not proof that it is relevant. Reject search hits
   whose title has no distinctive person, company, product, or event term from
   the story (for example, unrelated trending anime for a hardware story).
@@ -629,6 +732,7 @@ def build_first_page_visual_agent() -> LlmAgent:
             FunctionTool(download_image),
             FunctionTool(create_placeholder_background),
             FunctionTool(retrim_clip),
+            FunctionTool(inspect_cover_media),
             FunctionTool(build_cover),
         ],
         # Orchestrator-driven pipeline node: never LLM-transfer elsewhere.
