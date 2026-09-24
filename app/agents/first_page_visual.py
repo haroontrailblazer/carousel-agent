@@ -31,7 +31,7 @@ from app.config import agent_instructions, settings
 from app.design_limits import (
     HOOK_MAX_CHARS,
     HOOK_MAX_WORDS,
-    HOOK_MIN_READABLE_TITLE_SIZE,
+    hook_min_readable_size,
 )
 from app.llm import resolve_role_model
 from app.schemas import CarouselDesign, CarouselPlan, CoverSpec, NewsItem
@@ -350,9 +350,12 @@ def hook_warnings(
         )
     else:
         fitted = media_tools.fitted_title_size(clean, design)
-        if fitted < HOOK_MIN_READABLE_TITLE_SIZE:
+        floor = hook_min_readable_size(
+            design.cover.title_size if design is not None else media_tools.COVER_TITLE_FONT_SIZE
+        )
+        if fitted < floor:
             found.append(
-                f"hook renders at only {fitted}px, under the {HOOK_MIN_READABLE_TITLE_SIZE}px "
+                f"hook renders at only {fitted}px, under the {floor}px "
                 f"readable floor: {len(clean)} characters is too wide. Aim for "
                 f"{HOOK_MAX_CHARS} characters or fewer (skills/cover-style.md)"
             )
@@ -513,10 +516,9 @@ other slide, never write body copy or captions, and never AI-generate media.
 3. The title comes from the plan's hook_title and the highlighted phrase from
    hook_highlight. Only override them when rework feedback explicitly asks for
    a different title. The highlight must stay a VERBATIM substring of the
-   title; keep the title to 7 words or fewer, and aim for 30 characters or
-   fewer so it renders at full size. build_cover returns a warnings list -
-   read it; a hook flagged as too wide has been shrunk and will not read in
-   a feed.
+   title; keep the title to 9 words or fewer, and aim for 40 characters or
+   fewer so it renders large. build_cover returns a warnings list - read it;
+   a hook flagged as too wide has been shrunk and will not read in a feed.
 4. You MUST finish by calling build_cover successfully - that is what saves
    the cover artifacts and records the CoverSpec for the rest of the pipeline.
 

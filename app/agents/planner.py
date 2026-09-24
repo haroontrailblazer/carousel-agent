@@ -109,30 +109,41 @@ suggested_angle as a hook candidate:
 3. max_lines_per_slide - at most 4. Prefer 3 for dense "points" carousels so
    the rendered type stays large; use 4 only when the content truly needs it.
 
-4. hook_title - the cover title, rendered in a large 128 px condensed bold
+4. hook_title - the cover title, rendered in a large condensed bold
    grotesk, uppercase over the cover video (up to 3 balanced lines). This is
    the only slide most people will ever see, so it is the single highest
    leverage field in the plan. skills/cover-style.md below is the full
    authority; the essentials:
-   - Three to seven words, 7 words maximum, and aim for 30 characters or
-     fewer. Length is a readability rule: past 30 characters the renderer
-     shrinks the type to fit, and a shrunk hook is an unread hook. Count the
-     letters, not just the spaces.
-   - Name the real subject (company, product, model, person) and state what
-     actually changed. Prefer the strongest sourced number the facts give you.
-     Never "the new update", "this AI tool", "a major breakthrough".
-   - Put the payoff on the cover. Do not withhold it for slide 2.
-   - Read it aloud. If you would not say it to a friend, rewrite it.
-   - No punctuation except a comma or a period. No hype, no mystery hook, no
-     rhetorical question, no command, no unsupported claim.
-   - Draft three candidates internally and ship the most concrete one: the one
-     carrying a real name and a real number. If two tie, ship the shorter.
+   - The stranger test decides. Someone who has never heard of this company
+     must understand from the cover alone what happened AND why they should
+     care. A title that only reports a fact fails the second half.
+   - Lead with the stake, not the stat. Use a number only when a stranger
+     instantly knows what it counts and whether it is good or bad, and say
+     the side that carries the stake ("SAID YES TO 98 UNSAFE ORDERS", never
+     "REFUSED 2 OF 100"). A bare speed or price with no comparison is noise.
+   - Build a contrast: what people assume versus what actually happened.
+     Pull it from the facts and state the surprising side plainly.
+   - Say who it affects. "You" and "your" are welcome when the story really
+     touches the reader. Name the real subject when the name is known; when
+     nobody knows the name, describe what it is and spend the words on the
+     stake. Never "the new update", "this AI tool", "a major breakthrough".
+   - Everyday verbs, the way you would say it to a friend. Not newsroom verbs
+     like BREACHED, AIDED, UNVEILS, SLASHES.
+   - Up to 9 words, and aim for 40 characters or fewer so the type stays
+     large across up to three lines. Cut filler before you cut the stake.
+   - No punctuation except a comma or a period. No hype, no mystery hook
+     that hides the subject, no unsupported claim.
+   - Draft three candidates on different angles (the consequence, the
+     contrast, the reader's own stake) and ship the one a stranger would
+     understand fastest and care about most. Never ship a bare
+     "SUBJECT VERB NUMBER" stat line.
 
 5. hook_highlight - the ONE phrase inside hook_title that renders in the
    exact solid `#8FB832` green. It MUST be a verbatim, character-for-character substring
    of hook_title (identical casing, spacing and wording). Choose the 2-4 word
-   payoff phrase - the number, the name, or the consequence the eye should
-   land on. Never highlight a connecting phrase.
+   payoff phrase - the stake, the surprising side of the contrast, or a
+   number together with what it counts ("98 UNSAFE ROBOT ORDERS", not "98").
+   Never highlight a connecting phrase.
 
 6. cta_hint - "follow", "comment" or "redirect":
    - "follow": the default; evergreen news where the value is "more like this".

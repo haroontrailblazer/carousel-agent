@@ -1,11 +1,11 @@
 """The cover hook must stay short enough to render big, and say something.
 
 The first page is the only slide most people ever see, so its title carries
-two obligations at once: it has to make a concrete point, and it has to be
-legible in a feed. Those pull against each other - every extra word forces
-the renderer to shrink the type - so the word budget is a readability rule,
-not a style preference, and it is asserted here rather than left to prose in
-three separate prompt files that used to disagree with one another.
+two obligations at once: it has to make a point a stranger cares about, and
+it has to be legible in a feed. Those pull against each other - every extra
+word forces the renderer to shrink the type - so the budget is a readability
+rule, measured against the rendered size, and asserted here rather than left
+to prose in several prompt files that used to disagree with one another.
 """
 from pathlib import Path
 
@@ -15,45 +15,63 @@ from app.agents import first_page_visual
 from app.design_limits import (
     HOOK_MAX_CHARS,
     HOOK_MAX_WORDS,
-    HOOK_MIN_READABLE_TITLE_SIZE,
+    hook_min_readable_size,
 )
 from app.schemas import CarouselDesign
 from app.tools import media_tools
 
 REPO = Path(__file__).resolve().parents[1]
 
-# A real hook at the budget: named subject, the change, a sourced number.
-GOOD_HOOK = "GOOGLE AI READS A BOOK IN 30s"
-# Seven words, so the word count passes - but wide enough that the renderer
-# shrinks it anyway. This is the case word-counting alone cannot catch.
-WIDE_HOOK = "META JUST OPEN SOURCED ITS BEST MODEL"
-# What the old nine-word budget invited: abstract, unnamed, and far too long.
+# A hook at the budget that carries a stake, not just a stat.
+GOOD_HOOK = "GPT-6 SAID YES TO 98 UNSAFE ROBOT ORDERS"
+# Under the word budget, but wide enough that the renderer shrinks it anyway.
+# This is the case word-counting alone cannot catch.
+WIDE_HOOK = "ANTHROPIC'S INTERPRETABILITY BREAKTHROUGH EXPLAINED"
+# Abstract, unnamed, and far too long.
 LONG_HOOK = "THE NEW MODEL UPDATE COULD CHANGE HOW EVERY DEVELOPER WRITES SOFTWARE TODAY"
 
 
-def test_a_hook_within_the_budget_renders_at_the_full_cover_title_size():
+def _saved_design() -> CarouselDesign:
+    """The saved workspace designs render the cover title at 100 px."""
     design = CarouselDesign()
-    assert len(GOOD_HOOK.split()) == HOOK_MAX_WORDS
+    design.cover.title_size = 100
+    return design
+
+
+@pytest.mark.parametrize("design", [CarouselDesign(), _saved_design()], ids=["default", "saved"])
+def test_a_hook_within_the_budget_stays_above_the_readable_floor(design):
+    assert len(GOOD_HOOK.split()) <= HOOK_MAX_WORDS
     assert len(GOOD_HOOK) <= HOOK_MAX_CHARS
-    assert media_tools.fitted_title_size(GOOD_HOOK, design) == design.cover.title_size
+    fitted = media_tools.fitted_title_size(GOOD_HOOK, design)
+    assert fitted >= hook_min_readable_size(design.cover.title_size)
+
+
+def test_the_readable_floor_follows_the_design_title_size():
+    """A fixed 112 px floor flagged every hook on the 100 px saved designs.
+
+    That constant warning told the agents their hooks were too wide however
+    short they were, which pushed the copy toward cryptic stat lines.
+    """
+    design = _saved_design()
+    short = "LAYA ANSWERS LOCALLY IN 33 MS"
+    assert media_tools.fitted_title_size(short, design) == 100
+    assert first_page_visual.hook_warnings(short, "33 MS", design) == []
 
 
 def test_an_overlong_hook_is_shrunk_below_the_readable_floor():
     design = CarouselDesign()
     fitted = media_tools.fitted_title_size(LONG_HOOK, design)
-    assert fitted < HOOK_MIN_READABLE_TITLE_SIZE
-
-
-def test_a_wide_hook_inside_the_word_budget_is_still_shrunk():
-    """Why the fitted size is the real gate and the word count is only a guide."""
-    assert len(WIDE_HOOK.split()) <= HOOK_MAX_WORDS
-    assert len(WIDE_HOOK) > HOOK_MAX_CHARS
-    assert media_tools.fitted_title_size(WIDE_HOOK, CarouselDesign()) < HOOK_MIN_READABLE_TITLE_SIZE
+    assert fitted < hook_min_readable_size(design.cover.title_size)
 
 
 def test_a_wide_hook_is_flagged_even_though_its_word_count_passes():
-    warnings = first_page_visual.hook_warnings(WIDE_HOOK, "", CarouselDesign())
-    assert any(str(HOOK_MIN_READABLE_TITLE_SIZE) in w for w in warnings)
+    design = CarouselDesign()
+    assert len(WIDE_HOOK.split()) <= HOOK_MAX_WORDS
+    assert media_tools.fitted_title_size(WIDE_HOOK, design) < hook_min_readable_size(
+        design.cover.title_size
+    )
+    warnings = first_page_visual.hook_warnings(WIDE_HOOK, "", design)
+    assert any("readable floor" in w for w in warnings)
     assert not any(f"{HOOK_MAX_WORDS} word" in w for w in warnings)
 
 
@@ -69,7 +87,9 @@ def test_a_hook_over_the_word_budget_is_flagged():
 
 
 def test_a_hook_within_budget_draws_no_complaints():
-    assert first_page_visual.hook_warnings(GOOD_HOOK, "IN 30s", CarouselDesign()) == []
+    assert first_page_visual.hook_warnings(
+        GOOD_HOOK, "98 UNSAFE ROBOT ORDERS", CarouselDesign()
+    ) == []
 
 
 def test_a_highlight_that_is_not_in_the_title_is_still_reported():
@@ -84,21 +104,23 @@ def test_a_highlight_that_is_not_in_the_title_is_still_reported():
     "app/agents/planner.py",
     "app/agents/first_page_visual.py",
 ])
-def test_every_hook_rule_source_states_the_same_word_budget(source):
-    """Three files used to claim authority over the hook and all said "9".
-
-    The planner obediently filled that budget, and the renderer then shrank
-    the result. Whatever the cap is, every place that states it must agree.
-    """
+def test_every_hook_rule_source_states_the_same_budget(source):
+    """Several files claim authority over the hook; they must agree."""
     text = (REPO / source).read_text(encoding="utf-8")
     assert f"{HOOK_MAX_WORDS} words" in text
-    assert "9 words" not in text
-    assert "nine" not in text.lower()
+    assert f"{HOOK_MAX_CHARS} characters" in text
+    assert "7 words" not in text
+    assert "30 characters" not in text
 
 
-def test_the_character_target_reaches_the_planner_through_cover_style():
-    cover_style = (REPO / "skills/cover-style.md").read_text(encoding="utf-8")
-    assert f"{HOOK_MAX_CHARS} characters" in cover_style
+@pytest.mark.parametrize("source", ["skills/cover-style.md", "skills/agents/planner.md"])
+def test_the_hook_rules_ask_for_a_stake_not_a_bare_stat(source):
+    """The 7-word, name-plus-number rules produced lines like GPT-6 ASTRA
+    REFUSED 2 OF 100: accurate, and meaningless to a stranger."""
+    text = (REPO / source).read_text(encoding="utf-8").lower()
+    assert "stranger test" in text
+    assert "stake" in text
+    assert "contrast" in text
 
 
 def test_the_shared_writing_standard_asks_for_a_concrete_cover_not_just_a_safe_one():
@@ -107,4 +129,5 @@ def test_the_shared_writing_standard_asks_for_a_concrete_cover_not_just_a_safe_o
 
     standard = WRITING_STANDARD.lower()
     assert "name the real subject" in standard   # the do
+    assert "stake" in standard                    # and why it matters
     assert "mystery hook" in standard            # the don't, still enforced

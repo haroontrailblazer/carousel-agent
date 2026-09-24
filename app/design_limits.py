@@ -17,13 +17,24 @@ def design_slide_limit(state: Any) -> int:
 # --- Cover hook -------------------------------------------------------------
 # The cover title renders at the design's title_size and the renderer shrinks
 # it until it fits the saved title box, so length is a readability budget, not
-# a style preference. Measured against the shipped condensed face at the
-# default 128 px cover: a hook of 30 characters or fewer reliably holds full
-# size on two lines, and past roughly 36 it drops under 100 px. Word count
-# alone does not predict this (a wide 7-word hook shrinks while a narrow
-# 8-word one does not), so the character target and the fitted-size floor
-# below are what actually protect legibility.
-HOOK_MAX_WORDS = 7
-HOOK_MAX_CHARS = 30
-# A hook fitted below this has lost enough size to stop reading in a feed.
-HOOK_MIN_READABLE_TITLE_SIZE = 112
+# a style preference. Measured against the shipped condensed face: a hook of
+# 40 characters or fewer holds at least 80% of the design's title size (three
+# lines on the 100 px saved designs, two on the 128 px default), and a hook
+# past roughly 45 characters starts to read small.
+#
+# The old budget was 7 words and 30 characters. That was too tight to carry
+# the stake of a story, so hooks came out as bare stat lines ("GPT-6 ASTRA
+# REFUSED 2 OF 100") that a stranger could not decode. Nine words leaves room
+# for who, what happened, and why it matters.
+HOOK_MAX_WORDS = 9
+HOOK_MAX_CHARS = 40
+# A hook fitted below this share of the design's own title size has lost
+# enough size to stop reading in a feed. It is relative on purpose: the saved
+# designs use a 100 px title, and a fixed pixel floor above that flagged every
+# hook as "too wide", however short.
+HOOK_MIN_READABLE_FRACTION = 0.8
+
+
+def hook_min_readable_size(title_size: int) -> int:
+    """The smallest fitted size at which a cover hook still reads in a feed."""
+    return round(title_size * HOOK_MIN_READABLE_FRACTION)

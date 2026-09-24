@@ -99,6 +99,7 @@ _TEXT_PRIMARY = (232, 228, 214, 255)  # #E8E4D6
 _ACCENT_GREEN = (*ACCENT_GREEN, 255)  # #8FB832
 _TITLE_MAX_LINES = HEADLINE_MAX_LINES
 _COVER_TITLE_FONT_SIZE = 128
+COVER_TITLE_FONT_SIZE = _COVER_TITLE_FONT_SIZE  # default size, when no design is saved
 # The renderer will not shrink a hook past this; below it nothing reads.
 _TITLE_MIN_FONT_SIZE = 44
 _TITLE_MAX_WIDTH_FRAC = 0.78

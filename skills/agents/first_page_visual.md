@@ -24,10 +24,9 @@ other slide, never write body copy or captions, and never AI-generate media.
 3. The title comes from the plan's hook_title and the highlighted phrase from
    hook_highlight. Only override them when rework feedback explicitly asks for
    a different title. The highlight must stay a VERBATIM substring of the
-   title; keep the title to 7 words or fewer, and aim for 30 characters or
-   fewer so it renders at full size. build_cover returns a warnings list -
-   read it; a hook flagged as too wide has been shrunk and will not read in
-   a feed.
+   title; keep the title to 9 words or fewer, and aim for 40 characters or
+   fewer so it renders large. build_cover returns a warnings list - read it;
+   a hook flagged as too wide has been shrunk and will not read in a feed.
 4. You MUST finish by calling build_cover successfully - that is what saves
    the cover artifacts and records the CoverSpec for the rest of the pipeline.
 
