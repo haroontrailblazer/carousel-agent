@@ -442,7 +442,7 @@ These are the only re-runnable agents. Never output any other value.
 
 ## Output shape (example values, not a template to copy)
 
-{"targets": ["first_page_visual", "phrasing"], "reasons": [{"target": "first_page_visual", "reason": "Pick a more dynamic source clip for the cover."}, {"target": "phrasing", "reason": "Shorten slide 3 to two punchy lines."}], "feedback": "first visual is boring and slide 3 is too wordy"}
+{"targets": ["first_page_visual", "phrasing"], "reasons": [{"target": "first_page_visual", "reason": "Pick a more dynamic source clip for the cover."}, {"target": "phrasing", "reason": "Rewrite slide 3 as one clear paragraph that explains its main point in plain words."}], "feedback": "first visual is boring and slide 3 is too wordy"}
 """
 
 

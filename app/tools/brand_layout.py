@@ -219,6 +219,29 @@ def _headline_highlight(headline: str) -> str:
     return " ".join(words[-2:]) if len(words) >= 2 else words[0]
 
 
+def _headline_floor(preferred_headline_size: int) -> int:
+    minimum_floor = (
+        HEADLINE_MIN_FONT_SIZE
+        if preferred_headline_size == HEADLINE_FONT_SIZE
+        else 44
+    )
+    return max(minimum_floor, preferred_headline_size - 18)
+
+
+def _headline_sizes(preferred_headline_size: int) -> range:
+    """Headline sizes the renderer may step down through, largest first."""
+    return range(preferred_headline_size, _headline_floor(preferred_headline_size) - 1, -2)
+
+
+def minimum_headline_size(title_size: int) -> int:
+    """The smallest headline size the renderer actually tries.
+
+    Stepping by 2px can stop one pixel above the floor (an odd title size),
+    so this reads the real sequence instead of the floor.
+    """
+    return min(_headline_sizes(title_size), default=title_size)
+
+
 def _fit_typography_layout(
     headline_text: str,
     clean_body: list[str],
@@ -231,21 +254,21 @@ def _fit_typography_layout(
     line_height: int | None = None,
     panel_top: int = TEXT_PANEL_TOP,
     panel_bottom: int = TEXT_PANEL_BOTTOM,
+    sizes: list[tuple[int, int]] | None = None,
 ) -> _TypographyLayout:
-    """Choose the largest balanced type pair that fits without changing copy."""
-    minimum_floor = (
-        HEADLINE_MIN_FONT_SIZE
-        if preferred_headline_size == HEADLINE_FONT_SIZE
-        else 44
-    )
-    minimum_headline = max(minimum_floor, preferred_headline_size - 18)
-    head_sizes = range(preferred_headline_size, minimum_headline - 1, -2)
+    """Choose the largest balanced type pair that fits without changing copy.
+
+    ``sizes`` limits the search to explicit (headline, body) pairs. The copy
+    budget and the pre-render fit gate use it to measure one pair at a time.
+    """
+    head_sizes = _headline_sizes(preferred_headline_size)
+    minimum_headline = _headline_floor(preferred_headline_size)
     body_sizes = range(BODY_FONT_SIZE, BODY_MIN_FONT_SIZE - 1, -1)
     candidates = [
         (head_size, body_size)
         for head_size in head_sizes
         for body_size in body_sizes
-    ]
+    ] if sizes is None else list(sizes)
     head_span = max(preferred_headline_size - minimum_headline, 1)
     body_span = max(BODY_FONT_SIZE - BODY_MIN_FONT_SIZE, 1)
     candidates.sort(
@@ -285,7 +308,10 @@ def _fit_typography_layout(
             head_line_height = round(headline_size * line_height / 100)
             body_line_height = round(body_size * line_height / 100)
             head_gap = body_gap = 0
-        thought_gap = 10
+        # Half a body line between paragraphs. A fixed 10px all but vanished at
+        # a saved 100% line height, where wrapped lines sit 0px apart, so two
+        # paragraphs read as one block.
+        thought_gap = max(10, round(body_line_height * 0.5))
         headline_height = (
             len(headline_lines) * head_line_height
             + max(0, len(headline_lines) - 1) * head_gap
@@ -317,6 +343,69 @@ def _fit_typography_layout(
         "approved slide copy does not fit the typography reservation even at "
         f"the readable minimums ({minimum_headline}px headline and "
         f"{BODY_MIN_FONT_SIZE}px body); shorten the copy upstream"
+    )
+
+
+def inside_text_box(slide: SlideDesign | None) -> tuple[int, int, int, int, int]:
+    """Return (left, right, width, top, bottom) of the inside-slide text area.
+
+    The renderer and the pre-render copy checks both read this, so they can
+    never disagree about how much room the copy has.
+    """
+    title_transform = slide.title_transform if slide is not None else None
+    if title_transform is not None:
+        content_left = round(SLIDE_WIDTH * title_transform.x / 100)
+        max_width = max(1, round(SLIDE_WIDTH * title_transform.width / 100))
+        content_right = min(SLIDE_WIDTH, content_left + max_width)
+        panel_top = round(SLIDE_HEIGHT * title_transform.y / 100)
+        panel_bottom = max(
+            panel_top + 160,
+            round(SLIDE_HEIGHT * (title_transform.y + title_transform.height) / 100),
+        )
+        panel_bottom = min(panel_bottom, SLIDE_HEIGHT - slide.safe_margin)
+    else:
+        content_left = slide.safe_margin if slide is not None else TEXT_CONTENT_LEFT
+        content_right = SLIDE_WIDTH - content_left
+        panel_top = max(84, content_left) if slide is not None else TEXT_PANEL_TOP
+        panel_bottom = TEXT_PANEL_BOTTOM
+        max_width = content_right - content_left
+    return content_left, content_right, max_width, panel_top, panel_bottom
+
+
+def _typography_options(slide: SlideDesign | None) -> dict:
+    """The saved type settings _fit_typography_layout needs for one slide."""
+    return {
+        "preferred_headline_size": slide.title_size if slide else HEADLINE_FONT_SIZE,
+        "font_family": slide.font_family if slide else "condensed",
+        "letter_spacing": slide.letter_spacing if slide else 0,
+        "word_spacing": slide.word_spacing if slide else 0,
+        "line_height": slide.line_height if slide else None,
+    }
+
+
+def fit_inside_copy(
+    design: CarouselDesign | None,
+    headline: str,
+    body_lines: list[str],
+    *,
+    sizes: list[tuple[int, int]] | None = None,
+    panel_bottom: int | None = None,
+) -> _TypographyLayout:
+    """Lay out inside-slide copy exactly as apply_slide_typography would.
+
+    Raises ValueError when the copy cannot fit. ``panel_bottom`` overrides the
+    box bottom so a caller can measure how tall overflowing copy really is.
+    """
+    slide = design.inside if design is not None else None
+    _left, _right, max_width, top, bottom = inside_text_box(slide)
+    return _fit_typography_layout(
+        " ".join(str(headline or "").split()),
+        [" ".join(str(line).split()) for line in body_lines if str(line).strip()],
+        max_width,
+        panel_top=top,
+        panel_bottom=bottom if panel_bottom is None else panel_bottom,
+        sizes=sizes,
+        **_typography_options(slide),
     )
 
 
@@ -356,33 +445,14 @@ def apply_slide_typography(
     clean_body = [" ".join(str(line).split()) for line in body_lines if str(line).strip()]
 
     title_transform = slide.title_transform if slide is not None else None
-    if title_transform is not None:
-        content_left = round(SLIDE_WIDTH * title_transform.x / 100)
-        max_width = max(1, round(SLIDE_WIDTH * title_transform.width / 100))
-        content_right = min(SLIDE_WIDTH, content_left + max_width)
-        panel_top = round(SLIDE_HEIGHT * title_transform.y / 100)
-        panel_bottom = max(
-            panel_top + 160,
-            round(SLIDE_HEIGHT * (title_transform.y + title_transform.height) / 100),
-        )
-        panel_bottom = min(panel_bottom, SLIDE_HEIGHT - slide.safe_margin)
-    else:
-        content_left = slide.safe_margin if slide is not None else TEXT_CONTENT_LEFT
-        content_right = SLIDE_WIDTH - content_left
-        panel_top = max(84, content_left) if slide is not None else TEXT_PANEL_TOP
-        panel_bottom = TEXT_PANEL_BOTTOM
-        max_width = content_right - content_left
+    content_left, content_right, max_width, panel_top, panel_bottom = inside_text_box(slide)
     layout = _fit_typography_layout(
         headline_text,
         clean_body,
         max_width,
-        preferred_headline_size=(slide.title_size if slide else HEADLINE_FONT_SIZE),
-        font_family=(slide.font_family if slide else "condensed"),
-        letter_spacing=(slide.letter_spacing if slide else 0),
-        word_spacing=(slide.word_spacing if slide else 0),
-        line_height=(slide.line_height if slide else None),
         panel_top=panel_top,
         panel_bottom=panel_bottom,
+        **_typography_options(slide),
     )
     head_font = layout.head_font
     body_font = layout.body_font

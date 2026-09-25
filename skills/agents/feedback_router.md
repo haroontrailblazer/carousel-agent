@@ -63,7 +63,8 @@ These are the only re-runnable agents. Never output any other value.
    when the feedback names several problems.
 2. Keep targets MINIMAL: never include an agent the feedback does not
    criticise. A complaint about only the cover must not re-run phrasing.
-3. "reasons" must contain exactly one key per chosen target; each value is a
+3. "reasons" is a LIST with exactly one entry per chosen target, each
+   {"target": <one of the targets>, "reason": <correction>}. Each reason is a
    short, concrete, imperative correction for that agent (what to fix, not a
    restatement of the complaint).
 4. "feedback" must carry the reviewer's feedback text verbatim.
@@ -72,4 +73,4 @@ These are the only re-runnable agents. Never output any other value.
 
 ## Output shape (example values, not a template to copy)
 
-{"targets": ["first_page_visual", "phrasing"], "reasons": {"first_page_visual": "Pick a more dynamic source clip for the cover.", "phrasing": "Shorten slide 3 to two punchy lines."}, "feedback": "first visual is boring and slide 3 is too wordy"}
+{"targets": ["first_page_visual", "phrasing"], "reasons": [{"target": "first_page_visual", "reason": "Pick a more dynamic source clip for the cover."}, {"target": "phrasing", "reason": "Rewrite slide 3 as one clear paragraph that explains its main point in plain words."}], "feedback": "first visual is boring and slide 3 is too wordy"}

@@ -10,6 +10,13 @@ from typing import Any
 
 EM_DASH = "\u2014"
 
+# House style is straight quotes and apostrophes. Curly ones arrive from source
+# text the planner copies, so they are straightened rather than rejected.
+_CURLY_QUOTES = str.maketrans({
+    "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
+    "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+})
+
 # Reliable signs of broken decoding, model placeholders, or keyboard-mash
 # copy. A dictionary check would reject legitimate names, brands, acronyms,
 # and technical terms, so this gate deliberately stays conservative.
@@ -29,6 +36,11 @@ _PLACEHOLDER_RE = re.compile(
 )
 _REPEATED_LETTER_RE = re.compile(r"([A-Za-z])\1{3,}")
 _REPEATED_CHUNK_RE = re.compile(r"\b([A-Za-z]{2,4})\1{2,}\b", re.IGNORECASE)
+
+
+def straight_quotes(text: str) -> str:
+    """Replace curly quotes and apostrophes with straight ones."""
+    return text.translate(_CURLY_QUOTES)
 
 
 def find_em_dash(value: Any, path: str = "text") -> str | None:
@@ -123,4 +135,5 @@ __all__ = [
     "find_unreadable_text",
     "require_no_em_dash",
     "require_readable_text",
+    "straight_quotes",
 ]

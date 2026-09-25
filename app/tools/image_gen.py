@@ -47,7 +47,7 @@ from app import observability
 from app.services import ai_config
 from app.config import load_skill, settings
 from app.schemas import CarouselDesign, SlideDesign
-from app.text_rules import require_no_em_dash, require_readable_text
+from app.text_rules import require_no_em_dash, require_readable_text, straight_quotes
 from app.tools import brand_identity
 from app.tools.brand_layout import (
     INK,
@@ -441,10 +441,11 @@ def generate_slide_image(
             exists the images.edit endpoint reproduces its text-free visual
             layout; when empty/missing, images.generate is used with the full
             style prompt from skills/design-skill.md.
-        copy_lines: The approved body copy lines (rendered verbatim, one
-            thought per line, in order).
-        headline: The slide headline (rendered verbatim, uppercase condensed
-            per the design system).
+        copy_lines: The approved body copy (rendered verbatim, in order, one
+            paragraph per entry; each entry is wrapped and drawn as its own
+            block).
+        headline: The slide headline (rendered verbatim in the saved design's
+            bold face; its last two words take the highlight color).
         slide_no: 1-based number within the body-slide sequence, shown as a
             small quiet number tag. The first body slide is "01"; the cover
             and CTA are unnumbered.
@@ -576,7 +577,8 @@ def generate_cta_image(
         headline: The big centered CTA headline (rendered verbatim, e.g.
             "FOLLOW FOR MORE").
         lines: Supporting lines (question, emphasis line, etc.), rendered
-            verbatim in order.
+            verbatim in order. Curly quotes in the headline and lines are
+            straightened.
         link_text: A redirect destination or configured handle. The handle is
             composited deterministically in the final brand rail; a distinct
             redirect URL remains part of the generated CTA content.
@@ -588,6 +590,10 @@ def generate_cta_image(
         The absolute/normalized path of the written PNG as a string.
     """
     design = design or CarouselDesign()
+    # CTA copy reaches the renderer as tool arguments, never through a schema,
+    # so the house straight-quote style is applied here.
+    headline = straight_quotes(headline)
+    lines = [straight_quotes(line) for line in lines]
     require_no_em_dash([headline, *lines, link_text], "CTA image copy")
     # Typography and composition share the body renderer, with a dedicated
     # closing-slide layout selected from the design saved on this run.

@@ -12,7 +12,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
-from app.text_rules import require_no_em_dash, require_readable_text
+from app.text_rules import require_no_em_dash, require_readable_text, straight_quotes
 from app.design_limits import MIN_CAROUSEL_SLIDES, MAX_SUPPORTED_SLIDES
 
 CarouselStyle = Literal["points", "prose"]
@@ -255,6 +255,13 @@ class CarouselPlan(PublishedTextModel):
     caption_seed: str = ""
     slides: list[SlidePlan] = Field(default_factory=list)  # body slides only
 
+    @field_validator("hook_title", "hook_highlight", mode="before")
+    @classmethod
+    def straighten_hook_quotes(cls, value: Any) -> Any:
+        # The cover renders the hook verbatim; straightening both keeps the
+        # highlight a substring of the title.
+        return straight_quotes(value) if isinstance(value, str) else value
+
 
 class CoverSpec(PublishedTextModel):
     """Output of the First-Page Visual agent."""
@@ -267,10 +274,32 @@ class CoverSpec(PublishedTextModel):
     duration_s: float = 0.0
     used_fallback_image: bool = False  # True when no clip found; static cover built
 
+    @field_validator("title", "highlight", mode="before")
+    @classmethod
+    def straighten_title_quotes(cls, value: Any) -> Any:
+        return straight_quotes(value) if isinstance(value, str) else value
+
 
 class SlideCopy(PublishedTextModel):
     index: int
-    lines: list[str] = Field(default_factory=list)  # <= plan.max_lines_per_slide
+    # The description travels with output_schema, so the model reads the
+    # rendering contract (template_design._slide_texts) with the field itself.
+    lines: list[str] = Field(
+        default_factory=list,
+        description=(
+            "lines[0] is the slide headline. Each later entry is one paragraph "
+            "that the renderer wraps and draws as its own block, with no bullet. "
+            "Never split one sentence across entries. At most the plan's "
+            "max_lines_per_slide entries."
+        ),
+    )
+
+    @field_validator("lines", mode="before")
+    @classmethod
+    def straighten_line_quotes(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            return [straight_quotes(line) if isinstance(line, str) else line for line in value]
+        return value
 
 
 class CopySet(PublishedTextModel):
@@ -278,6 +307,11 @@ class CopySet(PublishedTextModel):
 
     slides: list[SlideCopy] = Field(default_factory=list)
     caption: str = ""
+
+    @field_validator("caption", mode="before")
+    @classmethod
+    def straighten_caption_quotes(cls, value: Any) -> Any:
+        return straight_quotes(value) if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def validate_latin_slide_copy(self) -> "CopySet":

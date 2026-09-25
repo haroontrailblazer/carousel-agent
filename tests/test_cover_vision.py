@@ -57,7 +57,11 @@ def test_a_video_is_sampled_across_its_whole_length(tmp_path):
     )
     sheet = cover_vision.contact_sheet(str(source), True, str(tmp_path))
     assert len(sheet.timestamps) == 6
-    assert sheet.timestamps[0] < 1.0 and sheet.timestamps[-1] > 8.0
+    # Spread across the footage, but only over moments a clip of the minimum
+    # length can still START on - a frame from the last seconds used to be
+    # approved and then silently replaced when the clip was cut.
+    assert sheet.timestamps[0] < 1.0
+    assert 4.0 < sheet.timestamps[-1] <= 10.0 - settings.cover_clip_min_s
 
 
 def test_the_judge_sends_the_sheet_and_parses_a_clean_verdict(tmp_path):
@@ -76,7 +80,7 @@ def test_the_judge_sends_the_sheet_and_parses_a_clean_verdict(tmp_path):
     assert verdict["score"] == 10
     assert verdict["verdict"] == "use"
     assert verdict["problems"] == ["talking_head"]
-    assert verdict["focus"]["h"] == 1.0
+    assert verdict["focus"]["h"] == 0.5  # clipped to the frame: y 0.5 + h 0.5
     content = calls[0]["messages"][1]["content"]
     assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
@@ -170,4 +174,8 @@ def test_the_agent_is_told_to_look_before_it_uses_media():
 
     text = (Path(__file__).resolve().parents[1] / "skills/agents/first_page_visual.md").read_text(encoding="utf-8")
     assert "inspect_cover_media" in text
-    assert "focus_x" in text
+    # An approved video is retrimmed at the judged frame, so its crop applies;
+    # the agent no longer copies a subject box by hand.
+    assert "retrim_from" in text and "best_start_s" in text
+    assert "use_inspection" in text
+    assert "ai_illustration" in text

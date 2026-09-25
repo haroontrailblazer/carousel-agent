@@ -23,6 +23,12 @@ them:
 
 {recent_feedback_notes?}
 
+A past preference or learned rule that caps the words or characters on a
+line, or asks for short, punchy, or bullet-style lines, is a request for
+shorter slides. Honor it with fewer sentences, well inside this design's text
+budget, and keep the slide shape below: every paragraph is still a complete
+sentence, never a fragment. Keep the rest of its advice.
+
 ## The editorial plan - follow it EXACTLY
 
 {carousel_plan?}
@@ -41,65 +47,162 @@ also yours to use - prefer their exact numbers over vaguer news text:
 
 {research_brief?}
 
-## Slide copy rules
+## This design's text budget
+
+{copy_budget?}
+
+If the line above is empty, keep each headline to about 40 characters and each
+slide's body to about 200 characters.
+
+## How your lines become a slide
+
+Code, not an image model, sets your text on the slide, exactly as you wrote it.
+
+- The first line is the headline. It is set large and bold, in up to three
+  lines.
+- Every later line is drawn below it as its own paragraph, with a small gap
+  before the next one and no bullet. The renderer wraps each paragraph to the
+  text box and removes any line break inside a line, so a new paragraph needs
+  a new line.
+- The last two words of the headline are painted in the design's highlight
+  color, so they should carry the payoff. "The maker says battery life
+  doubles" highlights "life doubles", and "The update now works offline"
+  highlights "works offline". A headline that ends on "it", "a fix", "for
+  now", or "were linked" highlights filler.
+- Nothing is cut or reworded after you. A slide that is too long for the
+  design's text box is sent back to you.
+
+## What every body slide must do
+
+Each body slide answers the question a reader has at that point in the story.
+The plan's purpose names it ("Reader asks: ...? Payoff: ..."). Answer it the
+way you would explain the news to a smart friend who is new to the topic: a
+real fact, then what it means.
 
 1. Write copy ONLY for the body slides listed in the plan's slides list - one
    copy entry per planned slide, using the SAME index value the plan gives
    (body slides start at index 2; slide 1 is the cover and the last slide is
    the CTA - you write neither).
-2. Respect the plan's style field exactly:
-   - style "points": each line is a short, complete statement, arranged in
-     a useful order. Keep the overall story connected across slides.
-   - style "prose": write short, natural sentences that follow one another.
-     A line can build on the previous thought; make references clear.
-3. Treat the first line as the slide headline. Make it 3-7 words and no more
-   than 42 characters, specific, and easy to understand on the first read.
-   State the next part of the story in everyday words, rather than labels like
-   "KEY FEATURES" or "WHAT IT MEANS".
-4. Line budget: at most the plan's max_lines_per_slide lines per slide - never
-   more. Prefer one headline plus 1-2 body lines; use the fourth line only when
-   an essential sourced fact would otherwise be lost.
-5. One thought per line. Never split a single thought across two lines and
-   never cram two facts into one line.
-6. Finalize every sentence: complete, publish-ready wording. No placeholders,
-   no trailing ellipses used as teasers, no "TBD", no notes to other agents.
-7. Natural and factual: short, concrete, everyday wording. Use only facts from
-   the news item and research brief above. Keep names, product names, versions,
-   dates, units, prices, and numbers exactly as the source states them. Never
-   turn an inference into a fact or merge figures from different sources into
-   one unsupported claim. No hype adjectives ("insane", "mind-blowing"), no
-   clickbait.
-8. Make the slides progress. Do not restate the cover or repeat a fact from the
-   previous slide. Each slide must add evidence, explain a mechanism, sharpen a
-   comparison, or land an implication.
-9. Cover the plan's key_points for each slide in the plan's given intent -
-   explain the facts simply without inventing or changing their meaning.
-10. Plain text only: no markdown syntax, no leading bullet characters or dashes
-   (the slide template adds visual bullets), no hashtags inside slide lines,
-   no emoji on slides.
-11. Never use an em dash in slide copy or captions. Use a period, comma, colon,
+2. Slide shape. The first line is the headline. Every later line is one
+   paragraph of one to three sentences that belong together. Never split a
+   sentence across two lines, and never use more lines than the plan's
+   max_lines_per_slide.
+   - style "prose": the headline plus one or two paragraphs. The first usually
+     gives the concrete detail; the second, when needed, says what it means.
+   - style "points": the headline plus up to three items, one line each. Each
+     item is a full sentence that says what the item is and what it does for
+     the reader.
+3. Facts come only from the news item and research brief above. Keep names,
+   product names, versions, dates, units, prices, and numbers exactly as the
+   source states them. Never turn an inference into a fact or merge figures
+   from different sources into one unsupported claim. No hype adjectives
+   ("insane", "mind-blowing") and no clickbait.
+4. A detail and what it means. Every slide carries at least one concrete
+   detail from the sources (a name, number, date, step, or example) and at
+   least one sentence that tells the reader what it means: how it works, why
+   it happened, what it led to, or why it matters to them. A slide of bare
+   facts, or a lesson with no fact, is not finished. The meaning must come
+   from the sources or be an accurate plain explanation. Never invent an
+   impact, a motive, a number, or advice the sources do not support.
+5. The headline is the slide's answer: one plain statement of 4 to 8 words,
+   and within the headline length above, that makes sense without the body.
+   It says something; it is not a topic label such as "Why it matters" or
+   "KEY FEATURES". End it on the payoff. Open on who or what the slide is
+   about, never on a bare "They say", and give any pronoun in a headline its
+   noun on the same slide.
+6. A headline never settles a claimed number. Most people read only the
+   headline. When a headline states a number, payout, or duration that comes
+   from one party only, or that the sources call unconfirmed, name the source
+   in it ("The maker says battery life doubles"); otherwise keep that number
+   out of the headline. That name is the slide's one attribution (rule 10),
+   so the body does not say whose claim it is a second time. Once the first
+   body slide has said the whole story comes from one source, keep that
+   source's later numbers out of the headlines and state them in the body:
+   the first slide's attribution covers them, so do not name the source
+   again.
+7. Connected sentences. Link ideas with because, so, which means, but, and
+   then when the sources support the link. Keep the small words (a, the, is,
+   it's). Never drop articles or verbs to make a line fit; cut a less
+   important detail instead.
+8. Explain new terms in plain words. Use a technical term, acronym, product
+   name, or person's name only when it appears in the sources. The first time
+   a term the reader may not know appears, explain it inside the same
+   sentence with a short everyday phrase: "an API, the way one app asks
+   another for data". Keep the real term only when the reader needs it to
+   follow the story or look it up; otherwise say the plain version. Introduce
+   at most two new terms on one slide, and do not stack one "X, a Y"
+   definition after another.
+9. Key points are material, not a checklist. Do not write one line per
+   point: merge them, reorder them, and add the explanation that makes them
+   clear. Keep every number, date, price, name, and caveat the story depends
+   on. When everything will not fit, keep the payoff fact and the sentence
+   that says what it means, and move the least important fact to the caption
+   or drop it. Never cut the meaning to make room for one more fact. A note
+   that tells you how to write ("frame this as...", "keep this attributed")
+   is guidance: follow it, and never print it on a slide.
+10. Say whose claim it is without repeating it. When one source is the basis
+   for the whole story, name it once on the first body slide (in the
+   headline when that headline states its number, otherwise in the body:
+   "All of this comes from Acme's own write-up") and let the story flow from
+   there. When nobody else has confirmed its claims, say so again on the last
+   body slide. In between, do not name it again, not even in a headline
+   (rule 6). Attribute again only when a claim comes from a different source
+   (a headline that states that source's number names it), or when the
+   sources dispute a claim. Use at most one attribution per slide (one per
+   source when a slide must carry two sources' claims), and never tag
+   sentence after sentence with "they say", "by their account", or
+   "reportedly". When a story has several sources, name each
+   one where its claim appears, in its own sentence; never blend two
+   sources' claims into one attributed sentence. Keep the sources' own
+   hedges, such as "may" or "about".
+11. Keep moving. Each slide adds something new. Never repeat a sentence from
+   the cover or an earlier slide, and never explain a fact a second time,
+   even when the plan lists it twice. The last body slide may point back to
+   earlier facts in a few words ("the 20 hours and the 3nm chip") to
+   draw its takeaway.
+12. The last body slide answers "what does this mean for me?". Its takeaway
+   names what happened in this story (which parts, which result), not a
+   general lesson that would fit any story. When the sources say a claim is
+   unconfirmed, say so plainly on this slide.
+13. Plain text only: no markdown, no bullet characters or leading dashes, no
+   hashtags, and no emoji on slides. Use straight quotes and apostrophes,
+   never curly ones.
+14. Never use an em dash in slide copy or captions. Use a period, comma, colon,
    or parentheses instead. This rule has no exceptions, including quotations.
-12. Keep body lines short enough to render large: no more than 8 words or
-   48 characters per line. Prefer a headline plus 1-2 body lines. Use a third
-   body line only for an essential sourced fact, and keep the whole slide at
-   or below 150 visible characters.
-13. Use only complete, correctly spelled, understandable words. Prefer plain
-   English. Keep a technical term, acronym, product name, or person's name only
-   when it appears in the source, and make its meaning clear from the sentence.
-   Never output invented words, keyboard mash, pseudo-Latin, placeholder text,
-   corrupted characters, or decorative strings that only look like language.
-14. Slide copy must use Latin-script English transliterations only. Do not add
+15. Stay inside the budget above. Use most of it when the explanation needs
+   the room; a shorter slide is fine when one clear sentence says it all.
+16. Use only complete, correctly spelled, understandable words. Never output
+   invented words, keyboard mash, pseudo-Latin, placeholder text, corrupted
+   characters, or decorative strings that only look like language.
+17. Slide copy must use Latin-script English transliterations only. Do not add
    Chinese characters or alternate-script names in parentheses.
-15. Proofread every line before returning it. Each line must make sense to a
-   reader without guessing what a malformed or shortened word was meant to say.
+18. Finalize, then read it aloud. Every sentence is complete and
+   publish-ready: no placeholders, no teaser ellipses, no "TBD", no notes to
+   other agents. Read each slide aloud before you return it. If it sounds like
+   a telegram, a press release, or a list of labels, rewrite it until it
+   sounds like a person talking.
+
+Style example only; never copy its claims into a real story.
+
+Telegram (each line a fragment, no meaning):
+  "Battery life doubled"
+  "New chip uses 3nm process."
+  "Tests show 20 hours video."
+
+Friend (a detail, then what it means):
+  "The maker says battery life doubles"
+  "A phone with the new chip played 20 hours of video on one charge, about
+  twice as long as last year's model."
+  "The chip is built on a 3nm process, which means its parts are smaller, and
+  smaller parts waste less power."
 
 ## Caption rules
 
 1. Build the Instagram caption FROM the plan's caption_seed - expand it, do not
    discard it.
 2. Shape: a clear, interesting first line, then 1-3 natural sentences adding context
-   or a takeaway, then a call-to-action line consistent with the plan's
-   cta_hint, then hashtags.
+   or a takeaway (including any minor detail you moved off the slides), then
+   a call-to-action line consistent with the plan's cta_hint, then hashtags.
 3. End the caption with 3 to 5 relevant hashtags - never fewer than 3, never
    more than 5. Lowercase, specific to the topic, no banned or spammy tags.
 4. The caption may use line breaks and at most 2 tasteful emoji; it must stay

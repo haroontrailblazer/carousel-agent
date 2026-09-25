@@ -55,6 +55,7 @@ from app import observability
 from app.pipeline_outputs import OUTPUT_KEYS, validate_output
 from app.agents.publisher import K_PUBLISH_RESULT
 from app.config import settings
+from app.copy_budget import copy_budget_note
 from app.schemas import CarouselPlan, NewsItem, QAReport, ReworkPlan, Verdict
 from app.services import db
 from app.services.telegram_delivery import deliver_carousel
@@ -72,6 +73,8 @@ from app.state import (
     AGENT_TEMPLATE_DESIGN,
     K_NEWS_ITEM,
     K_ACCOUNT_ID,
+    K_COPY_BUDGET,
+    K_DESIGN,
     K_PHASE,
     K_PLAN,
     K_QA_REPORT,
@@ -260,6 +263,35 @@ def _safe_model(state: Any, key: str, model_cls: Type[M]) -> Optional[M]:
     except Exception:
         logger.warning("State key '%s' holds a malformed value.", key, exc_info=True)
         return None
+
+
+#: A step's own repair retry reads its note from ``K_REWORK_FEEDBACK``, the
+#: one key every agent prompt already shows. Every other agent reads that key
+#: as the reviewer's words, so the note is appended for the retry only and
+#: removed again by ``_repair_notes_cleared``.
+_REPAIR_NOTE_RE = re.compile(
+    r"\nRepair the [a-z_]+ output: .*?\. Save the complete result with your output tool\.",
+    re.DOTALL,
+)
+
+
+def _repair_note(name: str, exc: Exception) -> str:
+    """The note one failed step reads on its repair retry."""
+    return f"\nRepair the {name} output: {exc}. Save the complete result with your output tool."
+
+
+def _repair_notes_cleared(state: Any) -> dict[str, Any]:
+    """State delta that strips every step-repair note from the rework feedback.
+
+    Empty when there is nothing to strip, so the reviewer's own feedback is
+    never rewritten. A note left by a run that stopped mid-retry is removed
+    the same way, so it can never survive a resume.
+    """
+    feedback = state.get(K_REWORK_FEEDBACK)
+    if not isinstance(feedback, str) or "Repair the " not in feedback:
+        return {}
+    cleaned = _REPAIR_NOTE_RE.sub("", feedback)
+    return {K_REWORK_FEEDBACK: cleaned} if cleaned != feedback else {}
 
 
 class CarouselOrchestrator(BaseAgent):
@@ -532,32 +564,52 @@ class CarouselOrchestrator(BaseAgent):
         for name in names:
             if name in completed:
                 try:
-                    validate_output(name, state)
+                    validate_output(name, state, checkpoint=True)
                     continue
                 except (ValueError, TypeError):
                     # A corrupt checkpoint invalidates its downstream results.
                     completed = completed[:completed.index(name)]
-            yield self._progress(ctx, f"[generate] preparing {name}", {
+            prepare = {
                 OUTPUT_KEYS[name]: None, checkpoint_key: completed,
                 "bundle": None, "qa_report": None,
-            })
+                # Each step starts clean: a repair note left by a run that
+                # stopped mid-retry is not this step's instruction.
+                **_repair_notes_cleared(state),
+            }
+            if name in (AGENT_PLANNER, AGENT_PHRASING):
+                # The planner sizes its key points and the copywriter the copy
+                # to how much text the saved design holds, measured with the
+                # real typesetter (about a second, then cached).
+                prepare[K_COPY_BUDGET] = await asyncio.to_thread(copy_budget_note, state.get(K_DESIGN))
+            yield self._progress(ctx, f"[generate] preparing {name}", prepare)
             for attempt in range(2):
                 async for event in self._drive(self._child(name), ctx, holder):
                     yield event
                 if holder["paused"]:
                     return
                 try:
-                    validate_output(name, state)
+                    validate_output(
+                        name, state, final_attempt=bool(attempt),
+                        under_rework=checkpoint_key == "rework_completed",
+                    )
                     break
                 except (ValueError, TypeError) as exc:
                     if attempt:
+                        # Stop with the reviewer's feedback as it was, so
+                        # nothing reads the note as theirs before a resume.
+                        yield self._progress(ctx, f"[recovery] {name} failed twice", _repair_notes_cleared(state))
                         raise RuntimeError(f"{name} could not finish: {exc}. Resume to retry this step; completed steps are saved.") from exc
                     feedback = str(state.get(K_REWORK_FEEDBACK) or "")
                     yield self._progress(ctx, f"[recovery] retrying {name}: {exc}", {
-                        K_REWORK_FEEDBACK: feedback + f"\nRepair the {name} output: {exc}. Save the complete result with your output tool.",
+                        K_REWORK_FEEDBACK: _REPAIR_NOTE_RE.sub("", feedback) + _repair_note(name, exc),
                     })
             completed.append(name)
-            yield self._progress(ctx, f"[checkpoint] {name} complete", {checkpoint_key: list(completed)})
+            # The repair note was for this step alone. Later steps read rework
+            # feedback as the reviewer's words (template_design would re-render
+            # only the slides a phrasing repair named).
+            yield self._progress(ctx, f"[checkpoint] {name} complete", {
+                checkpoint_key: list(completed), **_repair_notes_cleared(state),
+            })
 
     async def _phase_generate(
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]

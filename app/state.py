@@ -61,6 +61,7 @@ K_RESEARCH = "research_brief"        # ResearchBrief dict
 K_PLAN = "carousel_plan"             # CarouselPlan dict
 K_COVER = "cover"                    # CoverSpec dict
 K_COPY = "copy_set"                  # CopySet dict
+K_COPY_BUDGET = "copy_budget"        # str - the saved design's text budget, injected for planner/phrasing
 K_BODY_SLIDES = "body_slides"        # list[RenderedSlide dict]
 K_CTA_SLIDE = "cta_slide"            # CTASlide dict
 K_BUNDLE = "bundle"                  # Bundle dict

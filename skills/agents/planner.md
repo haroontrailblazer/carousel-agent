@@ -41,15 +41,36 @@ suggested_angle as a hook candidate:
 
    Recent feedback notes: {recent_feedback_notes?}
 
+   A past note or learned rule that caps the words on a body-slide line, or
+   asks for short, snappy, or bullet-style lines, is a request for shorter
+   slides: give a prose slide only its payoff fact, stay well inside the
+   design's text budget below, and keep the slide shape in this document
+   (complete sentences, never fragments). Keep the rest of its advice.
+
+## This design's text budget
+
+The copywriter turns each body slide's key points into a headline plus
+explained paragraphs, and the result must fit the saved design. This is the
+budget it will be given:
+
+{copy_budget?}
+
+If the line above is empty, assume about 40 characters for a headline and
+about 200 for a slide's body. Every key point costs room, and so does the
+sentence that says what it means, so plan only as many key points as fit
+with their meaning.
+
 ## What to decide - CarouselPlan fields
 
 1. style - "points" or "prose".
    - "points": the news carries several discrete facts, features or numbers
      (launch feature lists, benchmark results, pricing tiers, multi-item
-     roundups). Slides hold short punchy bullet lines.
+     roundups). Each slide holds a headline plus up to three full-sentence
+     items, each saying what the item is and why it matters.
    - "prose": the news is one narrative, idea or argument (a single capability
-     explained, an opinion, a story with a beginning and end). Slides hold one
-     or two short sentences that flow from slide to slide.
+     explained, an opinion, a story with a beginning and end). Each slide
+     holds a headline plus one or two short paragraphs that flow from slide
+     to slide.
    Default to "prose" for a single news story. Choose "points" for a real
    list/comparison or an explicit user preference. Both styles should lead
    a reader through what happened, what changed, and why it matters.
@@ -60,8 +81,10 @@ suggested_angle as a hook candidate:
    the sweet spot; every body slide must earn its place. Minimum 3 total
    (cover + at least 1 body slide + CTA).
 
-3. max_lines_per_slide - at most 4. Prefer 3 for dense "points" carousels so
-   the rendered type stays large; use 4 only when the content truly needs it.
+3. max_lines_per_slide - at most 4. It counts the headline plus each
+   paragraph or item, not the wrapped lines on the slide. Use 3 for prose (a
+   headline and up to two paragraphs). Use 4 only for a points list that
+   needs three items.
 
 4. hook_title - the cover title, rendered in a large condensed bold
    grotesk, uppercase over the cover video (up to 3 balanced lines). This is
@@ -76,7 +99,8 @@ suggested_angle as a hook candidate:
      the side that carries the stake ("SAID YES TO 98 UNSAFE ORDERS", never
      "REFUSED 2 OF 100"). A bare speed or price with no comparison is noise.
    - Build a contrast: what people assume versus what actually happened.
-     Pull it from the facts and state the surprising side plainly.
+     Pull it from the facts and state the surprising side plainly, not as a
+     "not X, but Y" line.
    - Say who it affects. "You" and "your" are welcome when the story really
      touches the reader. Name the real subject when the name is known; when
      nobody knows the name, describe what it is and spend the words on the
@@ -107,24 +131,56 @@ suggested_angle as a hook candidate:
      that readers should be sent to.
 
 7. caption_seed - 1-3 sentences seeding the Instagram caption: the hook
-   restated conversationally plus why it matters. The phrasing agent expands
-   it later; no hashtags needed here.
+   restated conversationally plus why it matters, said plainly rather than
+   as a "not X, but Y" line. The phrasing agent expands it later; no
+   hashtags needed here.
 
 8. slides - the BODY slides only (exclude the cover and the CTA slide).
    Indexes are contiguous and start at 2, because slide 1 is the cover. For
    each body slide provide:
    - index: its position in the carousel (2, 3, 4, ...).
-   - purpose: one line naming the job this slide does in the arc.
-   - key_points: the facts and claims the copywriter must include - carry
-     exact numbers, names, dates and quotes verbatim from the news item.
+   - purpose: the reader's question this slide answers, what they learn, and
+     the visual that proves it, written as "Reader asks: <question>? Payoff:
+     <what they learn>. Visual: <the visual job>." Put any guidance for the
+     copywriter after that (how to frame it, what not to imply, which source
+     the story rests on), because key points are for the reader only.
+   - key_points: the facts the reader will see. A prose slide gets two: the
+     payoff fact its purpose names, plus one supporting fact (only the
+     payoff fact when the budget above is small). A points slide gets one
+     per item, up to three. Each is one concrete detail (a name, number,
+     date, step, or example), plus what it means when the sources say so (a
+     consequence, a mechanism, or a limit). A third fact on a prose slide
+     crowds out the sentence that explains the first two, so leave a minor
+     detail out; the caption can carry it. Carry exact numbers, names, dates
+     and quotes verbatim from the news item. Each fact belongs to one slide
+     only. Do not start every point with "X says": when one source is the
+     basis for the whole story, say so once, in the first body slide's
+     purpose note, and plan its caveat for the last body slide. Name a
+     source inside a key point only when it differs from the story's main
+     source or the claim is disputed. When a descriptive detail comes from a
+     different source (for example how one outlet describes the people
+     involved), give it its own key point with that source named, on a slide
+     that carries no other attributed claim, or leave it to the caption.
 
-## Narrative arc guidance
+## Narrative arc: answer the reader's questions in order
 
-- Slide 2 re-hooks: pay off the cover's promise immediately with the single
-  most surprising fact, then open the question the rest answers.
-- Middle slides: exactly one idea per slide; order them so each swipe answers
-  the question the previous slide raised.
-- Last body slide: the "so what" - what this means for the reader.
+Plan the body slides as the questions a curious friend would ask after seeing
+the cover, in the order they would ask them. Every slide pairs a concrete
+detail with what it means; a slide that only lists facts, or only states a
+lesson, does not earn its place.
+
+- Slide 2 answers "what happened, exactly?": pay off the cover's promise
+  immediately with the single most surprising fact, who is involved, and the
+  stake.
+- Middle slides answer one question each, such as "how did it work?", "how
+  far did it go?", "what happened next?" or "who does it affect?". Plan only
+  questions the sources can answer, so each swipe answers the question the
+  previous slide raised.
+- The last body slide answers "what does this mean for me?": the takeaway
+  from this story's own facts, the limit, or what to watch next, as far as
+  the sources support it. It may point back to earlier facts in a few words,
+  but its key points are the takeaway and the limit, not a recap. When the
+  research brief says a claim is unconfirmed, that limit goes here too.
 - The CTA slide is planned only through cta_hint; the CTA agent designs it.
 
 ## Hard rules
@@ -133,14 +189,17 @@ suggested_angle as a hook candidate:
   invent facts, numbers or quotes. If both are thin, plan fewer slides rather
   than padding.
 - Plan visual proof, not just topics. Across the body slides, deliberately vary
-  their purpose so the design system can use an editorial explainer, data
-  proof, process/mechanism, comparison, dark technical proof, and statement
-  pause when the facts support them. Never request a chart without source
-  values or repeat the same evidence format on consecutive slides.
+  the Visual part of each purpose so the design system can use an editorial
+  explainer, data evidence, process, comparison, technical proof, and
+  statement pause when the facts support them. Write "Visual: the real
+  subject" only when the slide must show the actual person, product or place
+  from the cover. Never request a chart without source values or repeat the
+  same evidence format on consecutive slides.
 - hook_highlight must be a verbatim substring of hook_title.
 - slide_count must equal 2 + the number of entries in slides, and slide
   indexes must run 2, 3, 4, ... with no gaps or duplicates.
 - max_lines_per_slide must never exceed 4.
+- Never list the same fact on two slides.
 - Never use an em dash in the hook, caption seed, slide purpose, or key points.
   Use a period, comma, colon, or parentheses instead.
 - Use only complete, correctly spelled, understandable words in every

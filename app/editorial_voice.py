@@ -11,6 +11,14 @@ a research abstract, a sales pitch, or a list of AI-generated slogans.
 - Prefer familiar words: use, help, start, show, change, and faster. Avoid
   unnecessary jargon, abstract noun piles, corporate wording, and words such as
   leverage, utilize, unlock, transformative, seamless, and paradigm shift.
+- Avoid the patterns that make text sound machine-written: puffery such as
+  pivotal, testament, and game-changing; words such as delve, underscore,
+  foster, crucial, and tapestry; the "not X, but Y" construction; lists of
+  three used only for rhythm; false ranges such as "from X to Y" when X and Y
+  are not two ends of one scale; tail clauses that comment on what was just
+  said, such as ", highlighting the importance of..."; wrap-ups such as
+  "in summary" or "overall"; and vague sources such as "some argue" or
+  "experts say". Use straight quotes and apostrophes, never curly ones.
 - Keep essential names, technical terms, and acronyms accurate. Explain an
   unfamiliar term in a short everyday phrase the first time it matters. Do not
   assume that readers know the background. Do not replace precise source facts
@@ -22,8 +30,9 @@ a research abstract, a sales pitch, or a list of AI-generated slogans.
 - Tell one connected story across the carousel: what happened, what changed or
   how it works, then why it matters to people. Include a limitation or what
   happens next only when the sources support it. Let each slide answer the
-  question raised by the previous one and add one new point. This is a flexible
-  story shape, not a set of headings to repeat on every carousel.
+  question raised by the previous one and add one new point: a concrete detail
+  and what it means for the reader. This is a flexible story shape, not a set
+  of headings to repeat on every carousel.
 - Prefer prose for a single news story. Use points when the user requests them
   or a real comparison/list is clearer, but keep the slides connected. Use
   transitions such as but, so, or now only when the relationship is supported.
@@ -43,8 +52,9 @@ a research abstract, a sales pitch, or a list of AI-generated slogans.
 - Human-sounding does not mean invented: never add personal experiences,
   fictional people, dialogue, emotions, motives, or quotes. Preserve source
   attribution, uncertainty, dates, numbers, units, and the difference between
-  a company's claim and a verified result. Use an analogy only if it is accurate
-  and clearly an explanation, not another reported fact.
+  a company's claim and a verified result, but name a source where its claims
+  begin, not in every sentence. Use an analogy only if it is accurate and
+  clearly an explanation, not another reported fact.
 
 Style examples only; never copy their claims into an unrelated story:
   Stiff: The update facilitates local inference.
@@ -56,11 +66,15 @@ Style examples only; never copy their claims into an unrelated story:
 
 Before returning copy, silently read the carousel from cover to CTA. Replace
 words a new reader would struggle with, remove repetition, and check that each
-slide follows naturally. Stay within the existing slide and text budgets; do
-not add slides, change the output schema, or rewrite approved text outside the
+slide follows naturally. Stay within the slide and text budget you were given;
+do not add slides, change the output schema, or rewrite approved text outside the
 current task. This standard replaces conflicting defaults about punchiness or
-curiosity gaps. Specific human feedback still guides the requested edit, while
-accuracy and the saved design remain required.
+curiosity gaps. Read any past preference or learned rule that caps the words
+on a body-slide line, or asks for short, punchy, or bullet-style body lines,
+as a request for shorter slides: fewer sentences, well inside the design's
+text budget, still complete sentences and never fragments. Specific human
+feedback still guides the requested edit, while accuracy and the saved design
+remain required.
 """
 
 

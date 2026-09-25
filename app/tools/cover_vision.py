@@ -57,11 +57,36 @@ PROBLEMS = (
     "document_or_slide",
     "screen_recording_or_webpage",
     "talking_head",
+    "publisher_branding",
+    "ai_illustration",
     "logo_only",
     "generic_stock",
     "unrelated",
     "low_quality",
 )
+# Problems that rule a candidate out whatever the model's verdict says. The
+# cover must be real, sourced media; an AI picture or illustration never is.
+_HARD_REJECT_PROBLEMS = ("ai_illustration",)
+# A video only passes when this many sampled frames would each work as a
+# cover. One good B-roll frame in a presenter-led news package is not a clip.
+_MIN_USABLE_VIDEO_FRAMES = 3
+# Wide subjects (group shots, side-by-side portraits) are laid across the top
+# of the cover instead of being cropped to 4:5, which keeps one face at most.
+_BAND_MIN_ASPECT = 1.2
+_BAND_TARGET_ASPECT = 1080 / 756  # full width over the visible top ~56%
+_BAND_FADE_FRACTION = 0.22
+_FOCUS_MARGIN = 0.04
+# A clean box smaller than this is a misread (the logo itself was boxed, say);
+# cropping to it would blow a scrap of the frame up to cover size.
+_CLEAN_MIN_AREA = 0.35
+# Trimming a logo off an edge may cost a little of the subject. Losing more
+# than this means the logo sits on the subject, and hiding it would cut the
+# subject up or leave it out entirely.
+_CLEAN_MIN_FOCUS_KEPT = 0.85
+# The top of a subject box is where the faces are. A clean box may trim a
+# loose top edge, but one that starts lower than this share of the subject's
+# height cuts the heads to leave out a ticker or bug above them.
+_CLEAN_MAX_TOP_CUT = 0.04
 
 
 @dataclass(frozen=True)
@@ -126,7 +151,11 @@ def contact_sheet(media_path: str, is_video: bool, workdir: str = "") -> Sheet:
         return Sheet(out, [0.0])
 
     duration = media_tools._media_duration(media)
-    times = [duration * f for f in _SHEET_FRACTIONS] if duration > 0 else [0.0]
+    # Only offer moments a cover clip can START on. A frame near the end of
+    # the file cannot open a clip of the minimum length, and retrimming used
+    # to slide the start earlier - so the approved frame never shipped.
+    span = max(duration - float(settings.cover_clip_min_s), 0.0)
+    times = [span * f for f in _SHEET_FRACTIONS] if span > 0 else [0.0]
     frames: list[tuple[float, Image.Image]] = []
     for index, timestamp in enumerate(times):
         frame = _extract_frame(media, timestamp, wd / f"frame-{stem}-{index}.png")
@@ -170,21 +199,46 @@ Reject (verdict "reject") when the best frame is mainly:
 - screen_recording_or_webpage: a browser, app window or site screenshot,
   unless a clear photo or video of the subject inside it can be cropped out
   (then set focus on that photo and keep verdict "use")
-- talking_head: a news anchor, host or presenter who is not the story's subject
+- talking_head: a news anchor, host, presenter, YouTuber or interviewer who
+  is not the story's subject
+- publisher_branding: another news outlet's or channel's logo, watermark,
+  channel bug, lower-third or burned-in caption that cannot be left outside
+  the "clean" box below
+- ai_illustration: an AI-generated picture, drawing, digital illustration
+  or 3D render rather than a real photo or real footage
 - logo_only, generic_stock, unrelated, low_quality
+
+Several frames means a video. Judge the video, not just its luckiest frame:
+a news channel's explainer or report (a presenter talking, their logo in a
+corner, lower-thirds) is someone else's package and must be rejected even
+if one frame shows useful B-roll. Official footage of the event, product,
+demo or people themselves is what we want. Count how many frames would each
+work as the cover on their own.
 
 Answer with JSON only:
 {"best_frame": <number on the frame's label>,
  "score": <0-10 for the best frame as a cover>,
  "verdict": "use" | "reject",
  "problems": [<zero or more of the problem names above, for the best frame>],
+ "usable_frames": <how many of the frames would each work as the cover>,
  "focus": {"x": 0-1, "y": 0-1, "w": 0-1, "h": 0-1} or null,
+ "clean": {"x": 0-1, "y": 0-1, "w": 0-1, "h": 0-1} or null,
  "reason": "<one short sentence>"}
 
-focus is the box around the subject inside the best frame, as fractions of
-that frame's own width and height (x, y is the top-left corner). Keep it
-tight around what the viewer should see, but include the whole subject. Use
-null when the whole frame is the subject or no crop would help.
+All boxes are fractions of the best frame's own width and height (x, y is
+the top-left corner).
+focus: the box around the subject. Include the whole subject - every person
+in a group shot, every face in side-by-side portraits - and nothing else.
+Always give a box for a group shot, several people or side-by-side
+portraits, even when it covers nearly the whole frame: that box is how the
+cover knows to keep every one of them. Use null only for a scene with no
+single subject to keep, where any 4:5 part of the frame would work.
+clean: the largest box with NO logo, watermark, channel bug, lower-third,
+caption or burned-in text from any outlet. It should hold the whole focus
+box. When a corner bug or caption touches the subject, the clean box may
+leave out a thin strip (up to about a tenth) of the focus box's bottom or of
+one side, but never its top, where the faces are. Use null when the whole
+frame is clean, or when no such box exists (then list publisher_branding).
 """
 
 
@@ -202,6 +256,21 @@ def _client() -> Any:
     return ai_config.current().client.with_options(timeout=90)
 
 
+def _box(raw: Any) -> Optional[dict]:
+    """A 0-1 box clipped to the frame, or ``None`` when absent or degenerate."""
+    if not isinstance(raw, dict):
+        return None
+    try:
+        x, y = (min(max(float(raw[k]), 0.0), 1.0) for k in ("x", "y"))
+        w = min(max(float(raw["w"]), 0.0), 1.0 - x)
+        h = min(max(float(raw["h"]), 0.0), 1.0 - y)
+    except (KeyError, TypeError, ValueError):
+        return None
+    if w <= 0.02 or h <= 0.02:
+        return None
+    return {"x": x, "y": y, "w": w, "h": h}
+
+
 def _parse_verdict(text: str, frame_count: int) -> dict:
     match = re.search(r"\{.*\}", text or "", re.S)
     data = json.loads(match.group(0) if match else text)
@@ -209,24 +278,39 @@ def _parse_verdict(text: str, frame_count: int) -> dict:
     best = min(max(best, 1), frame_count)
     score = min(max(int(data.get("score") or 0), 0), 10)
     verdict = "use" if str(data.get("verdict", "")).lower() == "use" else "reject"
-    problems = [p for p in (data.get("problems") or []) if p in PROBLEMS]
-    focus = data.get("focus") or None
-    if isinstance(focus, dict):
-        try:
-            focus = {k: min(max(float(focus[k]), 0.0), 1.0) for k in ("x", "y", "w", "h")}
-            if focus["w"] <= 0.02 or focus["h"] <= 0.02:
-                focus = None
-        except (KeyError, TypeError, ValueError):
-            focus = None
-    else:
-        focus = None
+    raw_problems = data.get("problems") or []
+    if isinstance(raw_problems, str):  # one name instead of a list
+        raw_problems = [raw_problems]
+    named = (str(p).strip().lower() for p in raw_problems)
+    problems = [p for p in named if p in PROBLEMS]
+    try:
+        usable = int(data.get("usable_frames"))
+    except (TypeError, ValueError):
+        usable = frame_count if verdict == "use" else 0
+    usable = min(max(usable, 0), frame_count)
+    reason = str(data.get("reason") or "")[:300]
+    # Enforced here, not left to the model: a video where only one or two
+    # sampled moments work is a presenter-led package with a little B-roll.
+    if frame_count >= 4 and verdict == "use" and usable < _MIN_USABLE_VIDEO_FRAMES:
+        verdict = "reject"
+        reason = f"only {usable} of {frame_count} frames work as a cover. {reason}".strip()
+    hard = [p for p in problems if p in _HARD_REJECT_PROBLEMS]
+    if hard and verdict == "use":
+        verdict = "reject"
+        reason = f"not a real photo or footage ({', '.join(hard)}). {reason}".strip()
+    focus = _box(data.get("focus"))
+    clean = _box(data.get("clean"))
+    if clean is not None and clean["w"] * clean["h"] > 0.97:
+        clean = None
     return {
         "best_frame": best,
         "score": score,
         "verdict": verdict,
         "problems": problems,
+        "usable_frames": usable,
         "focus": focus,
-        "reason": str(data.get("reason") or "")[:300],
+        "clean": clean,
+        "reason": reason,
     }
 
 
@@ -305,12 +389,14 @@ def focus_crop_box(
     """Turn a subject box into a 4:5 crop that keeps the subject visible.
 
     The subject is centred horizontally and placed inside the top
-    ``_VISIBLE_TOP_FRACTION`` of the crop, above the title shadow.
+    ``_VISIBLE_TOP_FRACTION`` of the crop, above the title shadow. A subject
+    taller than that area keeps its top (the faces) and loses its foot.
 
     Returns:
         ``(left, top, width, height)`` in source pixels, or ``None`` when the
-        crop would be close to the whole usable frame (the renderer's own
-        subject-aware crop already covers that case).
+        crop would be close to the whole source on both axes, or the focus is
+        the whole frame (the renderer's own subject-aware crop already covers
+        those cases).
     """
     aspect = settings.slide_width / settings.slide_height
     fx, fy = focus["x"] * source_w, focus["y"] * source_h
@@ -323,12 +409,21 @@ def focus_crop_box(
     shrink = min(1.0, source_w / crop_w, source_h / crop_h)
     crop_w, crop_h = crop_w * shrink, crop_h * shrink
 
-    full_w = min(source_w, source_h * aspect)
-    if crop_w >= full_w * _FOCUS_NOOP_FRACTION:
+    # A no-op only when the crop is (nearly) the whole source on BOTH axes, or
+    # the focus is the whole frame and so carries no position to honour. A
+    # full-height crop of a 16:9 frame (or a full-width one of a 9:16 frame)
+    # still has to be PLACED, and the judge's box is what places it; the
+    # renderer's saliency crop happily picks a busy slide over the person.
+    whole_source = (
+        crop_w >= source_w * _FOCUS_NOOP_FRACTION
+        and crop_h >= source_h * _FOCUS_NOOP_FRACTION
+    )
+    whole_focus = focus["w"] >= _FOCUS_NOOP_FRACTION and focus["h"] >= _FOCUS_NOOP_FRACTION
+    if whole_source or whole_focus:
         return None
 
     left = fx + fw / 2 - crop_w / 2
-    top = fy + fh / 2 - crop_h * _VISIBLE_TOP_FRACTION / 2
+    top = min(fy + fh / 2 - crop_h * _VISIBLE_TOP_FRACTION / 2, fy)
     left = min(max(left, 0.0), source_w - crop_w)
     top = min(max(top, 0.0), source_h - crop_h)
     width, height = int(crop_w) // 2 * 2, int(crop_h) // 2 * 2  # even, for H.264
@@ -347,41 +442,214 @@ def _video_size(media: Path) -> tuple[int, int]:
     return int(width), int(height)
 
 
-def apply_focus(media_path: str, is_video: bool, focus: dict, workdir: str = "") -> str:
-    """Crop the media to its subject; returns the input path when no crop helps.
+@dataclass(frozen=True)
+class Layout:
+    """How the cover uses its source media, in source pixels.
+
+    ``mode`` is ``"crop"`` (cut ``box`` out; the renderer fills the 4:5 cover
+    with it) or ``"band"`` (scale ``box`` to the full cover width, lay it
+    across the top at ``band_h`` pixels tall and fade it into the black title
+    area). ``box`` is ``(left, top, width, height)``.
+    """
+
+    mode: str
+    box: tuple[int, int, int, int]
+    band_h: int = 0
+
+
+def _even(value: float) -> int:
+    return max(2, int(value) // 2 * 2)
+
+
+def _trusted_clean(focus: Optional[dict], clean: Optional[dict]) -> Optional[dict]:
+    """The clean box, or ``None`` when using it would cost the subject.
+
+    The judge is asked for a clean box that holds the whole subject, or all
+    but a thin strip of its bottom or one side, but that is impossible when a
+    logo sits on the subject, and a verdict rejected for
+    branding keeps its clean box too. The subject wins: the cover keeps the
+    whole subject (and the logo) rather than a crop without the subject.
+    A small trim is allowed off the bottom or a side (a lower-third, a corner
+    bug beside the subject), but not off the top, where the heads are.
+    """
+    if clean is None:
+        return None
+    if clean["w"] * clean["h"] < _CLEAN_MIN_AREA:
+        logger.warning("ignoring clean box %s: too small to be the logo-free area", clean)
+        return None
+    if focus is not None:
+        ix = min(focus["x"] + focus["w"], clean["x"] + clean["w"]) - max(focus["x"], clean["x"])
+        iy = min(focus["y"] + focus["h"], clean["y"] + clean["h"]) - max(focus["y"], clean["y"])
+        if max(ix, 0.0) * max(iy, 0.0) < _CLEAN_MIN_FOCUS_KEPT * focus["w"] * focus["h"]:
+            logger.warning("ignoring clean box %s: it would cut the subject %s", clean, focus)
+            return None
+        if clean["y"] - focus["y"] > _CLEAN_MAX_TOP_CUT * focus["h"]:
+            logger.warning("ignoring clean box %s: it would cut the top of the subject %s", clean, focus)
+            return None
+    return clean
+
+
+def plan_layout(
+    source_w: int, source_h: int, focus: Optional[dict], clean: Optional[dict] = None
+) -> Optional[Layout]:
+    """Decide how to show the subject without burying it or cutting it up.
+
+    Everything happens inside the clean area (the part of the frame with no
+    other outlet's logo or captions). Then:
+
+    - a subject that fits a 4:5 crop with room above the title shadow gets
+      that crop (:func:`focus_crop_box`);
+    - a wide subject that cannot - side-by-side portraits, a group on stage,
+      or any subject wider than the widest 4:5 crop of the clean area -
+      becomes a full-width band across the top. Cropping it to 4:5 kept one
+      face, huge and blurry, with its mouth under the title, or cut the
+      outer people through the shoulders;
+    - with no subject box, the clean area is cropped out and the renderer's
+      own subject-aware crop does the rest.
+
+    A clean box that is tiny or would cut the subject is ignored
+    (:func:`_trusted_clean`): the subject matters more than a logo.
+
+    Returns:
+        The layout, or ``None`` when the renderer's default crop is already
+        right (no subject box, whole frame clean).
+    """
+    clean = _trusted_clean(focus, clean)
+    cx, cy, cw, ch = 0.0, 0.0, float(source_w), float(source_h)
+    if clean is not None:
+        cx, cy = clean["x"] * source_w, clean["y"] * source_h
+        cw, ch = clean["w"] * source_w, clean["h"] * source_h
+    if focus is None:
+        if clean is None:
+            return None
+        return Layout("crop", (int(cx), int(cy), _even(cw), _even(ch)))
+
+    # Subject box in source pixels, clipped to the clean area, with a margin.
+    fx0 = max(focus["x"] * source_w, cx)
+    fy0 = max(focus["y"] * source_h, cy)
+    fx1 = min((focus["x"] + focus["w"]) * source_w, cx + cw)
+    fy1 = min((focus["y"] + focus["h"]) * source_h, cy + ch)
+    if fx1 - fx0 < 8 or fy1 - fy0 < 8:  # a few pixels: nothing to place
+        return Layout("crop", (int(cx), int(cy), _even(cw), _even(ch))) if clean else None
+    subject_w = fx1 - fx0
+    mx, my = (fx1 - fx0) * _FOCUS_MARGIN, (fy1 - fy0) * _FOCUS_MARGIN
+    fx0, fy0 = max(fx0 - mx, cx), max(fy0 - my, cy)
+    fx1, fy1 = min(fx1 + mx, cx + cw), min(fy1 + my, cy + ch)
+    fw, fh = fx1 - fx0, fy1 - fy0
+
+    aspect = settings.slide_width / settings.slide_height
+    needed_h = max(fh / _VISIBLE_TOP_FRACTION, fw / aspect)
+    # A group of two or three standing people is not very wide for its
+    # height, but it can still be wider than any 4:5 crop of the frame, and
+    # squeezing it into one cuts the outer people in half.
+    too_wide = subject_w > ch * aspect
+    if needed_h > ch and (fw / fh >= _BAND_MIN_ASPECT or too_wide):
+        # Grow the band downward/upward toward the visible top area's shape,
+        # never past the clean area, so the subject gets as much height as
+        # the frame can give it.
+        band_h = min(max(fh, fw / _BAND_TARGET_ASPECT), ch)
+        top = min(max(fy0 + fh / 2 - band_h / 2, cy), cy + ch - band_h)
+        width = max(fw, min(_MIN_FOCUS_CROP_W, cw))
+        left = min(max(fx0 + fw / 2 - width / 2, cx), cx + cw - width)
+        box = (int(left), int(top), _even(width), _even(band_h))
+        out_h = _even(settings.slide_width * box[3] / box[2])
+        return Layout("band", box, min(out_h, settings.slide_height))
+
+    local = {
+        "x": (fx0 - cx) / cw, "y": (fy0 - cy) / ch,
+        "w": fw / cw, "h": fh / ch,
+    }
+    inner = focus_crop_box(int(cw), int(ch), local)
+    if inner is None:
+        if clean is None:
+            return None
+        return Layout("crop", (int(cx), int(cy), _even(cw), _even(ch)))
+    left, top, width, height = inner
+    return Layout("crop", (int(cx) + left, int(cy) + top, width, height))
+
+
+def _band_fade(band_h: int, out: Path) -> Path:
+    """A 1080x1350 overlay: clear over the band, fading to black at its foot."""
+    width, height = settings.slide_width, settings.slide_height
+    fade = max(90, round(band_h * _BAND_FADE_FRACTION))
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    for row in range(max(band_h - fade, 0), height):
+        progress = min(1.0, (row - (band_h - fade) + 1) / fade)
+        draw.line([(0, row), (width, row)], fill=(0, 0, 0, round(255 * progress ** 1.3)))
+    overlay.save(out)
+    return out
+
+
+def apply_focus(
+    media_path: str,
+    is_video: bool,
+    focus: Optional[dict],
+    workdir: str = "",
+    clean: Optional[dict] = None,
+) -> str:
+    """Prepare the media for the cover according to :func:`plan_layout`.
+
+    A crop layout returns the cropped media. A band layout returns media that
+    is already 1080x1350 (the band on top, black below), which the renderer's
+    4:5 fill then leaves untouched. Returns the input path when the default
+    crop is already right.
 
     Raises:
-        RuntimeError: When the crop cannot be rendered.
+        RuntimeError: When the media cannot be read or rendered.
     """
     media = Path(media_path)
     wd = media_tools._ensure_workdir(workdir, "inspect")
     stem = uuid.uuid4().hex[:10]
+    width, height = settings.slide_width, settings.slide_height
+
     if not is_video:
         with Image.open(media) as image:
             source = image.convert("RGB")
-        box = focus_crop_box(source.width, source.height, focus)
-        if box is None:
+        layout = plan_layout(source.width, source.height, focus, clean)
+        if layout is None:
             return str(media)
-        left, top, width, height = box
+        left, top, box_w, box_h = layout.box
+        cropped = source.crop((left, top, left + box_w, top + box_h))
         out = wd / f"focus-{stem}.png"
-        source.crop((left, top, left + width, top + height)).save(out)
+        if layout.mode == "crop":
+            cropped.save(out)
+            return str(out)
+        canvas = Image.new("RGB", (width, height), (0, 0, 0))
+        canvas.paste(cropped.resize((width, layout.band_h), Image.Resampling.LANCZOS), (0, 0))
+        fade = Image.open(_band_fade(layout.band_h, wd / f"fade-{stem}.png"))
+        canvas.paste(fade, (0, 0), fade)
+        canvas.save(out)
         return str(out)
 
     try:
         source_w, source_h = _video_size(media)
     except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(f"could not read video size: {exc}") from exc
-    box = focus_crop_box(source_w, source_h, focus)
-    if box is None:
+    layout = plan_layout(source_w, source_h, focus, clean)
+    if layout is None:
         return str(media)
-    left, top, width, height = box
+    left, top, box_w, box_h = layout.box
     out = wd / f"focus-{stem}.mp4"
+    encode = [
+        "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out),
+    ]
+    if layout.mode == "crop":
+        media_tools._run_ffmpeg(
+            [settings.ffmpeg_bin, "-y", "-i", str(media),
+             "-vf", f"crop={box_w}:{box_h}:{left}:{top}", *encode]
+        )
+        return str(out)
+    fade = _band_fade(layout.band_h, wd / f"fade-{stem}.png")
     media_tools._run_ffmpeg(
         [
-            settings.ffmpeg_bin, "-y", "-i", str(media),
-            "-vf", f"crop={width}:{height}:{left}:{top}",
-            "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
-            "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out),
+            settings.ffmpeg_bin, "-y", "-i", str(media), "-loop", "1", "-i", str(fade),
+            "-filter_complex",
+            f"[0:v]crop={box_w}:{box_h}:{left}:{top},scale={width}:{layout.band_h},"
+            f"pad={width}:{height}:0:0:black,setsar=1[band];"
+            "[band][1:v]overlay=0:0:format=auto:shortest=1[out]",
+            "-map", "[out]", *encode,
         ]
     )
     return str(out)

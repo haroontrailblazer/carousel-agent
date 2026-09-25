@@ -202,12 +202,71 @@ def _slide_texts(slide: SlideCopy) -> tuple[str, list[str]]:
     return lines[0], lines[1:]
 
 
-def _layout_hint(slide: SlideCopy) -> str:
-    """Choose a content-aware visual archetype without changing copy/state."""
+# Plan purposes read "Reader asks: <question>? Payoff: <...>. Visual: <job>."
+_READER_QUESTION_RE = re.compile(r"reader asks:.*?(?:\?|(?=\bpayoff:)|$)", re.IGNORECASE | re.DOTALL)
+# The Visual part ends at the first clause break (". , ; : ! ?" before a space,
+# " - ", or "("), so a note after it ("Visual: technical proof, identify the
+# source") is never read as the visual job. "Node.js" and "$6,500" do not end it.
+_VISUAL_JOB_RE = re.compile(
+    r"\bvisual:\s*((?:(?![.,;:!?](?:\s|$))(?!\s+-\s)[^\n(])+)", re.IGNORECASE,
+)
+# Archetype names the planner may give in a purpose's Visual part, checked in
+# this order ("data proof" is data, "technical proof" is dark proof).
+_NAMED_ARCHETYPES = (
+    (re.compile(r"\b(data|numbers?|chart)\b"), "data evidence"),
+    (re.compile(r"\b(process|mechanism|steps?|sequence)\b"), "process line"),
+    (re.compile(r"\b(comparison|compare|contrast|versus)\b"), "comparison"),
+    (re.compile(r"\b(technical|dark|interface)\b"), "dark proof"),
+    # "Evidence" means data only when nothing more specific is named:
+    # "technical evidence" is dark proof.
+    (re.compile(r"\bevidence\b"), "data evidence"),
+    (re.compile(r"\b(statement|pause)\b"), "statement pause"),
+    # "Visual: the real subject" shows the cover's person, product or place.
+    (re.compile(r"\b(editorial|explainer|subject|person|people|product|photo|place)\b"), "editorial explainer"),
+)
+# A day next to a month name ("July 23", "23 July") is a date, not a statistic.
+_MONTH = (
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+    r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b\.?"
+)
+_MONTH_DAY_RE = re.compile(
+    rf"\b{_MONTH}\s+\d{{1,2}}(?:st|nd|rd|th)?\b|\b\d{{1,2}}(?:st|nd|rd|th)?\s+{_MONTH}"
+)
+
+
+def _purpose_visual_job(plan_slide: SlidePlan | None) -> str:
+    """The part of a plan purpose that instructs the visual, lowercased.
+
+    The reader's question is not a visual instruction ("Reader asks: who are
+    they?" must not pull in the cover subject), so it never counts. A purpose
+    with a Visual part counts only that part; an older free-text purpose
+    counts whole, as before.
+    """
+    if plan_slide is None:
+        return ""
+    match = _VISUAL_JOB_RE.search(plan_slide.purpose)
+    if match:
+        return match.group(1).strip().lower()
+    return _READER_QUESTION_RE.sub(" ", plan_slide.purpose).lower()
+
+
+def _layout_hint(slide: SlideCopy, plan_slide: SlidePlan | None = None) -> str:
+    """Choose a content-aware visual archetype without changing copy/state.
+
+    An archetype the planner named in the purpose's Visual part wins. Word
+    cues in the copy are the fallback: paragraph copy uses words such as
+    "new" or "then" in passing, so on their own they would pick the same
+    archetype for most slides.
+    """
+    visual = _VISUAL_JOB_RE.search(plan_slide.purpose) if plan_slide is not None else None
+    if visual:
+        for pattern, hint in _NAMED_ARCHETYPES:
+            if pattern.search(visual.group(1).lower()):
+                return hint
     text = " ".join(slide.lines).lower()
     if re.search(r"\b(vs\.?|versus|compare|comparison|before|after|old|new)\b", text):
         return "comparison"
-    number_tokens = re.findall(r"\b\d[\d,]*\b", text)
+    number_tokens = re.findall(r"\b\d[\d,]*\b", _MONTH_DAY_RE.sub(" ", text))
     has_non_year_number = any(
         not (token.isdigit() and 1900 <= int(token) <= 2099)
         for token in number_tokens
@@ -238,12 +297,22 @@ def _body_display_numbers(slides: list[SlideCopy]) -> dict[int, int]:
     }
 
 
+# The whole grounding block an image prompt gets (story plus this slide).
+_VISUAL_CONTEXT_CHARS = 2800
+
+
 def _visual_context(
     news: NewsItem | None,
     research: ResearchBrief | None,
     plan_slide: SlidePlan | None,
 ) -> str:
-    """Build a compact source-of-truth block for visual generation."""
+    """Build a compact source-of-truth block for visual generation.
+
+    The story context comes first and this slide's purpose and points last,
+    but only the story context is shortened to fit: a scraped news summary
+    can run to 2000 characters, and cutting the joined block used to drop
+    every slide's own part, so all images got the same grounding.
+    """
     sections: list[str] = []
     if news is not None:
         if news.title.strip():
@@ -256,20 +325,24 @@ def _visual_context(
         facts = [fact.fact.strip() for fact in research.key_facts if fact.fact.strip()]
         if facts:
             sections.append("Verified facts: " + " | ".join(facts[:6]))
+    slide_sections: list[str] = []
     if plan_slide is not None:
         if plan_slide.purpose.strip():
-            sections.append(f"This slide's purpose: {plan_slide.purpose.strip()}")
+            slide_sections.append(f"This slide's purpose: {plan_slide.purpose.strip()}")
         points = [point.strip() for point in plan_slide.key_points if point.strip()]
         if points:
-            sections.append("This slide's approved points: " + " | ".join(points))
-    return "\n".join(sections)[:2800]
+            slide_sections.append("This slide's approved points: " + " | ".join(points))
+    slide_part = "\n".join(slide_sections)[:_VISUAL_CONTEXT_CHARS]
+    room = max(_VISUAL_CONTEXT_CHARS - len(slide_part) - 1, 0)
+    story_part = "\n".join(sections)[:room].rstrip()
+    return "\n".join(part for part in (story_part, slide_part) if part)
 
 
 def _needs_subject_reference(plan_slide: SlidePlan | None) -> bool:
     """True when the slide must visibly identify the exact news subject."""
     if plan_slide is None:
         return False
-    purpose = plan_slide.purpose.lower()
+    purpose = _purpose_visual_job(plan_slide)
     return bool(
         re.search(
             r"\b(introduce|identify|identity|subject|meet)\b|"
@@ -419,8 +492,8 @@ async def render_body_slides(
         try:
             # generate_slide_image blocks on a slow image API call - keep the
             # event loop free by running it in a worker thread.
-            layout_hint = _layout_hint(slide)
             plan_slide = plan_slides.get(slide.index)
+            layout_hint = _layout_hint(slide, plan_slide)
             written = await asyncio.to_thread(
                 image_gen.generate_slide_image,
                 template_ref,

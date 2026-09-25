@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agents import cta, phrasing, planner
+from app.agents import cta, feedback_router, phrasing, planner
 from app.editorial_voice import WRITING_STANDARD
 from app.schemas import CopySet
 from app.state import K_COPY
@@ -34,6 +34,7 @@ def test_writing_standard_reaches_all_copy_producing_agents(monkeypatch, custom)
     (planner, "planner.md", "_DEFAULT_INSTRUCTION"),
     (phrasing, "phrasing.md", "DEFAULT_INSTRUCTION"),
     (cta, "cta.md", "_DEFAULT_INSTRUCTION"),
+    (feedback_router, "feedback_router.md", "DEFAULT_INSTRUCTION"),
 ])
 def test_fallback_prompts_match_the_shipped_instructions(module, filename, constant):
     path = Path(__file__).resolve().parents[1] / "skills/agents" / filename
