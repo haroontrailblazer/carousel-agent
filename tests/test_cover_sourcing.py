@@ -9,10 +9,12 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from typing import Any, Optional
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app.config import settings
 from app.tools import media_tools
@@ -23,6 +25,8 @@ CONTRACT_KEYS = {
     "image_candidates", "image_first", "video_url", "video_duration_s", "video_origin",
     "trend_search", "note",
 }
+# One image_candidates entry (C6); width/height are 0 when unknown.
+CANDIDATE_KEYS = {"url", "origin", "score", "reason", "context_url", "width", "height"}
 
 PAGE = "https://news.example.com/2026/widget-agent-launch"
 PAGE_PHOTO = "https://cdn.news.example.com/widget-agent-launch-photo.jpg"
@@ -45,8 +49,17 @@ def _run(
     fetched: Optional[list[str]] = None,
     limit: Optional[int] = None,
     research_media: Optional[list[str]] = None,
+    sizes: Optional[dict[str, tuple[int, int]]] = None,
+    measured: Optional[list[str]] = None,
+    probed: Optional[list[str]] = None,
+    provenance: Optional[dict] = None,
 ) -> dict:
-    """find_source_clip with every network call replaced by the given fakes."""
+    """find_source_clip with every network call replaced by the given fakes.
+
+    ``sizes`` is what the image size probe measures (nothing by default);
+    ``measured`` and ``probed`` collect the URLs sent to the size probe and
+    to yt-dlp; ``provenance`` is passed through (filled in place).
+    """
     pages = pages or {}
     probes = probes or {}
 
@@ -55,20 +68,31 @@ def _run(
             fetched.append(url)
         return list(pages.get(url, []))
 
+    def measure(urls: list[str]) -> dict[str, tuple[int, int]]:
+        if measured is not None:
+            measured.extend(urls)
+        return {url: size for url, size in (sizes or {}).items() if url in urls}
+
+    def probe(url: str) -> Optional[dict[str, Any]]:
+        if probed is not None:
+            probed.append(url)
+        return probes.get(url)
+
     with (
         patch.object(media_tools, "_scrape_page_media", side_effect=scrape),
         patch.object(
             media_tools, "_search_trending_pages",
             return_value=(list(trend), f"live trend search checked {len(trend)} page(s)"),
         ),
-        patch.object(media_tools, "_probe_with_ytdlp", side_effect=lambda url: probes.get(url)),
+        patch.object(media_tools, "_probe_with_ytdlp", side_effect=probe),
+        patch.object(media_tools, "_probe_image_sizes", side_effect=measure),
         patch.object(media_tools, "_search_video_online", return_value=video),
         patch.object(
             media_tools, "_IMAGE_CANDIDATE_LIMIT",
             limit or media_tools._IMAGE_CANDIDATE_LIMIT,
         ),
     ):
-        return media_tools.find_source_clip(news, "", research, research_media)
+        return media_tools.find_source_clip(news, "", research, research_media, provenance=provenance)
 
 
 def _urls(result: dict) -> list[str]:
@@ -241,7 +265,9 @@ class LeadMediaTests(unittest.TestCase):
             ("https://example.com/assets/site-logo.png", "image", 48),
             ("https://images.example.com/2026/09/ChatGPT-Image-Sep-19-2026.png", "image", 48),
             (second + "?resize=600,400", "image", 48),
-            ("https://images.example.com/2026/09/tiny-promo.jpg?w=320", "image", 48),
+            # A size in the file name is the picture's only size: no bigger
+            # variant can be asked for, so it stays a thumbnail.
+            ("https://images.example.com/2026/09/tiny-promo-320-80.jpg", "image", 48),
             (second + "?w=1600", "image", 48),
             ("https://www.youtube.com/embed/abc123", "video", 80),
         ]
@@ -265,6 +291,24 @@ class LeadMediaTests(unittest.TestCase):
             [url for url, _, _ in found],
             [f"https://images.example.com/2026/09/story-photo-{i}.jpg" for i in range(1, 5)],
         )
+
+    def test_lead_photo_linked_small_is_judged_at_the_size_its_cdn_serves(self) -> None:
+        # The ABC lead photo of run-34fdc2b246c7: 862x485 as linked (a
+        # thumbnail), 1600x900 when asked for (verified live).
+        abc = (
+            "https://live-production.wcms.abc-cdn.net.au/a189857205dc3e258a069e44bf2c6b08"
+            "?impolicy=wcms_watermark_news&cropH=1080&cropW=1920&xPos=0&yPos=0"
+            "&width=862&height=485&imformat=generic"
+        )
+        page = [
+            (abc, "image", 45),
+            ("https://www.abc.net.au/res/abc/logos/abc-news.svg", "image", 48),
+            ("https://sb.scorecardresearch.com/p?c1=2&c2=6035598", "image", 48),
+        ]
+        with patch.object(media_tools, "_scrape_page_media", return_value=page):
+            found = media_tools._scrape_lead_media(PAGE)
+
+        self.assertEqual([url for url, _, _ in found], [abc])
 
     def test_chrome_filter_reads_the_image_path_not_the_story(self) -> None:
         for url in [
@@ -343,6 +387,9 @@ class ResultContractTests(unittest.TestCase):
             with self.subTest(branch=label):
                 self.assertEqual(set(result), CONTRACT_KEYS)
                 self.assertIsInstance(result["video_duration_s"], float)
+                for entry in result["image_candidates"]:
+                    self.assertEqual(set(entry), CANDIDATE_KEYS)
+        self.assertTrue(results["image fallback"]["image_candidates"])
         self.assertFalse(results["nothing"]["found"])
         for label in ("nothing", "image fallback", "video pick"):
             self.assertEqual(
@@ -589,6 +636,314 @@ class ResearchRankingTests(unittest.TestCase):
         self.assertEqual(result["url"], EXPLAINER["url"])
 
 
+BBC_ARTICLE = "https://www.bbc.com/news/articles/cw24jm9rryy3o"
+ABC_ARTICLE = "https://www.abc.net.au/news/2026-09-24/albanese-openai-hacking-announcement/107189520"
+_ICHEF = "https://ichef.bbci.co.uk/news/{}/cpsprodpb/{}.jpg.webp"
+_ICHEF_IDS = (
+    "c694/live/dc86c7a0-a870-11f1-bbad-43eaf67b94b6",
+    "5b70/live/8b2e1e00-b8db-11f1-953d-97bd0803bc08",
+    "fe1e/live/6ddbd170-b954-11f1-96dc-f7c10dbde38b",
+    "f6dc/live/98dd3e90-b7a1-11f1-ba14-197cc9acea52",
+)
+ABC_PHOTO = (
+    "https://live-production.wcms.abc-cdn.net.au/a189857205dc3e258a069e44bf2c6b08"
+    "?impolicy=wcms_watermark_news&cropH=1080&cropW=1920&xPos=0&yPos=0"
+    "&width={}&height={}&imformat=generic"
+)
+# The same crop without the burned-in "ABC NEWS" logo.
+ABC_CLEAN = ABC_PHOTO.replace("wcms_watermark_news", "wcms_crop_resize")
+
+
+class BbcRunReplayTests(unittest.TestCase):
+    """run-34fdc2b246c7: every candidate was a 240/480 px ichef variant or an
+    862x485 ABC variant, download_image refused them all, and no cover was
+    ever built. The page data below is that run's."""
+
+    news = {
+        "title": "Why did an OpenAI system hack Australia's health system - and can it be "
+                 "stopped in the future?",
+        "tags": ["url"],
+        "source_url": BBC_ARTICLE,
+        "published_at": None,
+        "media_urls": [
+            "https://static.files.bbci.co.uk/bbcdotcom/web/20260922-091849-a8520cb5b4-web-3.22.0-3"
+            "/grey-placeholder.png",
+        ] + [_ICHEF.format(480, picture) for picture in _ICHEF_IDS],
+    }
+    pages = {
+        BBC_ARTICLE: [(_ICHEF.format(240, picture), "image", 48) for picture in _ICHEF_IDS],
+        ABC_ARTICLE: [(ABC_PHOTO.format(862, 485), "image", 45)],
+    }
+
+    def test_every_candidate_is_offered_at_cover_size(self) -> None:
+        measured: list[str] = []
+        result = _run(
+            self.news, pages=self.pages, trend=(ABC_ARTICLE,), measured=measured, limit=40,
+        )
+        urls = _urls(result)
+
+        self.assertEqual(
+            sorted(urls),
+            sorted([_ICHEF.format(2048, picture) for picture in _ICHEF_IDS]
+                   + [ABC_CLEAN.format(1600, 900)]),
+        )
+        for entry in result["image_candidates"]:
+            self.assertIn("variant upgraded", entry["reason"])
+        # ABC and ichef URLs state their width, so nothing needs measuring.
+        self.assertEqual(measured, [])
+        self.assertTrue(result["found"])
+        self.assertEqual(result["url"], result["image_url"])
+
+    def test_branded_and_watermarked_variants_become_the_clean_picture(self) -> None:
+        """3 of the replay's top 4 candidates carried another outlet's logo."""
+        branded = "https://ichef.bbci.co.uk/news/1024/branded_news/c694/live/dc86c7a0.jpg"
+        clean = "https://ichef.bbci.co.uk/news/2048/cpsprodpb/c694/live/dc86c7a0.jpg"
+        guardian = "https://www.theguardian.com/australia-news/2026/sep/24/openai-medicare"
+        opinions_card = (
+            "https://i.guim.co.uk/img/media/abc123/0_0_5000_3000/master/5000.jpg?width=1200"
+            "&height=630&quality=85&overlay-align=bottom%2Cleft&overlay-base64=L2ltZy9z&s=5e1e"
+        )
+        pages = {
+            BBC_ARTICLE: [(branded, "image", 45), (clean.replace("2048", "976"), "image", 48)],
+            ABC_ARTICLE: [(ABC_PHOTO.format(862, 485), "image", 45)],
+            guardian: [(opinions_card, "image", 45)],
+        }
+        news = dict(self.news, media_urls=[])
+        result = _run(news, pages=pages, trend=(ABC_ARTICLE, guardian), limit=40)
+        urls = _urls(result)
+
+        self.assertEqual(urls.count(clean), 1)
+        self.assertIn(ABC_CLEAN.format(1600, 900), urls)
+        self.assertIn(
+            "https://i.guim.co.uk/img/media/abc123/0_0_5000_3000/master/5000.jpg"
+            "?width=1600&dpr=1&s=none&crop=none", urls,
+        )
+        self.assertFalse([u for u in urls if "branded_news" in u or "watermark" in u
+                          or "overlay" in u])
+
+    def test_the_story_page_is_not_scraped_again_as_a_trend_result(self) -> None:
+        """A trend hit on the BBC article re-scraped it (17.7 s) and relabelled
+        its photos trend_search, so the branded og:image won the tie."""
+        fetched: list[str] = []
+        result = _run(self.news, pages=self.pages, trend=(BBC_ARTICLE, ABC_ARTICLE),
+                      fetched=fetched, limit=40)
+        self.assertEqual(fetched.count(BBC_ARTICLE), 1)
+        bbc = [c for c in result["image_candidates"] if "ichef" in c["url"]]
+        self.assertTrue(bbc)
+        self.assertTrue(all(c["origin"] in ("source_page", "media_urls") for c in bbc))
+
+
+class CandidateFilterTests(unittest.TestCase):
+    news = {"title": "Widget Agent launch", "tags": ["widget", "agent"]}
+    PIXEL = "https://sb.scorecardresearch.com/p?c1=2&c2=17986528&cv=3.9&cj=1"
+    FB_PIXEL = "https://www.facebook.com/tr?id=123456&ev=PageView&noscript=1"
+
+    def test_junk_and_furniture_never_become_candidates_from_any_origin(self) -> None:
+        body_page = "https://blog.example.com/widget-agent-notes"
+        trend_page = "https://coverage.example.net/widget-agent-launch"
+        photos = {
+            "media_urls": "https://cdn.example.com/2026/09/widget-agent-attached.jpg",
+            "source_page": PAGE_PHOTO,
+            "body_page": "https://blog.example.com/img/widget-agent-desk.jpg",
+            "research_page": COVERAGE_PHOTO,
+            "trend_search": "https://cdn.example.net/widget-agent-launch-stage.jpg",
+        }
+
+        def junk(site: str) -> list[tuple[str, str, int]]:
+            return [
+                (f"https://{site}/brand/og.svg", "image", 45),
+                (self.PIXEL, "image", 48),
+                (f"https://{site}/uploads/2023/06/small-facebook.png", "image", 48),
+                (f"https://{site}/2026/09/promo-320x180.jpg", "image", 48),
+                (f"https://{site}/2026/09/ChatGPT-Image-Sep-19-2026.png", "image", 48),
+            ]
+
+        news = dict(
+            self.news,
+            source_url=PAGE,
+            body=f"Notes: {body_page} and https://cdn.example.com/brand/logo.svg",
+            media_urls=[
+                photos["media_urls"], self.PIXEL, self.FB_PIXEL,
+                "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
+                "https://cdn.example.com/icons/share.svg",
+                "https://media.example.com/uploads/2023/06/small-instagram.png",
+            ],
+        )
+        pages = {
+            PAGE: junk("news.example.com") + [(photos["source_page"], "image", 45)],
+            body_page: junk("blog.example.com") + [(photos["body_page"], "image", 45)],
+            COVERAGE: junk("other.example.org") + [(photos["research_page"], "image", 45)],
+            trend_page: junk("coverage.example.net") + [(photos["trend_search"], "image", 45)],
+        }
+        fetched: list[str] = []
+        probed: list[str] = []
+        result = _run(
+            news, [COVERAGE], pages, trend=(trend_page,), fetched=fetched, probed=probed,
+            limit=40,
+        )
+
+        origins = {entry["url"]: entry["origin"] for entry in result["image_candidates"]}
+        self.assertEqual(origins, {url: origin for origin, url in photos.items()})
+        for url in (self.PIXEL, self.FB_PIXEL):
+            self.assertNotIn(url, fetched)
+            self.assertNotIn(url, probed)
+        self.assertFalse([url for url in fetched + probed if url.startswith("data:")])
+
+    def test_images_too_small_for_a_cover_are_dropped_once_measured(self) -> None:
+        icon = "https://mistral.ai/images/news/mistral-small-4/mistral-small-4.png"
+        avatar = "https://cdn.example.com/2026/09/widget-agent-team.jpg"
+        unknown = "https://cdn.example.com/2026/09/widget-agent-stage.jpg"
+        photo = "https://cdn.example.com/2026/09/widget-agent-keynote.jpg"
+        pages = {PAGE: [(url, "image", 48) for url in (icon, avatar, unknown, photo)]}
+        result = _run(
+            dict(self.news, source_url=PAGE), pages=pages,
+            sizes={icon: (192, 192), avatar: (258, 258), unknown: (0, 0), photo: (1600, 900)},
+        )
+
+        entries = {entry["url"]: entry for entry in result["image_candidates"]}
+        self.assertEqual(set(entries), {unknown, photo})
+        self.assertEqual((entries[photo]["width"], entries[photo]["height"]), (1600, 900))
+        self.assertEqual((entries[unknown]["width"], entries[unknown]["height"]), (0, 0))
+
+    def test_only_the_leading_unsized_images_are_measured(self) -> None:
+        sized = "https://cdn.example.com/2026/09/widget-agent-hero.jpg?w=1600&h=900"
+        unsized = [f"https://cdn.example.com/2026/09/widget-agent-{i}.jpg" for i in range(10)]
+        measured: list[str] = []
+        pages = {PAGE: [(sized, "image", 60)] + [(url, "image", 48) for url in unsized]}
+        result = _run(
+            dict(self.news, source_url=PAGE), pages=pages, measured=measured, limit=40
+        )
+
+        self.assertEqual(len(measured), media_tools._SIZE_PROBE_LIMIT)
+        self.assertNotIn(sized, measured)
+        self.assertEqual(len(result["image_candidates"]), 11)
+        self.assertEqual(
+            (result["image_candidates"][0]["width"], result["image_candidates"][0]["height"]),
+            (1600, 900),
+        )
+
+    def test_nothing_found_points_at_the_reference_photo_rung(self) -> None:
+        result = _run(self.news)
+
+        self.assertFalse(result["found"])
+        self.assertIn("find_reference_photo", result["note"])
+        self.assertNotIn("placeholder", result["note"])
+
+
+class CandidateRankingTests(unittest.TestCase):
+    def _rank(self, url: str, news: dict, context_url: str = "") -> media_tools._MediaCandidate:
+        return media_tools._rank_candidate(
+            media_tools._MediaCandidate(url, "image", 58, "trend_search", context_url),
+            news, "",
+        )
+
+    def test_generated_share_card_ranks_below_a_plain_photo(self) -> None:
+        news = {"title": "Mistral Small 4 launch", "tags": ["mistral"]}
+        card = self._rank("https://docs.mistral.ai//api/og?title=Mistral+Small+4+launch", news)
+        photo = self._rank("https://cdn.example.com/2026/09/team-photo.jpg", news)
+
+        self.assertNotIn("topic match", card.reason)
+        self.assertIn("banner/social card", card.reason)
+        self.assertGreater(photo.score, card.score)
+        # Topic words still count in the picture's own path and its page.
+        named = self._rank(
+            "https://cdn.example.com/2026/09/mistral-small-launch.jpg", news,
+            "https://news.example.com/mistral-small-4",
+        )
+        self.assertIn("topic match", named.reason)
+
+    def test_share_card_markers_need_a_whole_word(self) -> None:
+        news = {"title": "Widget Agent launch", "tags": []}
+        for url in (
+            "https://cdn.example.com/og/widget.png",
+            "https://x.ai/opengraph-image.png",
+            "https://cdn.example.com/2026/09/twitter-card-widget.jpg",
+            "https://cdn.example.com/2026/09/social-share-widget.jpg",
+        ):
+            with self.subTest(url=url):
+                self.assertIn("banner/social card", self._rank(url, news).reason)
+        for url in (
+            "https://cdn.example.com/blog-header/widget.jpg",
+            "https://cdn.example.com/2026/09/catalog-widget.jpg",
+        ):
+            with self.subTest(url=url):
+                self.assertNotIn("banner/social card", self._rank(url, news).reason)
+
+    def test_old_upload_folder_ranks_below_a_current_one(self) -> None:
+        news = {"title": "Widget Agent launch", "tags": [], "published_at": "2026-09-24T08:00:00Z"}
+        old = self._rank("https://site.example/wp-content/uploads/2021/08/widget.jpg", news)
+        new = self._rank("https://site.example/wp-content/uploads/2026/09/widget.jpg", news)
+        last_year = self._rank("https://site.example/wp-content/uploads/2025/09/widget.jpg", news)
+
+        self.assertIn("old upload", old.reason)
+        self.assertLess(old.score, new.score)
+        self.assertNotIn("old upload", last_year.reason)
+        self.assertNotIn("old upload", new.reason)
+
+
+class TrendSearchWindowTests(unittest.TestCase):
+    news = {"title": "Major AI model launches", "tags": [], "published_at": "2026-09-24"}
+    STRICT = {
+        "requested_on": "2026-09-26", "phrase": "this week", "start": "2026-09-20",
+        "end": "2026-09-26", "strict": True, "oldest": "2026-09-20",
+    }
+    SOFT = {
+        "requested_on": "2026-09-26", "phrase": "latest", "start": "2026-09-13",
+        "end": "2026-09-26", "strict": False, "oldest": "2026-08-27",
+    }
+
+    def _query(self, window: Optional[dict]) -> tuple[str, dict]:
+        calls: list[tuple[str, dict]] = []
+
+        def search_web(query: str, **kwargs: Any) -> dict:
+            calls.append((query, kwargs))
+            return {"status": "ok", "answer": "x", "sources": ["https://news.example.com/ai"]}
+
+        with patch("app.tools.research_tools.search_web", side_effect=search_web):
+            pages, note = media_tools._search_trending_pages(self.news, "", time_window=window)
+        self.assertEqual(pages, ["https://news.example.com/ai"])
+        self.assertIn("checked 1 page", note)
+        self.assertEqual(len(calls), 1)
+        return calls[0]
+
+    def test_strict_window_bounds_the_search_to_its_dates(self) -> None:
+        query, kwargs = self._query(self.STRICT)
+
+        self.assertIn("Published between 20 September 2026 and 26 September 2026 (UTC)", query)
+        self.assertNotIn("As of", query)
+        self.assertEqual(kwargs, {"window": self.STRICT, "timeout_s": 60, "attempts": 1})
+
+    def test_soft_window_asks_for_pages_since_its_start(self) -> None:
+        query, kwargs = self._query(self.SOFT)
+
+        self.assertIn("As of 26 September 2026", query)
+        self.assertIn("published since 13 September 2026", query)
+        self.assertEqual(kwargs["timeout_s"], 60)
+        self.assertEqual(kwargs["attempts"], 1)
+
+    def test_no_window_keeps_the_story_date_hint(self) -> None:
+        for window in (None, dict(self.STRICT, start="", oldest="")):
+            with self.subTest(window=window):
+                query, kwargs = self._query(window)
+                self.assertIn("As of 2026-09-24", query)
+                self.assertNotIn("Published between", query)
+                self.assertEqual((kwargs["timeout_s"], kwargs["attempts"]), (60, 1))
+
+    def test_find_source_clip_passes_the_window_to_the_trend_search(self) -> None:
+        with (
+            patch.object(media_tools, "_scrape_page_media", return_value=[]),
+            patch.object(
+                media_tools, "_search_trending_pages", return_value=([], "checked 0 page(s)")
+            ) as trend,
+            patch.object(media_tools, "_probe_with_ytdlp", return_value=None),
+            patch.object(media_tools, "_probe_image_sizes", return_value={}),
+            patch.object(media_tools, "_search_video_online", return_value=None),
+        ):
+            media_tools.find_source_clip(self.news, "ai launches", time_window=self.STRICT)
+
+        self.assertEqual(trend.call_args.kwargs.get("time_window"), self.STRICT)
+
+
 @unittest.skipUnless(
     shutil.which(settings.ffmpeg_bin), "FFmpeg is required to build a two-shot clip"
 )
@@ -824,3 +1179,193 @@ def test_story_page_order_keeps_the_briefs_order_on_ties():
     news = {"title": "Widget Agent launch", "tags": []}
     pages = ["https://a.example/one", "https://b.example/two", "https://c.example/widget-agent"]
     assert media_tools._story_pages_first(pages, news) == [pages[2], pages[0], pages[1]]
+
+
+# ---------------------------------------------------------------------------
+# One search call's cost and what it may pick (BBC re-diagnosis, run-34fdc2b246c7)
+# ---------------------------------------------------------------------------
+
+
+class SearchCostTests(unittest.TestCase):
+    news = {"title": "Widget Agent launch", "tags": ["widget", "agent"], "source_url": PAGE}
+
+    def _call(self, scrape: Any, trend: Any = None, **kwargs: Any) -> dict:
+        with (
+            patch.object(media_tools, "_scrape_page_media", side_effect=scrape),
+            patch.object(media_tools, "_search_trending_pages",
+                         side_effect=trend or (lambda *_a, **_k: ([], "checked 0 page(s)"))),
+            patch.object(media_tools, "_probe_with_ytdlp", return_value=None),
+            patch.object(media_tools, "_probe_image_sizes", return_value={}),
+            patch.object(media_tools, "_search_video_online", return_value=None),
+        ):
+            return media_tools.find_source_clip(self.news, "", [COVERAGE], None, **kwargs)
+
+    def test_a_second_call_reads_the_pages_from_the_step_cache(self) -> None:
+        fetched: list[str] = []
+
+        def scrape(url: str) -> list:
+            fetched.append(url)
+            return [(PAGE_PHOTO, "image", 45)] if url == PAGE else []
+
+        cache: dict = {}
+        first = self._call(scrape, page_cache=cache)
+        second = self._call(scrape, page_cache=cache)
+        self.assertEqual(sorted(fetched), sorted([PAGE, COVERAGE]))
+        self.assertEqual(_urls(first), _urls(second))
+        self.assertEqual(_urls(second), [PAGE_PHOTO])
+
+    def test_the_trend_search_runs_while_the_pages_load(self) -> None:
+        page_started = threading.Event()
+
+        def scrape(url: str) -> list:
+            page_started.set()
+            return [(PAGE_PHOTO, "image", 45)] if url == PAGE else []
+
+        def trend(*_args: Any, **_kwargs: Any) -> tuple:
+            # One after the other, the scrapes would only start after this.
+            return ([], "live") if page_started.wait(5) else ([], "sequential")
+
+        result = self._call(scrape, trend)
+        self.assertEqual(result["trend_search"], "live")
+
+    def test_a_slow_page_is_skipped_within_the_budget_and_not_waited_for_twice(self) -> None:
+        def scrape(url: str) -> list:
+            if url == COVERAGE:
+                time.sleep(3)
+                return [(COVERAGE_PHOTO, "image", 45)]
+            return [(PAGE_PHOTO, "image", 45)]
+
+        cache: dict = {}
+        started = time.monotonic()
+        with patch.object(media_tools, "_SCRAPE_WAIT_S", 0.5):
+            result = self._call(scrape, page_cache=cache, budget_s=20)
+        self.assertLess(time.monotonic() - started, 2.5)
+        self.assertEqual(_urls(result), [PAGE_PHOTO])
+        self.assertIn("1 slow page(s) skipped", result["trend_search"])
+        self.assertEqual(cache[f"lead {media_tools._page_key(COVERAGE)}"], [])
+
+    def test_pdfs_are_never_fetched_and_other_bodies_are_not_read(self) -> None:
+        with patch.object(media_tools.requests, "get") as get:
+            self.assertEqual(media_tools._page_html("https://gov.example/report.pdf"), "")
+        get.assert_not_called()
+
+        class _Pdf:
+            headers = {"Content-Type": "application/pdf"}
+            encoding = None
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def iter_content(self, chunk_size: int = 1) -> Any:
+                raise AssertionError("the body of a non-HTML page was read")
+
+            def close(self) -> None:
+                return None
+
+        with patch.object(media_tools.requests, "get", return_value=_Pdf()):
+            self.assertEqual(media_tools._page_html("https://gov.example/report"), "")
+
+
+class ThirdPartyVideoTests(unittest.TestCase):
+    """The replay's pick was "IN FULL: Anthony Albanese announces OpenAI hack on
+    Medicare data portal | ABC NEWS" (1843 s) over the BBC's own photo, and with
+    an empty query a 36,190 s "LIVE: ABC News Live" stream."""
+
+    news = {
+        "title": "Why did an OpenAI system hack the health system of Australia?",
+        "summary": "Live updates. Watch live September coverage. " * 200,
+        "source_url": BBC_ARTICLE,
+        "tags": [],
+    }
+    STORY = "https://ichef.bbci.co.uk/news/2048/cpsprodpb/c694/live/dc86c7a0.jpg"
+
+    def test_a_story_photo_anywhere_in_the_ranking_holds_the_video_back(self) -> None:
+        trend_page = "https://coverage.example.net/openai-health-system-hack"
+        pages = {
+            BBC_ARTICLE: [(self.STORY, "image", 20)],
+            trend_page: [("https://cdn.example.net/openai-health-hack-photo.jpg", "image", 80)],
+        }
+        video = {"url": "https://www.youtube.com/watch?v=abcnews01", "duration": 1843.0,
+                 "title": "Albanese announces OpenAI hack on health system"}
+        result = _run(self.news, pages=pages, trend=(trend_page,), video=video, limit=40)
+        self.assertEqual(result["image_origin"], "trend_search")  # not the story's own
+        self.assertFalse(result["is_video"])
+        self.assertTrue(result["image_first"])
+        self.assertEqual(result["video_url"], video["url"])
+
+    def test_the_video_query_is_the_title_and_subjects_not_the_page(self) -> None:
+        queries: list[str] = []
+        with (
+            patch.object(media_tools, "_scrape_page_media", return_value=[]),
+            patch.object(media_tools, "_search_trending_pages", return_value=([], "x")),
+            patch.object(media_tools, "_probe_with_ytdlp", return_value=None),
+            patch.object(media_tools, "_probe_image_sizes", return_value={}),
+            patch.object(media_tools, "_search_video_online",
+                         side_effect=lambda query: queries.append(query)),
+        ):
+            media_tools.find_source_clip(self.news, subjects=["OpenAI", "Services Australia"])
+        [query] = queries
+        self.assertLessEqual(len(query), media_tools._VISUAL_QUERY_MAX_CHARS + 40)
+        self.assertIn("Services Australia", query)
+        self.assertNotIn("September", query)
+        self.assertFalse(media_tools._video_title_matches_topic(
+            "LIVE: ABC News Live - Sunday, September 20", query))
+
+    def test_live_streams_and_day_long_videos_are_never_picked(self) -> None:
+        embed = "https://www.youtube.com/watch?v=live01"
+        pages = {COVERAGE: [(embed, "video", 90)]}
+        news = {"title": "Widget Agent launch", "tags": ["widget", "agent"]}
+        title = "Widget Agent launch keynote"
+        for info in (
+            {"duration": 0.0, "title": title, "live_status": "is_live"},
+            {"duration": 36190.0, "title": title, "live_status": "was_live"},
+            {"duration": 9000.0, "title": title, "live_status": ""},
+        ):
+            with self.subTest(info=info):
+                result = _run(news, [COVERAGE], pages, probes={embed: info})
+                self.assertNotEqual(result["url"], embed)
+                self.assertNotEqual(result["video_url"], embed)
+        ok = _run(news, [COVERAGE], pages,
+                  probes={embed: {"duration": 90.0, "title": title, "live_status": ""}})
+        self.assertEqual(ok["url"], embed)
+
+    def test_the_video_search_skips_streams(self) -> None:
+        ydl = MagicMock()
+        ydl.__enter__.return_value.extract_info.return_value = {"entries": [
+            {"url": "https://www.youtube.com/watch?v=a", "title": "OpenAI hack Medicare live",
+             "live_status": "is_live"},
+            {"url": "https://www.youtube.com/watch?v=b", "title": "OpenAI hack Medicare full",
+             "duration": 30000},
+            {"url": "https://www.youtube.com/watch?v=c", "title": "OpenAI hack Medicare explained",
+             "duration": 95},
+        ]}
+        with patch.object(media_tools, "YoutubeDL", return_value=ydl) as factory:
+            found = media_tools._search_video_online("OpenAI hack Medicare")
+        self.assertEqual(found["url"], "https://www.youtube.com/watch?v=c")
+        self.assertEqual(factory.call_args.args[0]["extract_flat"], "in_playlist")
+
+
+def test_every_candidate_keeps_its_page_and_the_url_as_found():
+    """The C1 keys give no page for url and video_url, and keep only the
+    rewritten size of an image: Xiaomi's demo video on its CDN was judged
+    without its mimo.mi.com page, and a picture whose CDN refused the new
+    width had no original to fall back to."""
+    page = "https://mimo.mi.com/models/en-US/mimo-v2.6-pro"
+    video = "https://aistudio-cdn.xiaomimimo.com/xiaomimimo-static/model-v2.6-pro-video1.mov"
+    original = "https://cdn.example.com/photos/launch-stage.jpg?w=900&h=700"
+    offered = "https://cdn.example.com/photos/launch-stage.jpg?w=1600&h=1244"
+    news = {"title": "Xiaomi MiMo-V2.6 Pro launch", "source_url": page, "media_urls": []}
+    found: dict = {}
+    result = _run(
+        news, pages={page: [(video, "video", 90), (original, "image", 60)]},
+        probes={video: {"title": "Xiaomi MiMo-V2.6 Pro launch", "duration": 20.0}}, provenance=found,
+    )
+    assert (result["url"], result["is_video"]) == (video, True)
+    assert set(result) == {
+        "found", "url", "is_video", "duration_s", "origin", "image_url", "image_origin",
+        "image_candidates", "image_first", "video_url", "video_duration_s", "video_origin",
+        "trend_search", "note",
+    }
+    assert found[video] == {"context_url": page, "original": ""}
+    assert _urls(result) == [offered]
+    assert found[offered] == {"context_url": page, "original": original}

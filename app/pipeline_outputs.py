@@ -4,6 +4,16 @@ from app import state as s
 from app.copy_budget import copy_problems
 from app.design_limits import design_slide_limit
 from app.schemas import ResearchBrief, CarouselDesign, CarouselPlan, CoverSpec, CopySet, RenderedSlide, CTASlide
+from app.time_window import window_problems, window_rule
+
+class TimeWindowError(ValueError):
+    """Research found no facts dated inside the window the request named.
+
+    The window is fixed for the run (a resume on a later day still means the
+    week the person asked about), so the stop message says so instead of
+    promising that a resume fixes it.
+    """
+
 
 OUTPUT_KEYS = {
     s.AGENT_RESEARCH: s.K_RESEARCH, s.AGENT_PLANNER: s.K_PLAN,
@@ -38,6 +48,10 @@ def validate_output(
     read as their own words, telling the retry to lengthen it again, and
     slides they did not criticise would be sent back too. The fit, split and
     repeat checks stay, since the renderer needs them whatever was asked.
+    Research facts must fall inside the request's time window; the last
+    attempt and human rework only need one fact inside it, so a quiet week
+    stops a run only when nothing current was found at all. A checkpoint
+    never re-checks dates: the brief was accepted when it was saved.
     """
     raw = state.get(OUTPUT_KEYS[name])
     if raw is None:
@@ -46,6 +60,14 @@ def validate_output(
         brief = ResearchBrief.model_validate(raw)
         if not brief.summary.strip() or not brief.key_facts:
             raise ValueError("Research must save a summary and at least one supported fact")
+        window = state.get(s.K_TIME_WINDOW)
+        problems = [] if checkpoint else window_problems(
+            brief.key_facts, window, relaxed=final_attempt or under_rework)
+        if problems:
+            raise TimeWindowError(
+                f"Research must use facts dated {window_rule(window)}: " + "; ".join(problems)
+                + " (search with those dates, or name exact dates / drop the time word)"
+            )
     elif name == s.AGENT_PLANNER:
         plan = CarouselPlan.model_validate(raw)
         if not 3 <= plan.slide_count <= design_slide_limit(state):

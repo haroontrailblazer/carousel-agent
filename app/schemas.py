@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
@@ -195,9 +195,21 @@ class CarouselDesign(BaseModel):
 class PublishedTextModel(BaseModel):
     """Base model that rejects forbidden or unreadable published text."""
 
+    #: Fields that are never shown to the audience (source URLs, artifact
+    #: file names). A sourced image URL can legally contain an em dash, and
+    #: rejecting it lost a finished cover. No underscore: pydantic would make
+    #: a leading-underscore name a private attribute instead of a class value.
+    text_rules_exempt: ClassVar[frozenset[str]] = frozenset()
+
     @model_validator(mode="after")
     def validate_no_em_dash(self) -> "PublishedTextModel":
-        published = self.model_dump(mode="python")
+        # A nested published model already ran this check with its own
+        # exemptions, so re-checking it here would ignore them.
+        exclude = set(self.text_rules_exempt) | {
+            name for name in type(self).model_fields
+            if isinstance(getattr(self, name, None), PublishedTextModel)
+        }
+        published = self.model_dump(mode="python", exclude=exclude)
         require_no_em_dash(published, self.__class__.__name__)
         require_readable_text(published, self.__class__.__name__)
         return self
@@ -223,6 +235,8 @@ class ResearchFact(BaseModel):
 
     fact: str  # the fact itself, with exact numbers/names/dates
     source_url: str = ""  # where it was verified (empty only for facts from the news item itself)
+    date: str = ""  # ISO YYYY-MM-DD, YYYY-MM or YYYY: when the source says it happened or was announced
+    background: bool = False  # older context, never presented as new
 
 
 class ResearchBrief(BaseModel):
@@ -266,6 +280,12 @@ class CarouselPlan(PublishedTextModel):
 class CoverSpec(PublishedTextModel):
     """Output of the First-Page Visual agent."""
 
+    # File names, the source URL and the picture check's labels are never
+    # published as text.
+    text_rules_exempt: ClassVar[frozenset[str]] = frozenset(
+        {"video_artifact", "poster_artifact", "source_media_url", "picture_verdict", "picture_kind"}
+    )
+
     video_artifact: str = ""  # artifact filename of the final 4-8 s cover video
     poster_artifact: str = ""  # first-frame PNG (used as IG fallback / preview)
     source_media_url: str = ""
@@ -273,6 +293,20 @@ class CoverSpec(PublishedTextModel):
     highlight: str = ""
     duration_s: float = 0.0
     used_fallback_image: bool = False  # True when no clip found; static cover built
+    drawn_background: bool = False  # True when the cover is the drawn plain background, with no picture
+    source_credit: str = ""  # attribution published in the caption for Wikimedia photos (checked)
+    source_origin: str = ""  # find_source_clip / find_reference_photo origin ('wikimedia' for reference photos)
+    # What the automatic picture check said about the media the cover was
+    # built from, so a chart or a rejected picture never ships silently
+    # (app/cover_notice.py). picture_verdict is 'use' or 'reject',
+    # 'unchecked' when the media was never inspected, and '' for the drawn
+    # background and for covers built before these fields existed.
+    picture_verdict: str = ""
+    picture_kind: str = ""  # cover_vision.KINDS
+    picture_tier: int = 0  # cover_vision.tier_for
+    picture_score: int = 0  # the judge's 0-10
+    picture_from_reviewer: bool = False  # built from an image link in the reviewer's feedback
+    share_alike_skipped: int = 0  # free Wikimedia photos left out for a share-alike licence
 
     @field_validator("title", "highlight", mode="before")
     @classmethod

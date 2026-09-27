@@ -99,6 +99,13 @@ export type RunArtifacts = {
      *  <video> element for it. */
     is_still: boolean
     duration_s: number
+    /** No picture could be sourced, so the cover is the drawn plain
+     *  background. The viewer must warn the reviewer. */
+    drawn_background?: boolean
+    /** Photo credit for a free-licensed reference photo (also in the caption). */
+    credit?: string
+    /** Warning lines for the reviewer, worded by the backend. */
+    notices?: string[]
   }
   slides: (SignedArtifact & { index: number })[]
   cta: SignedArtifact & { cta_type: string | null; link_url: string }

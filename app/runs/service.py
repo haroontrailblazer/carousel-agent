@@ -21,11 +21,14 @@ click must not be able to start ten.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Literal, Optional
 
 from app import observability
@@ -214,6 +217,80 @@ async def _check_limits(run_id: str, *, new_run: bool = True) -> None:
             )
 
 
+_JSON_LD = re.compile(
+    r"<script[^>]*application/ld\+json[^>]*>(.*?)</script>", re.I | re.S
+)
+_TAG = re.compile(r"<(meta|time)\b([^>]*)>", re.I)
+_ATTR = re.compile(r"""([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""")
+
+
+def _parse_published(value: Any) -> Optional[datetime]:
+    """An ISO 8601 or RFC 2822 timestamp as an aware datetime (None if unreadable)."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = parsedate_to_datetime(text)
+        except (TypeError, ValueError, IndexError):
+            return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _json_ld_published(node: Any) -> Optional[datetime]:
+    """The first ``datePublished`` anywhere in a JSON-LD document."""
+    if isinstance(node, dict):
+        found = _parse_published(node.get("datePublished"))
+        if found:
+            return found
+        node = list(node.values())
+    if isinstance(node, list):
+        for child in node:
+            found = _json_ld_published(child)
+            if found:
+                return found
+    return None
+
+
+def _published_from_html(markup: str) -> Optional[datetime]:
+    """When a pasted article was published, from the page's own metadata.
+
+    A URL run has no typed time words, so the page's own date is how the
+    pipeline knows how old its story is. Research and the writers are told
+    it, and "today" in the copy then means the article's day, not the
+    model's.
+
+    Reads JSON-LD ``datePublished``, then ``article:published_time`` and
+    ``itemprop="datePublished"`` meta tags, then the first ``<time
+    datetime>``. Best effort: None when the page states no readable date.
+    """
+    try:
+        for block in _JSON_LD.findall(markup):
+            try:
+                found = _json_ld_published(json.loads(block))
+            except ValueError:
+                match = re.search(r'"datePublished"\s*:\s*"([^"]+)"', block)
+                found = _parse_published(match.group(1)) if match else None
+            if found:
+                return found
+        first_time: Optional[datetime] = None
+        for tag, body in _TAG.findall(markup):
+            attrs = {k.lower(): a or b or c for k, a, b, c in _ATTR.findall(body)}
+            names = {(attrs.get(key) or "").lower() for key in ("property", "name", "itemprop")}
+            if tag.lower() == "time":
+                first_time = first_time or _parse_published(attrs.get("datetime"))
+            elif names & {"article:published_time", "datepublished"}:
+                found = _parse_published(attrs.get("content") or attrs.get("datetime"))
+                if found:
+                    return found
+        return first_time
+    except Exception:  # metadata is a bonus; never refuse a readable page over it
+        logger.debug("Could not read a publication date from the page.", exc_info=True)
+        return None
+
+
 async def fetch_url_item(url: str) -> dict:
     """Turn a pasted article URL into a NewsItem payload.
 
@@ -275,6 +352,7 @@ async def fetch_url_item(url: str) -> dict:
         source_name="web",
         source_url=clean,
         media_urls=_media_urls_from_html(markup, base_url=resp.url),
+        published_at=_published_from_html(markup),
         tags=["url"],
     )
     return item.model_dump(mode="json")

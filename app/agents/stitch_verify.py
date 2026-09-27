@@ -13,7 +13,11 @@ for budgets) and:
    check on every body-slide PNG (the contract's size-heuristic variant:
    real PNG, exact target slide size, byte-size sanity floor), plus exact
    fixed body-slide number plus brand-rail and safe-area validation. The cover
-   and CTA are intentionally unnumbered.
+   and CTA are intentionally unnumbered. A cover with no picture (the drawn
+   plain background), or whose picture the picture check did not approve,
+   is critical once (while automatic QA rounds are left) and a major note
+   after that.
+   A Wikimedia reference photo's credit is appended to the Bundle caption.
 3. Writes ``K_BUNDLE`` + ``K_QA_REPORT``. On CRITICAL failures it also writes
    a :class:`app.schemas.ReworkPlan` to ``K_REWORK_PLAN`` (and the distilled
    correction text to ``K_REWORK_FEEDBACK``) targeting the responsible agents,
@@ -41,6 +45,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools import FunctionTool, ToolContext
 
 from app.config import agent_instructions, settings
+from app.cover_notice import weak_picture_reason
 from app.llm import resolve_role_model
 from app.design_limits import design_slide_limit
 from app.schemas import (
@@ -72,6 +77,7 @@ from app.state import (
     K_NEWS_ITEM,
     K_PLAN,
     K_QA_REPORT,
+    K_QA_ROUND,
     K_REWORK_FEEDBACK,
     K_REWORK_PLAN,
     REWORKABLE_AGENTS,
@@ -99,6 +105,14 @@ _DURATION_TOLERANCE_S = 0.1
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _MIN_SLIDE_PNG_BYTES = 10_000
 
+#: Persisted once the cover has been sent back for its picture. The first
+#: drawn-background cover, or cover picture the picture check did not
+#: approve (a chart scored under 3, a rejected picture, one never checked),
+#: is critical and re-runs only the cover step; after that, or when the
+#: automatic QA rounds are used up, it is a major note, so this check alone
+#: never spends every QA round or stops a run that is otherwise finished.
+K_COVER_PICTURE_RETRIED = "cover_picture_retried"
+
 _DEFAULT_INSTRUCTION = """\
 # Stitch & Verify
 
@@ -122,6 +136,12 @@ a review mail.
      the cover and CTA intentionally unnumbered) so
      every body-slide PNG is a real, full-size render actually able to
      carry its approved text);
+   - flags a cover with no picture (built on the plain drawn background)
+     or with a picture the picture check did not approve (a chart scored
+     under 3, a rejected picture, one never checked): the first time it is
+     a critical issue that sends only first_page_visual back to find a real
+     photo; after that one automatic retry, or with no automatic QA round
+     left, it is a major note the reviewer sees, and QA can pass;
    - stores the QAReport, and on CRITICAL failures also stores a ReworkPlan
      targeting the agents responsible, so the orchestrator re-runs only them.
 2. Read the tool result and reply with a short plain-text QA summary
@@ -415,9 +435,10 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
     Deterministic, idempotent. Reads the cover spec, rendered body slides,
     CTA slide, copy set and plan from session state; assembles the Bundle
     (ordered_artifacts: cover video first, then body slides by index, then
-    CTA); checks slide count, cover duration, per-slide line budgets,
-    artifact existence and the copy-vs-rendered size heuristics on every
-    body-slide PNG; then writes the Bundle and QAReport to state. On any
+    CTA); checks slide count, cover duration, a cover with no picture,
+    per-slide line budgets, artifact existence and the copy-vs-rendered size
+    heuristics on every body-slide PNG; then writes the Bundle and QAReport
+    to state. On any
     CRITICAL issue it also writes a ReworkPlan targeting the responsible
     agents so the orchestrator re-runs only them instead of mailing a review.
 
@@ -484,6 +505,7 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
 
     # ------------------------------------------------------------------ QA -
     # 1. Cover: video present + duration window.
+    cover_retry_sent = False
     if cover is not None:
         if not cover.video_artifact:
             issues.append(
@@ -525,6 +547,52 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
                     ),
                 )
             )
+        # A cover with no picture, or with a picture the check did not
+        # approve, is the failure the user asked never to ship silently. The
+        # message must not name research or planner: _target_for_issue routes
+        # to the first agent name it finds. A critical issue with every
+        # automatic QA round spent would stop the run, so then it is major.
+        weak = weak_picture_reason(cover.model_dump())
+        if cover.drawn_background or weak:
+            rounds_left = int(state.get(K_QA_ROUND) or 0) < settings.max_qa_rounds
+            if not state.get(K_COVER_PICTURE_RETRIED) and rounds_left:
+                cover_retry_sent = True
+                problem = (
+                    "Cover has no picture: it was built on the plain drawn background."
+                    if cover.drawn_background
+                    else f"Cover picture was not approved by the picture check: {weak}."
+                )
+                issues.append(
+                    QAIssue(
+                        severity="critical",
+                        slide_index=1,
+                        message=(
+                            f"{problem} {AGENT_FIRST_PAGE_VISUAL} must "
+                            "call find_reference_photo with broader subjects "
+                            "(the country, city, organisation or sector of the "
+                            "story), inspect the result and rebuild the cover "
+                            "from a real photo, or from best_so_far when "
+                            "nothing better is found. No new find_source_clip "
+                            "search: it would find the same pages."
+                        ),
+                    )
+                )
+            else:
+                issues.append(
+                    QAIssue(
+                        severity="major",
+                        slide_index=1,
+                        message=(
+                            "Cover has no picture (plain drawn background)"
+                            if cover.drawn_background
+                            else f"Cover picture was not approved by the picture check ({weak})"
+                        ) + (
+                            " after an automatic retry"
+                            if state.get(K_COVER_PICTURE_RETRIED)
+                            else " and no automatic QA round is left"
+                        ) + ". The reviewer must check it or supply an image.",
+                    )
+                )
 
     # 2. Body slides: artifacts + contiguous indexes starting at 2.
     for slide in body_slides:
@@ -641,7 +709,9 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
         cover=cover or CoverSpec(),
         slides=body_slides,
         cta=cta or CTASlide(cta_type="follow"),
-        caption=(copy_set.caption if copy_set is not None else ""),
+        caption=_caption_with_credit(
+            copy_set.caption if copy_set is not None else "", cover
+        ),
         ordered_artifacts=ordered_artifacts,
     )
 
@@ -717,6 +787,10 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
 
     set_model(state, K_BUNDLE, bundle)
     set_model(state, K_QA_REPORT, report)
+    # Only once the report is stored: a storage outage above returns early,
+    # and the retry must still be owed when QA runs again.
+    if cover_retry_sent:
+        state[K_COVER_PICTURE_RETRIED] = True
 
     critical_targets: list[str] = []
     if critical:
@@ -770,6 +844,26 @@ async def assemble_and_verify(tool_context: ToolContext) -> dict:
         ],
         "critical_targets": critical_targets,
     }
+
+
+def _caption_with_credit(caption: str, cover: Optional[CoverSpec]) -> str:
+    """The published caption, with the Wikimedia photo credit appended once.
+
+    A free-licensed reference photo must be credited where the post is read,
+    and the caption is the only text Instagram shows. Only the Bundle gets
+    the credit: ``K_COPY`` stays the phrasing agent's own copy, so a rework
+    of the cover can never leave a stale credit behind in it.
+    """
+    credit = (cover.source_credit or "").strip() if cover is not None else ""
+    if (
+        cover is None
+        or cover.source_origin != "wikimedia"
+        or not credit
+        or "Cover photo:" in caption
+    ):
+        return caption
+    line = f"Cover photo: {credit}"
+    return f"{caption}\n\n{line}" if caption else line
 
 
 def _owner_of_artifact(name: str, bundle: Bundle) -> str:

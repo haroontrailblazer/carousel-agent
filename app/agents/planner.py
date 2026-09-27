@@ -31,6 +31,7 @@ from google.adk.utils.instructions_utils import inject_session_state
 from app.config import agent_instructions, load_skill, settings
 from app.llm import resolve_role_model
 from app.editorial_voice import with_editorial_voice
+from app.time_window import with_time_context
 from app.design_limits import MAX_SUPPORTED_SLIDES, design_slide_limit
 from app.schemas import CarouselPlan
 from app.state import (
@@ -302,7 +303,9 @@ def _build_instruction(max_slides: int = MAX_SUPPORTED_SLIDES) -> str:
             "\n## Shared skill: cover-style.md (hook/title authority)\n\n"
             + safe_cover_style
         )
-    return with_editorial_voice(instruction)
+    # Today's date and the request's window, so a March launch is never
+    # planned as "this week" (run-3c4107e390df).
+    return with_editorial_voice(with_time_context(instruction))
 
 
 async def _instruction_provider(ctx: ReadonlyContext) -> str:

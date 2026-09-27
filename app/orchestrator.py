@@ -39,7 +39,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 import uuid
+from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, ClassVar, Optional, Sequence, Type, TypeVar
 
 from google.adk.agents import BaseAgent
@@ -51,11 +54,12 @@ from google.genai import types
 from pydantic import BaseModel
 from typing_extensions import override
 
-from app import observability
-from app.pipeline_outputs import OUTPUT_KEYS, validate_output
+from app import observability, time_window
+from app.pipeline_outputs import OUTPUT_KEYS, TimeWindowError, validate_output
 from app.agents.publisher import K_PUBLISH_RESULT
 from app.config import settings
 from app.copy_budget import copy_budget_note
+from app.cover_notice import cover_notice_lines
 from app.schemas import CarouselPlan, NewsItem, QAReport, ReworkPlan, Verdict
 from app.services import db
 from app.services.telegram_delivery import deliver_carousel
@@ -73,7 +77,9 @@ from app.state import (
     AGENT_TEMPLATE_DESIGN,
     K_NEWS_ITEM,
     K_ACCOUNT_ID,
+    K_BUNDLE,
     K_COPY_BUDGET,
+    K_COVER_DEADLINE,
     K_DESIGN,
     K_PHASE,
     K_PLAN,
@@ -81,11 +87,14 @@ from app.state import (
     K_QA_ROUND,
     AGENT_RESEARCH,
     K_RECENT_FEEDBACK,
+    K_RESEARCH_RELAXED,
     K_REVIEW_ROUND,
     K_REWORK_FEEDBACK,
     K_REWORK_PLAN,
     K_REWORK_ROUND,
     K_RUN_ID,
+    K_TIME_CONTEXT,
+    K_TIME_WINDOW,
     K_TOKEN_USAGE,
     K_VERDICT,
     PHASE_DONE,
@@ -102,6 +111,19 @@ logger = logging.getLogger(__name__)
 
 #: The orchestrator's agent name (root of the tree rendered by ``adk web``).
 ORCHESTRATOR_NAME = "carousel_orchestrator"
+
+#: Wall-clock limit of one child step.
+_STEP_TIMEOUT_S = 1200
+#: The cover agent's own deadline (K_COVER_DEADLINE), well inside the step
+#: limit: its tools stop searching near it, and whatever happens a cover is
+#: then built without the model (first_page_visual.ensure_cover) within
+#: _COVER_SALVAGE_S. In run-34fdc2b246c7 the step timed out with no cover.
+_COVER_AGENT_BUDGET_S = 900
+_COVER_SALVAGE_S = 240
+
+
+class StepTimeoutError(RuntimeError):
+    """A child step ran past :data:`_STEP_TIMEOUT_S`."""
 
 #: Canonical execution order of the generate-phase agents. Rework re-runs use
 #: the same order for whatever subset is targeted.
@@ -275,6 +297,17 @@ _REPAIR_NOTE_RE = re.compile(
 )
 
 
+def _resolve_time_window(news: Any) -> dict[str, Any]:
+    """The request's time window, resolved against today's UTC date.
+
+    Stamped once per run: a resume on a later day must still mean the week
+    the person asked about, not the week the run happened to be resumed in.
+    """
+    today = time_window.today_utc()
+    now = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+    return time_window.resolve(news if isinstance(news, dict) else {}, now)
+
+
 def _repair_note(name: str, exc: Exception) -> str:
     """The note one failed step reads on its repair retry."""
     return f"\nRepair the {name} output: {exc}. Save the complete result with your output tool."
@@ -306,8 +339,9 @@ class CarouselOrchestrator(BaseAgent):
 
     * *(missing)* - init: stamp ``K_RUN_ID`` / round counters, inject recent
       reviewer feedback from the memory service, synthesize an ad-hoc
-      ``NewsItem`` from the user message when the fetcher did not seed one.
-    * ``generate`` - planner → first_page_visual → phrasing →
+      ``NewsItem`` from the user message when the fetcher did not seed one,
+      and resolve the request's time window (``K_TIME_WINDOW``).
+    * ``generate`` - research → planner → first_page_visual → phrasing →
       template_design → cta.
     * ``qa`` - stitch_verify assembles the Bundle + QAReport; critical issues
       auto-route to ``rework`` (no mail), otherwise → ``review``.
@@ -454,7 +488,7 @@ class CarouselOrchestrator(BaseAgent):
         logger.info("[%s] running child agent '%s'", self.name, child.name)
         event_count = 0
         try:
-            async with asyncio.timeout(1200), Aclosing(child.run_async(ctx)) as agen:
+            async with asyncio.timeout(_STEP_TIMEOUT_S), Aclosing(child.run_async(ctx)) as agen:
                 async for event in agen:
                     event_count += 1
                     if event_count > 160:
@@ -472,7 +506,7 @@ class CarouselOrchestrator(BaseAgent):
                         holder["paused"] = True
                     yield event
         except TimeoutError as exc:
-            raise RuntimeError(f"{child.name} did not finish within 20 minutes. Resume to retry this step; completed outputs are saved.") from exc
+            raise StepTimeoutError(f"{child.name} did not finish within 20 minutes. Resume to retry this step; completed outputs are saved.") from exc
 
     # ------------------------------------------------------------------
     # Phase handlers (each an async generator of events)
@@ -514,6 +548,10 @@ class CarouselOrchestrator(BaseAgent):
             news_id = str((news_raw or {}).get("id") or "") if isinstance(
                 news_raw, dict
             ) else ""
+
+        # "this week" means the week of the request, read once, here.
+        if not isinstance(state.get(K_TIME_WINDOW), dict):
+            delta[K_TIME_WINDOW] = _resolve_time_window(delta.get(K_NEWS_ITEM) or news_raw)
 
         notes = await self._recent_feedback_notes(ctx)
         if notes or state.get(K_RECENT_FEEDBACK) is None:
@@ -581,10 +619,36 @@ class CarouselOrchestrator(BaseAgent):
                 # to how much text the saved design holds, measured with the
                 # real typesetter (about a second, then cached).
                 prepare[K_COPY_BUDGET] = await asyncio.to_thread(copy_budget_note, state.get(K_DESIGN))
-            yield self._progress(ctx, f"[generate] preparing {name}", prepare)
+            text = f"[generate] preparing {name}"
+            if name in (AGENT_RESEARCH, AGENT_PLANNER, AGENT_PHRASING):
+                # Every model's own "today" is its training cutoff, so the
+                # three agents that search or write get the real date and
+                # the request's window. Runs from before the window existed
+                # resolve it here, once.
+                window = state.get(K_TIME_WINDOW)
+                if not isinstance(window, dict):
+                    window = prepare[K_TIME_WINDOW] = _resolve_time_window(state.get(K_NEWS_ITEM))
+                prepare[K_TIME_CONTEXT] = time_window.context_note(window, time_window.today_utc())
+                if name == AGENT_RESEARCH and window.get("start"):
+                    text += f' (dates {time_window.describe_range(window)} for "{window.get("phrase")}", UTC)'
+            if name == AGENT_RESEARCH:
+                # The save tool applies validate_output's date rule: relaxed
+                # under rework here, and on the retry below.
+                prepare[K_RESEARCH_RELAXED] = checkpoint_key == "rework_completed"
+            cover = name == AGENT_FIRST_PAGE_VISUAL
+            if cover:
+                prepare[K_COVER_DEADLINE] = time.time() + _COVER_AGENT_BUDGET_S
+            yield self._progress(ctx, text, prepare)
             for attempt in range(2):
-                async for event in self._drive(self._child(name), ctx, holder):
-                    yield event
+                crashed: Optional[Exception] = None
+                try:
+                    async for event in self._drive(self._child(name), ctx, holder):
+                        yield event
+                except Exception as exc:
+                    # Any other step fails as before; the cover is never lost.
+                    if not cover:
+                        raise
+                    crashed = exc
                 if holder["paused"]:
                     return
                 try:
@@ -594,15 +658,36 @@ class CarouselOrchestrator(BaseAgent):
                     )
                     break
                 except (ValueError, TypeError) as exc:
-                    if attempt:
+                    if cover and (crashed is not None or attempt):
+                        # Out of time, crashed, or failed twice: build a
+                        # cover without the model rather than lose the run.
+                        async for event in self._salvage_cover(ctx, str(crashed or exc)):
+                            yield event
+                        try:
+                            validate_output(name, state, final_attempt=True)
+                            break
+                        except (ValueError, TypeError):
+                            pass
+                    if attempt or crashed is not None:
                         # Stop with the reviewer's feedback as it was, so
                         # nothing reads the note as theirs before a resume.
                         yield self._progress(ctx, f"[recovery] {name} failed twice", _repair_notes_cleared(state))
+                        if crashed is not None:
+                            raise crashed
+                        if isinstance(exc, TimeWindowError):
+                            # The window is fixed for the run: a resume only
+                            # searches again for the same dates.
+                            raise RuntimeError(f"{name} could not finish: {exc}. The requested dates are fixed for this run: resume to search them again, or start a new run with other dates or without the time word; completed steps are saved.") from exc
                         raise RuntimeError(f"{name} could not finish: {exc}. Resume to retry this step; completed steps are saved.") from exc
                     feedback = str(state.get(K_REWORK_FEEDBACK) or "")
-                    yield self._progress(ctx, f"[recovery] retrying {name}: {exc}", {
+                    retry = {
                         K_REWORK_FEEDBACK: _REPAIR_NOTE_RE.sub("", feedback) + _repair_note(name, exc),
-                    })
+                    }
+                    if cover:
+                        retry[K_COVER_DEADLINE] = time.time() + _COVER_AGENT_BUDGET_S
+                    if name == AGENT_RESEARCH:
+                        retry[K_RESEARCH_RELAXED] = True  # the last attempt, as validate_output
+                    yield self._progress(ctx, f"[recovery] retrying {name}: {exc}", retry)
             completed.append(name)
             # The repair note was for this step alone. Later steps read rework
             # feedback as the reviewer's words (template_design would re-render
@@ -610,6 +695,41 @@ class CarouselOrchestrator(BaseAgent):
             yield self._progress(ctx, f"[checkpoint] {name} complete", {
                 checkpoint_key: list(completed), **_repair_notes_cleared(state),
             })
+
+    def _cover_tool_context(self, ctx: InvocationContext) -> Any:
+        """A tool context over the run's session, for building the cover here."""
+        from google.adk.tools import ToolContext
+
+        return ToolContext(ctx)
+
+    async def _salvage_cover(
+        self, ctx: InvocationContext, reason: str
+    ) -> AsyncGenerator[Event, None]:
+        """Build the cover without the model after the cover step failed.
+
+        Yields one progress event carrying the state and artifact changes
+        (the CoverSpec, and the cover video and poster versions).
+        """
+        from app.agents import first_page_visual
+
+        tool_ctx = self._cover_tool_context(ctx)
+        try:
+            result = await asyncio.wait_for(
+                first_page_visual.ensure_cover(tool_ctx, budget_s=_COVER_SALVAGE_S),
+                timeout=_COVER_SALVAGE_S + 30,
+            )
+        except Exception as exc:  # the step is failing already; say why and move on
+            logger.warning("Cover salvage failed: %s", exc, exc_info=True)
+            result = {"ok": False, "error": str(exc)}
+        short = reason if len(reason) <= 160 else reason[:157].rstrip() + "..."
+        if result.get("ok"):
+            source = Path(str(result.get("salvaged_from") or "")).name or "a picture"
+            text = f"[recovery] {AGENT_FIRST_PAGE_VISUAL} did not finish ({short}); built the cover from {source}"
+        else:
+            text = f"[recovery] {AGENT_FIRST_PAGE_VISUAL} did not finish ({short}); no cover could be built: {result.get('error')}"
+        event = self._progress(ctx, text, dict(tool_ctx.actions.state_delta))
+        event.actions.artifact_delta.update(dict(tool_ctx.actions.artifact_delta))
+        yield event
 
     async def _phase_generate(
         self, ctx: InvocationContext, state: Any, holder: dict[str, bool]
@@ -698,7 +818,13 @@ class CarouselOrchestrator(BaseAgent):
         """
         if not state.get(K_ACCOUNT_ID):
             holder["halted"] = True
-            yield self._progress(ctx, "[review] Your carousel is ready to preview and download. No Instagram account was selected for this run.", {K_VERDICT: None, K_REVIEW_NOTICE_FAILED: False})
+            text = "[review] Your carousel is ready to preview and download. No Instagram account was selected for this run."
+            # No review message is sent for these runs, so the progress line
+            # carries the same cover warning the review screen shows.
+            notices = cover_notice_lines((state.get(K_BUNDLE) or {}).get("cover"))
+            if notices:
+                text += " " + " ".join(notices)
+            yield self._progress(ctx, text, {K_VERDICT: None, K_REVIEW_NOTICE_FAILED: False})
             await self._record_phase_quietly(state, PHASE_REVIEW, status=db.RUN_STATUS_AWAITING_REVIEW)
             return
         verdict = _safe_model(state, K_VERDICT, Verdict)

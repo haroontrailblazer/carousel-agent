@@ -1,0 +1,1115 @@
+{
+ "subjects": [
+  "Mistral AI"
+ ],
+ "responses": {
+  "https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=5&search=Mistral+AI&type=item&uselang=en": {
+   "searchinfo": {
+    "search": "Mistral AI"
+   },
+   "search": [
+    {
+     "id": "Q119718658",
+     "title": "Q119718658",
+     "pageid": 114199524,
+     "concepturi": "http://www.wikidata.org/entity/Q119718658",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q119718658",
+     "display": {
+      "label": {
+       "value": "Mistral AI",
+       "language": "en"
+      },
+      "description": {
+       "value": "French AI company",
+       "language": "en"
+      }
+     },
+     "label": "Mistral AI",
+     "description": "French AI company",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "Mistral AI"
+     }
+    },
+    {
+     "id": "Q1939338",
+     "title": "Q1939338",
+     "pageid": 1868901,
+     "concepturi": "http://www.wikidata.org/entity/Q1939338",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q1939338",
+     "display": {
+      "label": {
+       "value": "Poste Air Cargo",
+       "language": "en"
+      },
+      "description": {
+       "value": "Italian cargo and former passenger airline headquartered in Rome, Italy which is a wholly owned subsidiary of Poste Italiane",
+       "language": "en"
+      }
+     },
+     "label": "Poste Air Cargo",
+     "description": "Italian cargo and former passenger airline headquartered in Rome, Italy which is a wholly owned subsidiary of Poste Italiane",
+     "match": {
+      "type": "alias",
+      "language": "en",
+      "text": "Mistral Airline"
+     },
+     "aliases": [
+      "Mistral Airline"
+     ]
+    },
+    {
+     "id": "Q131806057",
+     "title": "Q131806057",
+     "pageid": 125696484,
+     "concepturi": "http://www.wikidata.org/entity/Q131806057",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q131806057",
+     "display": {
+      "label": {
+       "value": "Mistral Air Clim",
+       "language": "fr"
+      }
+     },
+     "label": "Mistral Air Clim",
+     "match": {
+      "type": "label",
+      "language": "fr",
+      "text": "Mistral Air Clim"
+     }
+    }
+   ],
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=Q119718658&props=claims": {
+   "entities": {
+    "Q119718658": {
+     "type": "item",
+     "id": "Q119718658",
+     "claims": {
+      "P18": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "98006e54f398d5ef4298c1780075a2a7fc46944e",
+         "datavalue": {
+          "value": "Le Chat chatbot memories screenshot.webp",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P407": [
+          {
+           "snaktype": "value",
+           "property": "P407",
+           "hash": "daf1c4fcb58181b02dff9cc89deb084004ddae4b",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 1860,
+             "id": "Q1860"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P407"
+        ],
+        "id": "Q119718658$e535d9aa-4e84-5c09-dec2-943b99c133aa",
+        "rank": "preferred"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "35a1dd172569519b972b55b4a11aaa1dc6d66a6c",
+         "datavalue": {
+          "value": "Exemple Mistral Le Chat.png",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P407": [
+          {
+           "snaktype": "value",
+           "property": "P407",
+           "hash": "d197d0a5efa4b4c23a302a829dd3ef43684fe002",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 150,
+             "id": "Q150"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P407"
+        ],
+        "id": "Q119718658$501f87f5-4622-43d1-8071-d25d114b0550",
+        "rank": "normal"
+       }
+      ],
+      "P169": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P169",
+         "hash": "4e2de1f9f12abd55fe30ee64750b2088fe63843a",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 123758735,
+           "id": "Q123758735"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P580": [
+          {
+           "snaktype": "value",
+           "property": "P580",
+           "hash": "e18d3ba7a83b3a85bc3146e03813224f03817c66",
+           "datavalue": {
+            "value": {
+             "time": "+2023-00-00T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 9,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P580"
+        ],
+        "id": "Q119718658$b099ce23-429a-74a8-f37f-737de33a7e52",
+        "rank": "normal"
+       }
+      ],
+      "P112": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "088e4515bc5662531f8923aa2e79e29a6079346b",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 56101409,
+           "id": "Q56101409"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q119718658$99fa776d-4dca-9672-067a-ee2d7d23a399",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "00b202a5e33f1634169b376dcb3b9f87f526774a",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 125192446,
+           "id": "Q125192446"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q119718658$be94436f-428f-ea57-1905-bb7d0a2e2c3c",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "b545e20f0cbc97f19556992673117aa0f24a0910",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 123758735,
+           "id": "Q123758735"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q119718658$5ff1cb9f-4da3-b0cf-9a71-fdede813a171",
+        "rank": "normal"
+       }
+      ]
+     }
+    }
+   },
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=Q123758735%7CQ56101409&languages=en&props=claims%7Clabels": {
+   "entities": {
+    "Q123758735": {
+     "type": "item",
+     "id": "Q123758735",
+     "labels": {
+      "en": {
+       "language": "en",
+       "value": "Arthur Mensch"
+      }
+     },
+     "claims": {
+      "P18": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "e54bf16fd09608d26618fad7b597c8cf65f83a84",
+         "datavalue": {
+          "value": "Arthur Mensch.png",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P585": [
+          {
+           "snaktype": "value",
+           "property": "P585",
+           "hash": "bd4e608fca97bfd620514f81e735833b9d96e34d",
+           "datavalue": {
+            "value": {
+             "time": "+2026-00-00T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 9,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P585"
+        ],
+        "id": "Q123758735$4b1b8d68-4e18-4e33-5b18-e9d979e6218e",
+        "rank": "normal"
+       }
+      ]
+     }
+    },
+    "Q56101409": {
+     "type": "item",
+     "id": "Q56101409",
+     "labels": {
+      "en": {
+       "language": "en",
+       "value": "Guillaume Lample"
+      }
+     },
+     "claims": {}
+    }
+   },
+   "success": 1
+  },
+  "https://commons.wikimedia.org/w/api.php?action=query&cllimit=50&format=json&formatversion=2&iiextmetadatafilter=LicenseShortName%7CArtist%7CCategories%7CNonFree&iiprop=url%7Csize%7Cmime%7Cextmetadata&iiurlwidth=1920&prop=imageinfo%7Ccategories&titles=File%3ALe+Chat+chatbot+memories+screenshot.webp%7CFile%3AExemple+Mistral+Le+Chat.png%7CFile%3AArthur+Mensch.png": {
+   "batchcomplete": true,
+   "query": {
+    "pages": [
+     {
+      "pageid": 163195025,
+      "ns": 6,
+      "title": "File:Exemple Mistral Le Chat.png",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 121794,
+        "width": 870,
+        "height": 509,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Exemple_Mistral_Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1123,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Exemple_Mistral_Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1123
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Exemple_Mistral_Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Exemple_Mistral_Le_Chat.png",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=163195025",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-Zero|Artificial intelligence|Self-published work|AI-generated images including prompts|PD-algorithm|Mistral AI",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "Mistral le Chat",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/png"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:AI-generated images including prompts"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Artificial intelligence"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-Zero"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       }
+      ]
+     },
+     {
+      "pageid": 174683810,
+      "ns": 6,
+      "title": "File:Le Chat chatbot memories screenshot.webp",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 30524,
+        "width": 688,
+        "height": 588,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Le_Chat_chatbot_memories_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1641,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Le_Chat_chatbot_memories_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1641
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Le_Chat_chatbot_memories_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Le_Chat_chatbot_memories_screenshot.webp",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=174683810",
+        "extmetadata": {
+         "Categories": {
+          "value": "Screenshots taken by VulcanSphere|PD-algorithm|Mistral AI",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<b>Software:</b> Mistral AI<br><b>Screenshot:</b> <a href=\"//commons.wikimedia.org/wiki/User:VulcanSphere\" title=\"User:VulcanSphere\">VulcanSphere</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/webp"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Screenshots taken by VulcanSphere"
+       }
+      ]
+     },
+     {
+      "pageid": 183903636,
+      "ns": 6,
+      "title": "File:Arthur Mensch.png",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 4771289,
+        "width": 2141,
+        "height": 2855,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Arthur_Mensch.png/1920px-Arthur_Mensch.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 2560,
+        "responsiveUrls": {
+         "2": "https://upload.wikimedia.org/wikipedia/commons/2/27/Arthur_Mensch.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Arthur_Mensch.png/1920px-Arthur_Mensch.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2560,
+         "srcset": "https://upload.wikimedia.org/wikipedia/commons/2/27/Arthur_Mensch.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/27/Arthur_Mensch.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Arthur_Mensch.png",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=183903636",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-Zero|Self-published work|Arthur Mensch",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Jan2342342423&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Jan2342342423 (page does not exist)\">Jan2342342423</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/png"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Arthur Mensch"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-Zero"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "https://commons.wikimedia.org/w/api.php?action=query&cllimit=50&format=json&formatversion=2&generator=search&gsrlimit=8&gsrnamespace=6&gsrsearch=Mistral+AI+filetype%3Abitmap&iiextmetadatafilter=LicenseShortName%7CArtist%7CCategories%7CNonFree&iiprop=url%7Csize%7Cmime%7Cextmetadata&iiurlwidth=1920&prop=imageinfo%7Ccategories": {
+   "batchcomplete": true,
+   "continue": {
+    "gsroffset": 8,
+    "continue": "gsroffset||"
+   },
+   "query": {
+    "pages": [
+     {
+      "pageid": 156539725,
+      "ns": 6,
+      "title": "File:Le Chat chatbot example screenshot.webp",
+      "index": 1,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 22166,
+        "width": 612,
+        "height": 429,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/8/81/Le_Chat_chatbot_example_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1346,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/8/81/Le_Chat_chatbot_example_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1346
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/81/Le_Chat_chatbot_example_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Le_Chat_chatbot_example_screenshot.webp",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=156539725",
+        "extmetadata": {
+         "Categories": {
+          "value": "Screenshots taken by VulcanSphere|PD-algorithm|Mistral AI",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<b>Software:</b> Mistral AI<br><b>Screenshot:</b> <a href=\"//commons.wikimedia.org/wiki/User:VulcanSphere\" title=\"User:VulcanSphere\">VulcanSphere</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/webp"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Screenshots taken by VulcanSphere"
+       }
+      ]
+     },
+     {
+      "pageid": 156539816,
+      "ns": 6,
+      "title": "File:Le Chat chatbot example screenshot (JA).webp",
+      "index": 5,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 37172,
+        "width": 635,
+        "height": 387,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/c/c4/Le_Chat_chatbot_example_screenshot_%28JA%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1170,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/c/c4/Le_Chat_chatbot_example_screenshot_%28JA%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1170
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/c/c4/Le_Chat_chatbot_example_screenshot_%28JA%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Le_Chat_chatbot_example_screenshot_(JA).webp",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=156539816",
+        "extmetadata": {
+         "Categories": {
+          "value": "De minimis|Screenshots taken by VulcanSphere|PD-algorithm|Mistral AI",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<p><b>Software:</b> Mistral AI\n</p><p><b>Screenshot:</b>\n</p>\n<a href=\"//commons.wikimedia.org/wiki/User:VulcanSphere\" title=\"User:VulcanSphere\">VulcanSphere</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/webp"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:De minimis"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Screenshots taken by VulcanSphere"
+       }
+      ]
+     },
+     {
+      "pageid": 156544845,
+      "ns": 6,
+      "title": "File:Mistral AI representation (FLUX Pro).webp",
+      "index": 2,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 46672,
+        "width": 1024,
+        "height": 768,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/9/9f/Mistral_AI_representation_%28FLUX_Pro%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1440,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/9/9f/Mistral_AI_representation_%28FLUX_Pro%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1440
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/9/9f/Mistral_AI_representation_%28FLUX_Pro%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Mistral_AI_representation_(FLUX_Pro).webp",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=156544845",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-Zero|Eiffel Tower in art|Images with extracted images|PD-algorithm|2024 AI-generated works|AI-generated artworks by VulcanSphere|Images generated by Flux (text-to-image model)|Mistral AI|AI-generated images of architecture",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:VulcanSphere\" title=\"User:VulcanSphere\">VulcanSphere</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/webp"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:2024 AI-generated works"
+       },
+       {
+        "ns": 14,
+        "title": "Category:AI-generated artworks by VulcanSphere"
+       },
+       {
+        "ns": 14,
+        "title": "Category:AI-generated images of architecture"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-Zero"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Eiffel Tower in art"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Images generated by Flux (text-to-image model)"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Images with extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       }
+      ]
+     },
+     {
+      "pageid": 156544925,
+      "ns": 6,
+      "title": "File:Mistral AI representation (FLUX Pro) (cropped).webp",
+      "index": 3,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 31274,
+        "width": 602,
+        "height": 611,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/0/07/Mistral_AI_representation_%28FLUX_Pro%29_%28cropped%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1949,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/0/07/Mistral_AI_representation_%28FLUX_Pro%29_%28cropped%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1949
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/0/07/Mistral_AI_representation_%28FLUX_Pro%29_%28cropped%29.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Mistral_AI_representation_(FLUX_Pro)_(cropped).webp",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=156544925",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-Zero|Eiffel Tower in art|Extracted images|PD-algorithm|2024 AI-generated works|AI-generated artworks by VulcanSphere|Images generated by Flux (text-to-image model)|Mistral AI|AI-generated images of architecture",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:VulcanSphere\" title=\"User:VulcanSphere\">VulcanSphere</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/webp"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:2024 AI-generated works"
+       },
+       {
+        "ns": 14,
+        "title": "Category:AI-generated artworks by VulcanSphere"
+       },
+       {
+        "ns": 14,
+        "title": "Category:AI-generated images of architecture"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-Zero"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Eiffel Tower in art"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Images generated by Flux (text-to-image model)"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       }
+      ]
+     },
+     {
+      "pageid": 159423929,
+      "ns": 6,
+      "title": "File:Le Chat.png",
+      "index": 6,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 141748,
+        "width": 833,
+        "height": 618,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/3/3a/Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1424,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/3/3a/Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1424
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/3/3a/Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Le_Chat.png",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=159423929",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-Zero|De minimis|Self-published work|PD-algorithm|Mistral AI",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<p><b>Oprogramowanie:</b> Mistral AI\n</p>\n<b>Zrzut ekranu:</b> <a href=\"//commons.wikimedia.org/w/index.php?title=User:Vfg5&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Vfg5 (page does not exist)\">Vfg5</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/png"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:CC-Zero"
+       },
+       {
+        "ns": 14,
+        "title": "Category:De minimis"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       }
+      ]
+     },
+     {
+      "pageid": 161823905,
+      "ns": 6,
+      "title": "File:Les esprits derrière Mistral AI.png",
+      "index": 4,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 56898,
+        "width": 500,
+        "height": 500,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/7/76/Les_esprits_derri%C3%A8re_Mistral_AI.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1920,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/7/76/Les_esprits_derri%C3%A8re_Mistral_AI.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1920
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/76/Les_esprits_derri%C3%A8re_Mistral_AI.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Les_esprits_derri%C3%A8re_Mistral_AI.png",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=161823905",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-Zero|Self-published work|Files with coordinates missing SDC location of creation (48° N, 2° E)|All media needing categories as of 2025|Media needing categories as of 12 March 2025",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Metus_01&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Metus 01 (page does not exist)\">Metus 01</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/png"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:All media needing categories as of 2025"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-Zero"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files with coordinates missing SDC location of creation (48° N, 2° E)"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Media needing categories as of 12 March 2025"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       }
+      ]
+     },
+     {
+      "pageid": 163195025,
+      "ns": 6,
+      "title": "File:Exemple Mistral Le Chat.png",
+      "index": 7,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 121794,
+        "width": 870,
+        "height": 509,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Exemple_Mistral_Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1123,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Exemple_Mistral_Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1123
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Exemple_Mistral_Le_Chat.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Exemple_Mistral_Le_Chat.png",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=163195025",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-Zero|Artificial intelligence|Self-published work|AI-generated images including prompts|PD-algorithm|Mistral AI",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "Mistral le Chat",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/png"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:AI-generated images including prompts"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Artificial intelligence"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-Zero"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       }
+      ]
+     },
+     {
+      "pageid": 178854960,
+      "ns": 6,
+      "title": "File:Firefox 145.0 AI Chatbot on Linux screenshot.webp",
+      "index": 8,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 26134,
+        "width": 541,
+        "height": 649,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/e/e2/Firefox_145.0_AI_Chatbot_on_Linux_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2303,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/e/e2/Firefox_145.0_AI_Chatbot_on_Linux_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2303
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/e2/Firefox_145.0_AI_Chatbot_on_Linux_screenshot.webp?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Firefox_145.0_AI_Chatbot_on_Linux_screenshot.webp",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=178854960",
+        "extmetadata": {
+         "Categories": {
+          "value": "Mozilla Public License|Open Goldberg Variations|Free screenshots|Screenshots taken by VulcanSphere|PD-algorithm|Mistral AI|Screenshots of Mozilla Firefox in Linux|Screenshots of Mozilla Firefox 140 series",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<b>Software:</b> <a href=\"https://en.wikipedia.org/wiki/Mozilla_Foundation\" class=\"extiw\" title=\"w:Mozilla Foundation\">Mozilla Foundation</a> and contributors<br><b>Website and content:</b> Mistral AI<br><b>Screenshot:</b> <a href=\"//commons.wikimedia.org/wiki/User:VulcanSphere\" title=\"User:VulcanSphere\">VulcanSphere</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "Public domain",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/webp"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Free screenshots"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mistral AI"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mozilla Public License"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Open Goldberg Variations"
+       },
+       {
+        "ns": 14,
+        "title": "Category:PD-algorithm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Screenshots of Mozilla Firefox 140 series"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Screenshots of Mozilla Firefox in Linux"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Screenshots taken by VulcanSphere"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

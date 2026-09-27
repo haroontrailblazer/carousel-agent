@@ -8,7 +8,12 @@ brand. Never impose a particular website palette, account or favicon.
 
 - 1080 x 1350 px, portrait 4:5.
 - Use a sourced 4-15 second video under the runtime duration contract. A sourced
-  still with a restrained push-in is the fallback. Cover media is never AI-generated.
+  still with a restrained push-in is the fallback. We never AI-generate cover
+  media. Artwork the story's own organisation published (key art, a product
+  render, an official photo) is sourced media and may be used.
+- When no sourced picture works, a credited, free-licensed reference photo of
+  the story's people, organisation or place comes before a plain background.
+  The plain background is the last resort, and the reviewer is warned about it.
 - Prefer the announcement, product, event, paper figure or trusted report's
   actual subject. Keep one recognizable focal point when cropping full-bleed.
 

@@ -20,6 +20,12 @@ a review mail.
      the cover and CTA intentionally unnumbered, so
      every body-slide PNG is a real, full-size render actually able to
      carry its approved text);
+   - flags a cover with no picture (built on the plain drawn background)
+     or with a picture the picture check did not approve (a chart scored
+     under 3, a rejected picture, one never checked): the first time it is
+     a critical issue that sends only first_page_visual back to find a real
+     photo; after that one automatic retry, or with no automatic QA round
+     left, it is a major note the reviewer sees, and QA can pass;
    - stores the QAReport, and on CRITICAL failures also stores a ReworkPlan
      targeting the agents responsible, so the orchestrator re-runs only them.
 2. Read the tool result and reply with a short plain-text QA summary

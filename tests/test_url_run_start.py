@@ -79,6 +79,22 @@ class PastedUrlTests(unittest.TestCase):
             'https://example.test/clip.mp4',
         ])
 
+    def test_article_publication_date_comes_from_its_json_ld(self):
+        # The BBC story behind run-34fdc2b246c7 states it only in JSON-LD and a
+        # <time> tag; research and the writers are told the story's date.
+        self.page.text = (
+            '<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle",'
+            '"headline":"Launch","datePublished":"2026-09-24T14:08:38.298Z"}</script>'
+            + self.page.text + '<time dateTime="2026-01-01T00:00:00Z">comment</time>'
+        )
+        self.assertEqual(self.submit().status_code, 202)
+        news = self.session.await_args.kwargs['state'][K_NEWS_ITEM]
+        self.assertEqual(news['published_at'][:10], '2026-09-24')
+
+    def test_article_without_a_stated_date_still_starts(self):
+        self.assertEqual(self.submit().status_code, 202)
+        self.assertIsNone(self.session.await_args.kwargs['state'][K_NEWS_ITEM]['published_at'])
+
     def test_media_payload_is_capped(self):
         self.page.text += ''.join(f'<img src="/{index}.jpg">' for index in range(20))
         self.assertEqual(self.submit().status_code, 202)

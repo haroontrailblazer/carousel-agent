@@ -57,9 +57,22 @@ K_PHASE = "phase"
 K_ACCOUNT_ID = "account_id"          # str - instagram_accounts.id
 K_DESIGN = "carousel_design"         # CarouselDesign dict selected before generation
 K_NEWS_ITEM = "news_item"            # NewsItem dict
+#: The date range a typed request asked about ("this week", "latest" ...),
+#: resolved ONCE at init against the UTC request date so a resume on a later
+#: day still means the week the reviewer asked for. See app/time_window.py.
+K_TIME_WINDOW = "time_window"        # dict - app.time_window.resolve() result
+K_TIME_CONTEXT = "time_context"      # str - today + window note, injected for research/planner/phrasing
+#: True while research runs on its last attempt or on a reviewer's rework,
+#: where validate_output needs only one fact inside the window; the save
+#: tool then applies the same rule. The orchestrator sets it per attempt.
+K_RESEARCH_RELAXED = "research_relaxed_window"  # bool
 K_RESEARCH = "research_brief"        # ResearchBrief dict
 K_PLAN = "carousel_plan"             # CarouselPlan dict
 K_COVER = "cover"                    # CoverSpec dict
+#: Wall-clock time (epoch seconds) by which the cover agent must have built
+#: the cover. The orchestrator stamps it before each cover attempt, well
+#: inside its own step timeout, so a late cover can still be salvaged.
+K_COVER_DEADLINE = "cover_step_deadline"  # float
 K_COPY = "copy_set"                  # CopySet dict
 K_COPY_BUDGET = "copy_budget"        # str - the saved design's text budget, injected for planner/phrasing
 K_BODY_SLIDES = "body_slides"        # list[RenderedSlide dict]

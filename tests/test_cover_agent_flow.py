@@ -271,7 +271,7 @@ def cover_fakes(workdir, monkeypatch):
     def sheet(media_path, is_video, _workdir=""):
         return SimpleNamespace(path=workdir / "sheet.jpg", timestamps=times if is_video else [0.0])
 
-    def judge(_sheet, _story, _hook, _client=None):
+    def judge(_sheet, _story, _hook, _client=None, **_kw):
         return dict(calls.answer)
 
     def apply_focus(media_path, is_video, focus, _workdir="", clean=None):
@@ -349,8 +349,9 @@ def test_a_clip_from_another_moment_keeps_only_the_logo_free_area(cover_fakes, w
     assert any("does not open on the inspected frame" in w for w in result["warnings"])
 
 
-def test_download_and_trims_own_clip_gets_no_subject_crop(cover_fakes, workdir, monkeypatch):
-    """Its start is picked inside media_tools, so it cannot be matched to the frame."""
+def test_download_and_trims_own_clip_is_cut_again_at_the_judged_moment(cover_fakes, workdir, monkeypatch):
+    """Its start is picked inside media_tools, so the approved frame was neither
+    the cover's first frame nor its poster: build_cover cuts that moment itself."""
     _needs_ffmpeg()
     source = _shots(workdir / "src-abc.mp4", ("red", 12))
     clip = workdir / "clip-abc.mp4"
@@ -359,18 +360,39 @@ def test_download_and_trims_own_clip_gets_no_subject_crop(cover_fakes, workdir, 
     ctx = _Ctx()
     downloaded = asyncio.run(fpv.download_and_trim("https://example.com/v", tool_context=ctx))
     assert downloaded["source_path"] == str(source)
-    _inspect(ctx, downloaded["source_path"])
+    inspected = _inspect(ctx, downloaded["source_path"])
 
     assert _build(ctx, downloaded["clip_path"])["ok"]
-    assert cover_fakes.apply_focus[0]["focus"] is None
-    assert cover_fakes.apply_focus[0]["clean"] == CLEAN
+    [focused] = cover_fakes.apply_focus
+    assert Path(focused["media"]).name.startswith("retrim-")
+    assert (focused["focus"], focused["clean"]) == (FOCUS, CLEAN)
+    _, offset = fpv._verdict_for(ctx, focused["media"])
+    assert offset == pytest.approx(inspected["best_start_s"], abs=0.01)
+
+
+def test_an_untrimmed_source_is_cut_at_its_judged_moment(cover_fakes, workdir):
+    """best_so_far may name an untrimmed source: built as it was, the cover
+    started at 0 s and ran the full 15 s."""
+    _needs_ffmpeg()
+    source = _shots(workdir / "src.mp4", ("red", 30))
+    ctx = _Ctx()
+    inspected = _inspect(ctx, source)
+    best = inspected["best_so_far"]
+    assert (best["retrim_from"], best["best_start_s"]) == (str(source), 2.5)
+
+    result = _build(ctx, best["path"])
+    assert result["ok"], result
+    built = cover_fakes.apply_focus[0]["media"]
+    assert Path(built).name.startswith("retrim-")
+    assert media_tools._media_duration(built) <= fpv._MAX_COVER_S + 0.5
 
 
 def test_a_rejected_verdict_gives_no_subject_crop(cover_fakes, workdir):
     _needs_ffmpeg()
     source = _shots(workdir / "src.mp4", ("red", 12))
     ctx = _Ctx()
-    cover_fakes.answer = _verdict(verdict="reject", problems=["talking_head"])
+    # A corner bug: still a real picture (a talking head is unusable, tier 0).
+    cover_fakes.answer = _verdict(verdict="reject", problems=["publisher_branding"])
     inspected = _inspect(ctx, source)
     clip = _retrim(ctx, source, inspected["best_start_s"], 6)
 
@@ -446,7 +468,7 @@ def test_find_source_clip_passes_the_research_media_through(workdir, monkeypatch
     video = "https://www.youtube.com/watch?v=explainer01"
     calls = []
     monkeypatch.setattr(media_tools, "find_source_clip",
-                        lambda *args: calls.append(args) or {"video_url": ""})
+                        lambda *args, **_k: calls.append(args) or {"video_url": ""})
     ctx = _Ctx()
     _news_state(ctx, media_urls=[video], research_media=[video])
 
@@ -461,7 +483,7 @@ def test_a_held_back_video_is_inspected_after_the_stills_use_up_the_budget(
     """Up to five stills come first; the one video behind them still gets a look."""
     held = "https://www.youtube.com/watch?v=held01"
     monkeypatch.setattr(media_tools, "find_source_clip",
-                        lambda *_a: {"image_first": True, "video_url": held})
+                        lambda *_a, **_k: {"image_first": True, "video_url": held})
     source = workdir / "src-held.mp4"
     clip = workdir / "clip-held.mp4"
     source.write_bytes(b"mp4")
@@ -490,14 +512,17 @@ def test_a_held_back_video_is_inspected_after_the_stills_use_up_the_budget(
     assert again["ok"] is False and "budget" in again["error"]
 
 
-def test_an_ai_illustration_is_refused_and_so_is_any_clip_cut_from_it(cover_fakes, workdir):
+@pytest.mark.parametrize("kind", ["ai_art", ""])  # "" = a verdict stored before kinds
+def test_an_ai_illustration_is_refused_and_so_is_any_clip_cut_from_it(cover_fakes, workdir, kind):
     _needs_ffmpeg()
     source = _shots(workdir / "src.mp4", ("red", 12))
     image = workdir / "ChatGPT-Image.png"
     image.write_bytes(b"png")
     ctx = _Ctx()
     cover_fakes.answer = _verdict(verdict="reject", problems=["ai_illustration"])
-    _inspect(ctx, image, is_video=False)
+    if kind:
+        cover_fakes.answer["kind"] = kind
+    assert _inspect(ctx, image, is_video=False)["kind"] == "ai_art"
     _inspect(ctx, source)
     clip = _retrim(ctx, source, 2.5, 6)
 
@@ -505,6 +530,7 @@ def test_an_ai_illustration_is_refused_and_so_is_any_clip_cut_from_it(cover_fake
         for use_inspection in (True, False):
             result = _build(ctx, media, is_video, use_inspection=use_inspection)
             assert result["ok"] is False and "ai_illustration" in result["error"]
+            assert "the cover is never AI-generated" in result["error"]
     assert cover_fakes.compose == [] and ctx.saved == []
 
 
@@ -517,7 +543,7 @@ def test_the_real_crop_reaches_the_renderer(workdir, monkeypatch):
     monkeypatch.setattr(cover_vision, "contact_sheet",
                         lambda *_a: SimpleNamespace(path=workdir / "s.jpg", timestamps=[0.5, 2.5]))
     monkeypatch.setattr(cover_vision, "judge_cover_media",
-                        lambda *_a: _verdict(clean=None, best_frame=2))
+                        lambda *_a, **_k: _verdict(clean=None, best_frame=2))
 
     def compose(media_path, *_rest):
         compose_calls.append(media_path)
@@ -562,6 +588,8 @@ def test_the_instruction_follows_the_tools():
     assert "image_first=true" not in ladder
     assert "retrim_from" in ladder and "held_s" in ladder
     assert "ai_illustration" in ladder and "use_inspection" in ladder
+    # A credited reference photo is always tried before the plain background.
+    assert ladder.index("find_reference_photo") < ladder.index("create_placeholder_background")
     rework = text[text.index("## Rework"):]
     assert "inspect_cover_media on the new" in rework and "use_inspection=false" in rework
 
@@ -579,17 +607,19 @@ def test_inspecting_a_url_or_missing_file_costs_no_inspection(cover_fakes, workd
 
 def test_a_candidate_rejected_below_the_floor_is_not_built_from(cover_fakes, workdir):
     """Every candidate was rejected and the agent built from a text card that
-    scored 1: the cover was a blurred banner. The placeholder is better."""
+    scored 1: the cover was a blurred banner. A credited reference photo is
+    tried first; the plain background is never the suggested way out."""
     card = workdir / "text-card.png"
     card.write_bytes(b"png")
     ctx = _Ctx()
     weak = _verdict(verdict="reject", problems=["text_heavy"])
     weak["score"] = 1
     cover_fakes.answer = weak
-    _inspect(ctx, card, is_video=False)
+    assert _inspect(ctx, card, is_video=False)["tier"] == 1
 
     refused = _build(ctx, card, is_video=False)
-    assert refused["ok"] is False and "create_placeholder_background" in refused["error"]
+    assert refused["ok"] is False and "find_reference_photo" in refused["error"]
+    assert "create_placeholder_background" not in refused["error"]
     assert cover_fakes.compose == []
 
 

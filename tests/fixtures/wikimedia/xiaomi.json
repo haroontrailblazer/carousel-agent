@@ -1,0 +1,618 @@
+{
+ "subjects": [
+  "Xiaomi"
+ ],
+ "responses": {
+  "https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=5&search=Xiaomi&type=item&uselang=en": {
+   "searchinfo": {
+    "search": "Xiaomi"
+   },
+   "search": [
+    {
+     "id": "Q1636958",
+     "title": "Q1636958",
+     "pageid": 1571263,
+     "concepturi": "http://www.wikidata.org/entity/Q1636958",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q1636958",
+     "display": {
+      "label": {
+       "value": "Xiaomi",
+       "language": "en"
+      },
+      "description": {
+       "value": "Chinese electronics company",
+       "language": "en"
+      }
+     },
+     "label": "Xiaomi",
+     "description": "Chinese electronics company",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "Xiaomi"
+     }
+    },
+    {
+     "id": "Q15954223",
+     "title": "Q15954223",
+     "pageid": 17577688,
+     "concepturi": "http://www.wikidata.org/entity/Q15954223",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q15954223",
+     "display": {
+      "label": {
+       "value": "Redmi",
+       "language": "en"
+      },
+      "description": {
+       "value": "Chinese smartphone brand made by Xiaomi Corporation",
+       "language": "en"
+      }
+     },
+     "label": "Redmi",
+     "description": "Chinese smartphone brand made by Xiaomi Corporation",
+     "match": {
+      "type": "alias",
+      "language": "en",
+      "text": "Xiaomi Redmi"
+     },
+     "aliases": [
+      "Xiaomi Redmi"
+     ]
+    },
+    {
+     "id": "Q9746",
+     "title": "Q9746",
+     "pageid": 11144,
+     "concepturi": "http://www.wikidata.org/entity/Q9746",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q9746",
+     "display": {
+      "label": {
+       "value": "Emperor Xuanzong of Tang",
+       "language": "en"
+      },
+      "description": {
+       "value": "7th emperor of the Tang dynasty, reigning from 713 to 756 CE",
+       "language": "en"
+      }
+     },
+     "label": "Emperor Xuanzong of Tang",
+     "description": "7th emperor of the Tang dynasty, reigning from 713 to 756 CE",
+     "match": {
+      "type": "alias",
+      "language": "en",
+      "text": "Xiaominghuangdi"
+     },
+     "aliases": [
+      "Xiaominghuangdi"
+     ]
+    },
+    {
+     "id": "Q3178580",
+     "title": "Q3178580",
+     "pageid": 3036193,
+     "concepturi": "http://www.wikidata.org/entity/Q3178580",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q3178580",
+     "display": {
+      "label": {
+       "value": "Mi Youren",
+       "language": "en"
+      },
+      "description": {
+       "value": "12th century painter",
+       "language": "en"
+      }
+     },
+     "label": "Mi Youren",
+     "description": "12th century painter",
+     "match": {
+      "type": "alias",
+      "language": "en",
+      "text": "Xiaomi"
+     },
+     "aliases": [
+      "Xiaomi"
+     ]
+    },
+    {
+     "id": "Q641234",
+     "title": "Q641234",
+     "pageid": 603339,
+     "concepturi": "http://www.wikidata.org/entity/Q641234",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q641234",
+     "display": {
+      "label": {
+       "value": "Xiaomi Arena",
+       "language": "en"
+      },
+      "description": {
+       "value": "indoor arena in Riga, Latvia",
+       "language": "en"
+      }
+     },
+     "label": "Xiaomi Arena",
+     "description": "indoor arena in Riga, Latvia",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "Xiaomi Arena"
+     }
+    }
+   ],
+   "search-continue": 5,
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=Q1636958&props=claims": {
+   "entities": {
+    "Q1636958": {
+     "type": "item",
+     "id": "Q1636958",
+     "claims": {
+      "P18": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "2842517ab10485b3515be483d762aa8c4d838417",
+         "datavalue": {
+          "value": "Xiaomi Headquarters.jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "id": "Q1636958$9b7cbdde-41a6-5830-62d5-8d9445342ee2",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "2ddf957fa62c3a69fa96a7d3ce4a868d7aa8513d",
+         "datavalue": {
+          "value": "Xiaomi Store Portugal.jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "id": "Q1636958$dd991fd2-4f02-94ad-9509-6f279ed1b65c",
+        "rank": "normal"
+       }
+      ],
+      "P169": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P169",
+         "hash": "42f01e936d854c5f99ce510a63edf67ac3f96df8",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 9000717,
+           "id": "Q9000717"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P580": [
+          {
+           "snaktype": "value",
+           "property": "P580",
+           "hash": "f40f7a3b9b28e53e1034a3e8568f93a60b52188e",
+           "datavalue": {
+            "value": {
+             "time": "+2010-00-00T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 9,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P580"
+        ],
+        "id": "Q1636958$bece1e82-4fc5-7de6-434b-415e3e51ccb2",
+        "rank": "normal"
+       }
+      ],
+      "P488": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P488",
+         "hash": "46ea60e5642a95b7883440895eb6b697c55fdd53",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 9000717,
+           "id": "Q9000717"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P580": [
+          {
+           "snaktype": "value",
+           "property": "P580",
+           "hash": "f40f7a3b9b28e53e1034a3e8568f93a60b52188e",
+           "datavalue": {
+            "value": {
+             "time": "+2010-00-00T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 9,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P580"
+        ],
+        "id": "Q1636958$c64f006f-4425-1b6f-8e1f-a12e9413d79a",
+        "rank": "normal"
+       }
+      ],
+      "P112": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "3951381e01011df0dd413204fce8f52cac54b07c",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 9000717,
+           "id": "Q9000717"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q1636958$a281d51c-4e53-7811-ca4c-9f5e7a92ed9a",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "caba2c140a290d1d27a83c0b8268be0fa0df7513",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 18745545,
+           "id": "Q18745545"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q1636958$13d5c11d-4361-4f5a-5d92-d3cf6abca077",
+        "rank": "normal"
+       }
+      ]
+     }
+    }
+   },
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=Q9000717%7CQ18745545&languages=en&props=claims%7Clabels": {
+   "entities": {
+    "Q9000717": {
+     "type": "item",
+     "id": "Q9000717",
+     "labels": {
+      "en": {
+       "language": "en",
+       "value": "Lei Jun"
+      }
+     },
+     "claims": {
+      "P18": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "87f51e98124ce72ec38d3eab8235bf42f987ea40",
+         "datavalue": {
+          "value": "雷军 Lei Jun 20240425 1.jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P585": [
+          {
+           "snaktype": "value",
+           "property": "P585",
+           "hash": "4080c1a4e52642d70fd2f0e9b5c28b861699436c",
+           "datavalue": {
+            "value": {
+             "time": "+2024-04-25T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P585"
+        ],
+        "id": "Q9000717$44785a68-411e-d544-5a5d-f7ecbd2a4dd1",
+        "rank": "normal"
+       }
+      ]
+     }
+    },
+    "Q18745545": {
+     "type": "item",
+     "id": "Q18745545",
+     "labels": {
+      "en": {
+       "language": "en",
+       "value": "Lin Bin"
+      }
+     },
+     "claims": {}
+    }
+   },
+   "success": 1
+  },
+  "https://commons.wikimedia.org/w/api.php?action=query&cllimit=50&format=json&formatversion=2&iiextmetadatafilter=LicenseShortName%7CArtist%7CCategories%7CNonFree&iiprop=url%7Csize%7Cmime%7Cextmetadata&iiurlwidth=1920&prop=imageinfo%7Ccategories&titles=File%3AXiaomi+Headquarters.jpg%7CFile%3AXiaomi+Store+Portugal.jpg%7CFile%3A%E9%9B%B7%E5%86%9B+Lei+Jun+20240425+1.jpg": {
+   "batchcomplete": true,
+   "query": {
+    "pages": [
+     {
+      "pageid": 116388464,
+      "ns": 6,
+      "title": "File:Xiaomi Store Portugal.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 4389202,
+        "width": 4096,
+        "height": 3072,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Xiaomi_Store_Portugal.jpg/1920px-Xiaomi_Store_Portugal.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 1440,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Xiaomi_Store_Portugal.jpg/3840px-Xiaomi_Store_Portugal.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Xiaomi_Store_Portugal.jpg/1920px-Xiaomi_Store_Portugal.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1440,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Xiaomi_Store_Portugal.jpg/3840px-Xiaomi_Store_Portugal.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/1/11/Xiaomi_Store_Portugal.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Xiaomi_Store_Portugal.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=116388464",
+        "extmetadata": {
+         "Categories": {
+          "value": "Self-published work|Files with coordinates missing SDC location of creation|Xiaomi smartphones (Redmi brand)|Xiaomi Stores",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Partydoos&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Partydoos (page does not exist)\">Justin Sijbolts</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-SA-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files with coordinates missing SDC location of creation"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Xiaomi Stores"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Xiaomi smartphones (Redmi brand)"
+       }
+      ]
+     },
+     {
+      "pageid": 147826762,
+      "ns": 6,
+      "title": "File:雷军 Lei Jun 20240425 1.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 89888,
+        "width": 628,
+        "height": 836,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/7/70/%E9%9B%B7%E5%86%9B_Lei_Jun_20240425_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2556,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/7/70/%E9%9B%B7%E5%86%9B_Lei_Jun_20240425_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2556
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/70/%E9%9B%B7%E5%86%9B_Lei_Jun_20240425_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:%E9%9B%B7%E5%86%9B_Lei_Jun_20240425_1.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=147826762",
+        "extmetadata": {
+         "Categories": {
+          "value": "Media from YouTube|Files from external sources with reviewed licenses|Images from China News Service|Lei Jun|Creative Commons Attribution 4.0 with different SDC copyright license|Still images of YouTube videos",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<bdi><a href=\"https://en.wikipedia.org/wiki/en:China_News_Service\" class=\"extiw\" title=\"w:en:China News Service\"><span title=\"state-owned news agency in the People's Republic of China\">China News Service</span></a></bdi>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Creative Commons Attribution 4.0 with different SDC copyright license"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files from external sources with reviewed licenses"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Images from China News Service"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Lei Jun"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Media from YouTube"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Still images of YouTube videos"
+       }
+      ]
+     },
+     {
+      "pageid": 152958609,
+      "ns": 6,
+      "title": "File:Xiaomi Headquarters.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 4983263,
+        "width": 4032,
+        "height": 3024,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/Xiaomi_Headquarters.jpg/1920px-Xiaomi_Headquarters.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 1440,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/Xiaomi_Headquarters.jpg/3840px-Xiaomi_Headquarters.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/Xiaomi_Headquarters.jpg/1920px-Xiaomi_Headquarters.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1440,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0f/Xiaomi_Headquarters.jpg/3840px-Xiaomi_Headquarters.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/0/0f/Xiaomi_Headquarters.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Xiaomi_Headquarters.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=152958609",
+        "extmetadata": {
+         "Categories": {
+          "value": "Self-published work|FoP-China|Files with coordinates missing SDC location of creation|China photographs taken on 2024-08-06|August 2024 in Beijing|Xiaomi Science and Technology Park",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Partydoos&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Partydoos (page does not exist)\">Justin Sijbolts</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:August 2024 in Beijing"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:China photographs taken on 2024-08-06"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files with coordinates missing SDC location of creation"
+       },
+       {
+        "ns": 14,
+        "title": "Category:FoP-China"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Xiaomi Science and Technology Park"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

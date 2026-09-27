@@ -186,6 +186,13 @@ class Settings:
     # Cover clip duration window in seconds (sourced video trimmed into it).
     cover_clip_min_s: float = float(os.getenv("COVER_CLIP_MIN_S", "4"))
     cover_clip_max_s: float = float(os.getenv("COVER_CLIP_MAX_S", "15"))
+    # Wikimedia photos under a share-alike licence (CC BY-SA) put a
+    # share-alike obligation on the post. Off until the owner decides; the
+    # review says when such photos were left out of a cover with no good
+    # picture (app/cover_notice.py).
+    cover_allow_share_alike: bool = os.getenv("COVER_ALLOW_SHARE_ALIKE", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
     skills_dir: Path = PROJECT_ROOT / "skills"
     workdir: Path = Path(os.getenv("WORKDIR", str(PROJECT_ROOT / ".work")))
     # Optional brand overlay composited onto the cover. EMPTY by default, and

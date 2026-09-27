@@ -35,6 +35,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.config import settings
+from app.cover_notice import cover_notice_lines
 from app.services import telegram_config
 
 logger = logging.getLogger(__name__)
@@ -296,6 +297,9 @@ def _send_review_message(run_id: str, bundle: dict, round_no: int, *, creds: dic
         sent_previews = _send_album(client, chat_id, previews, bundle.get("preview_labels"))
 
         lines = [f"Carousel review needed - round {int(round_no)}", news_title]
+        # A cover with no picture must never reach the reviewer looking
+        # finished, so the warning sits above the caption.
+        lines += cover_notice_lines(cover)
         if caption:
             lines += ["", "Caption:", caption]
         source_url = str(bundle.get("source_url") or "").strip()

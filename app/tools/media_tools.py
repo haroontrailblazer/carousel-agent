@@ -6,7 +6,10 @@ Three jobs (see docs/CONTRACTS.md file map):
    image URL from a news item's ``media_urls``, its source page, every page
    linked in its body text, plus a live trend-aware visual search. Current,
    topical, source-affine imagery outranks generic merely available assets.
-   ``placeholder_background`` guarantees a cover can ALWAYS be built.
+   Small CDN size variants are asked for at cover size, and pictures too
+   small for a cover are dropped before they are offered.
+   ``placeholder_background`` is the drawn last resort, after the cover
+   agent's free reference-photo rung (app/tools/reference_photos.py).
 2. ``download_and_trim(url)``   - fetch the clip via the yt-dlp Python API and
    trim it into the configured cover window (settings.cover_clip_min_s..max_s,
    default 4-15 s), silent H.264 mp4.
@@ -32,17 +35,23 @@ import logging
 import math
 import re
 import subprocess
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import partial
 from itertools import combinations
 from pathlib import Path
 from statistics import median
 from typing import Any, Optional
-from urllib.parse import parse_qsl, unquote, urlencode, urljoin, urlparse, urlsplit
+from urllib.parse import (
+    parse_qsl, unquote, urlencode, urljoin, urlparse, urlsplit, urlunsplit,
+)
 
 import requests
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFile, ImageFilter, ImageFont
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, download_range_func
 
@@ -85,14 +94,48 @@ _HTTP_HEADERS = {
         "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
     )
 }
+#: File name of the drawn dark background, the cover's last resort. The
+#: cover agent recognises a drawn cover by this name.
+PLACEHOLDER_NAME = "placeholder-bg.png"
+#: Wikimedia asks every client to name itself with a contact URL and
+#: throttles anonymous browser agents. A project URL, never a person's email.
+WIKIMEDIA_USER_AGENT = "CarouselFactory/1.0 (+https://closefuture.io) cover-reference-lookup"
+_WIKIMEDIA_HOSTS = ("wikimedia.org", "wikipedia.org", "wikidata.org")
 # (connect, read) timeouts for every requests call - never hang the pipeline.
 _PAGE_TIMEOUT = (10, 30)
 _IMAGE_TIMEOUT = (10, 60)
+# The timeouts above are per connection attempt and per read, so a host with
+# six addresses or a server dripping bytes could hold one GET for minutes
+# (60 s measured on ichef with a 10 s connect timeout). Bodies are streamed
+# under a wall-clock limit and a size cap instead of read in one go.
+_PAGE_READ_S = 25.0
+_PAGE_MAX_BYTES = 3_000_000
+_IMAGE_READ_S = 40.0
+_IMAGE_MAX_BYTES = 25_000_000
 _FFMPEG_TIMEOUT_S = 300
 _FFPROBE_TIMEOUT_S = 60
 _MAX_PROBES = 4  # cap yt-dlp probes per find_source_clip call
 _TREND_PAGE_LIMIT = 4
+# One try. It runs next to the page scrapes, so it costs no extra wall time;
+# at 45 s it timed out on searches that took 52-54 s in run-34fdc2b246c7.
+_TREND_SEARCH_TIMEOUT_S = 60
+# Pages are scraped side by side; one call used to fetch them one after
+# another, 127-176 s per call in the BBC replay, of which the government
+# pages with no media took 31-52 s each.
+_SCRAPE_WORKERS = 8
+_SCRAPE_WAIT_S = 45.0
+# find_source_clip's own wall-clock budget when the caller gives none.
+_FIND_BUDGET_S = 150.0
+# Third-party videos past this length are day-long streams, not a clip.
+_MAX_THIRD_PARTY_VIDEO_S = 7200.0
+_LIVE_STATUSES = frozenset({"is_live", "is_upcoming", "post_live", "was_live"})
+# The video search and its title check read the title and the story's
+# subjects, capped: the whole scraped BBC page (12,984 characters) once
+# matched "LIVE: ABC News Live - Sunday, September 20" on "live" and
+# "september".
+_VISUAL_QUERY_MAX_CHARS = 160
 _IMAGE_CANDIDATE_LIMIT = 5
+_IMAGES_PER_PAGE = 2  # per page among the leading candidates (see _few_per_page)
 # Articles the research agent read and cited. They are about the story itself,
 # so their lead images are the "correct news image" far more often than a web
 # search hit - but each page costs a fetch, so only the first few are scraped.
@@ -139,6 +182,11 @@ _SALIENCY_MAX_SIZE = 320
 _MIN_COVER_IMAGE_PIXELS = 450_000
 _MIN_COVER_IMAGE_SIDE = 360
 _MAX_COVER_IMAGE_ASPECT = 3.2
+# Pictures whose URL says nothing about their size are measured before they
+# are offered: 64 KB holds any JPEG/PNG/GIF/WebP header.
+_SIZE_PROBE_LIMIT = 8
+_SIZE_PROBE_BYTES = 65_536
+_SIZE_PROBE_WAIT_S = 10.0
 
 _TOPIC_STOPWORDS = {
     "about", "after", "again", "from", "into", "just", "latest", "more",
@@ -163,10 +211,16 @@ _BAD_VISUAL_TOKENS = {
     "avatar", "badge", "favicon", "icon", "logo", "placeholder", "sprite",
     "tracking", "transparent",
 }
+# Matched on the image's own URL. Generated share cards (``/api/og?title=``,
+# Next.js ``opengraph-image``) render the page title as text on a flat card.
 _BANNER_VISUAL_MARKERS = {
-    "16_9", "16-9", "banner", "og-image", "og_image", "opengraph",
-    "share-card", "share_card", "social-card", "social_card",
+    "16_9", "16-9", "api/og", "banner", "og", "og-image", "og_image", "opengraph",
+    "opengraph-image", "share-card", "share_card", "social-card", "social_card",
+    "social-share", "twitter-card", "twitter_card",
 }
+# A /YYYY/MM/ upload folder this many years before the story is an old picture.
+_OLD_UPLOAD_RE = re.compile(r"/((?:19|20)\d\d)/(?:0[1-9]|1[0-2])/")
+_OLD_UPLOAD_YEARS = 2
 _VIDEO_QUERY_NOISE = {
     "announcement", "clip", "cover", "current", "demo", "event", "image",
     "keynote", "launch", "latest", "news", "official", "photo", "release",
@@ -204,6 +258,17 @@ def _ensure_workdir(workdir: str, subdir: str) -> Path:
     target = base / subdir
     target.mkdir(parents=True, exist_ok=True)
     return target
+
+
+def _headers_for(url: str) -> dict[str, str]:
+    """Request headers for ``url``: Wikimedia gets its named agent."""
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        host = ""
+    if any(host == name or host.endswith("." + name) for name in _WIKIMEDIA_HOSTS):
+        return {"User-Agent": WIKIMEDIA_USER_AGENT}
+    return _HTTP_HEADERS
 
 
 def _ffprobe_bin() -> str:
@@ -284,11 +349,21 @@ def _classify_url(url: str) -> str:
     return "unknown"
 
 
+def _live_status(info: dict[str, Any]) -> str:
+    """yt-dlp's live status of an entry ('' for an ordinary video)."""
+    status = str(info.get("live_status") or "").strip().lower()
+    if not status and info.get("is_live"):
+        status = "is_live"
+    if not status and info.get("was_live"):
+        status = "was_live"
+    return status
+
+
 def _probe_with_ytdlp(url: str) -> Optional[dict[str, Any]]:
     """Probe a URL with the yt-dlp Python API without downloading.
 
-    Returns a small dict ``{"duration": float, "title": str}`` when the URL
-    resolves to playable video, ``None`` otherwise.
+    Returns a small dict ``{"duration": float, "title": str, "live_status":
+    str}`` when the URL resolves to playable video, ``None`` otherwise.
     """
     opts: dict[str, Any] = {
         "quiet": True,
@@ -319,7 +394,25 @@ def _probe_with_ytdlp(url: str) -> Optional[dict[str, Any]]:
     return {
         "duration": float(info.get("duration") or 0.0),
         "title": str(info.get("title") or ""),
+        "live_status": _live_status(info),
     }
+
+
+def _unfit_video(info: dict[str, Any], third_party: bool) -> str:
+    """Why a probed video cannot be the cover ('' when it can).
+
+    A live or upcoming stream cannot be cut. Someone else's past stream or a
+    video of hours is a channel's day-long feed, not a clip of the story; the
+    story's own keynote stream stays allowed.
+    """
+    status = str(info.get("live_status") or "")
+    if status in ("is_live", "is_upcoming"):
+        return f"a {status.replace('_', ' ')} stream"
+    if third_party and status in _LIVE_STATUSES:
+        return "a past live stream"
+    if third_party and float(info.get("duration") or 0.0) > _MAX_THIRD_PARTY_VIDEO_S:
+        return "longer than two hours"
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +449,40 @@ _META_SCORES: dict[str, tuple[str, int]] = {
 }
 
 
+def _page_html(page_url: str) -> str:
+    """A web page's HTML, or '' when it is not HTML or cannot be fetched.
+
+    The Content-Type is read before the body, so a PDF is never downloaded
+    (one cited PDF took 4-10 s per call); a ``.pdf`` link is not requested at
+    all. The body is streamed and cut at :data:`_PAGE_MAX_BYTES` or after
+    :data:`_PAGE_READ_S` seconds, whichever comes first.
+    """
+    if _url_ext(page_url) == ".pdf":
+        return ""
+    try:
+        resp = requests.get(
+            page_url, headers=_headers_for(page_url), timeout=_PAGE_TIMEOUT, stream=True
+        )
+    except requests.RequestException:
+        return ""
+    try:
+        resp.raise_for_status()
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+        if "html" not in ctype and "xml" not in ctype:
+            return ""
+        body = bytearray()
+        ends = time.monotonic() + _PAGE_READ_S
+        for chunk in resp.iter_content(chunk_size=65_536):
+            body += chunk
+            if len(body) >= _PAGE_MAX_BYTES or time.monotonic() > ends:
+                break
+        return bytes(body[:_PAGE_MAX_BYTES]).decode(resp.encoding or "utf-8", errors="replace")
+    except (requests.RequestException, LookupError):
+        return ""
+    finally:
+        resp.close()
+
+
 def _scrape_page_media(page_url: str) -> list[tuple[str, str, int]]:
     """Scrape a source page for media candidates.
 
@@ -366,15 +493,9 @@ def _scrape_page_media(page_url: str) -> list[tuple[str, str, int]]:
         List of ``(url, kind, score)`` tuples; kind is 'video'/'image'/'unknown'.
         Network failures return an empty list - scraping is best-effort.
     """
-    try:
-        resp = requests.get(page_url, headers=_HTTP_HEADERS, timeout=_PAGE_TIMEOUT)
-        resp.raise_for_status()
-    except requests.RequestException:
+    text = _page_html(page_url)
+    if not text:
         return []
-    ctype = (resp.headers.get("Content-Type") or "").lower()
-    if "html" not in ctype and "xml" not in ctype:
-        return []
-    text = resp.text[:3_000_000]
 
     found: list[tuple[str, str, int]] = []
 
@@ -488,35 +609,62 @@ def _video_title_matches_topic(title: str, query: str) -> bool:
     return overlap >= required
 
 
-def _default_visual_query(news: dict) -> str:
-    """Build a clean topic query even when an ad-hoc title contains only URLs."""
-    raw = " ".join(
-        str(news.get(key) or "") for key in ("title", "summary", "body")
-    )
-    urls = _URL_IN_TEXT_RE.findall(raw)
-    without_urls = _URL_IN_TEXT_RE.sub(" ", raw)
-    clean_text = re.sub(r"\s+", " ", without_urls).strip()
-    slug_phrases: list[str] = []
+def _clip_words(text: str, limit: int) -> str:
+    """``text`` cut to ``limit`` characters at a word boundary."""
+    text = re.sub(r"\s+", " ", text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    return (cut.rsplit(" ", 1)[0] if " " in cut else cut).strip()
+
+
+def _visual_topic(news: dict, subjects: Optional[list[str]] = None) -> str:
+    """The story in a few words: its title, then subjects the title lacks.
+
+    A title made only of URLs becomes its slug phrases plus the start of the
+    summary or body. Capped at :data:`_VISUAL_QUERY_MAX_CHARS`: the video
+    search and the title check once read a whole scraped news page.
+    """
+    title = str(news.get("title") or "")
+    topic = re.sub(r"\s+", " ", _URL_IN_TEXT_RE.sub(" ", title)).strip()
+    slugs = _slug_phrases(_URL_IN_TEXT_RE.findall(title))
+    if slugs or not any(char.isalpha() for char in topic):
+        rest = " ".join(str(news.get(key) or "") for key in ("summary", "body"))
+        rest = re.sub(r"\s+", " ", _URL_IN_TEXT_RE.sub(" ", rest)).strip()
+        topic = " ".join(part for part in (*slugs[:1], topic, rest) if part)
+    topic = _clip_words(topic, _VISUAL_QUERY_MAX_CHARS)
+    for subject in subjects or []:
+        name = re.sub(r"\s+", " ", str(subject or "")).strip()
+        if not name or name.lower() in topic.lower():
+            continue
+        longer = f"{topic} {name}".strip()
+        if len(longer) > _VISUAL_QUERY_MAX_CHARS + 40:
+            break
+        topic = longer
+    return topic
+
+
+def _slug_phrases(urls: list[str]) -> list[str]:
+    """Readable phrases from URL slugs ('Niu_Lai' -> 'Niu Lai')."""
+    phrases: list[str] = []
     for url in urls:
         path = unquote(urlparse(url).path).strip("/")
         if not path:
             continue
-        slug = path.split("/")[-1]
-        phrase = re.sub(r"[-_]+", " ", slug)
+        phrase = re.sub(r"[-_]+", " ", path.split("/")[-1])
         phrase = re.sub(
-            r"\b(?:index|article|detail|movie|movies|news)\b",
-            " ",
-            phrase,
-            flags=re.I,
+            r"\b(?:index|article|detail|movie|movies|news)\b", " ", phrase, flags=re.I,
         )
         phrase = re.sub(r"\b\d{4,}\b", " ", phrase)
         phrase = re.sub(r"\s+", " ", phrase).strip()
         if phrase and any(char.isalpha() for char in phrase):
-            slug_phrases.append(phrase)
-    topic = slug_phrases[0] if slug_phrases else clean_text
-    topic = re.sub(r"\s+", " ", topic).strip()
-    if clean_text and clean_text.lower() not in topic.lower():
-        topic = f"{topic} {clean_text}".strip()
+            phrases.append(phrase)
+    return phrases
+
+
+def _default_visual_query(news: dict, subjects: Optional[list[str]] = None) -> str:
+    """Build a clean topic query even when an ad-hoc title contains only URLs."""
+    topic = _visual_topic(news, subjects)
     return f"{topic} official current news image film still poster".strip()
 
 
@@ -584,6 +732,300 @@ _AI_ART_NAME_RE = re.compile(
 _TRACKING_QUERY_KEYS = {"fbclid", "gclid", "mc_cid", "mc_eid"}  # as research_tools
 # Size variants worth upgrading to: at least the cover's width, not a huge original.
 _SANE_VARIANT_WIDTHS = (1080, 2600)
+# A page often links only a small variant of a picture its CDN serves large:
+# BBC ichef /news/240/, ABC width=862. In run-34fdc2b246c7 every candidate was
+# such a variant and every download was refused as too small.
+_UPGRADE_BELOW_WIDTH = 1080
+_UPGRADE_WIDTH = 1600
+# Next.js and Vercel serve only their configured widths; 1920 is a default one.
+_FIXED_WIDTH_IMAGE_ROUTES = ("/_next/image", "/_vercel/image")
+_FIXED_WIDTH_UPGRADE = 1920
+# BBC ichef serves only fixed widths (240 ... 1024, 1536, 2048; 1080, 1200 and
+# 1600 are 404s), so every variant goes to 2048: about 1.2x upscaled on the
+# 4:5 cover, where 1024 was 2.3x. The og:image's /news/1024/branded_news/
+# path has a "BBC NEWS" logo burned in and stops at 1024; the same picture
+# under cpsprodpb is clean at 2048 (checked 2026-09-26).
+_ICHEF_PATH_RE = re.compile(r"^/(news|ace/standard|ace/ws)/(\d{2,4})/(branded_news|cpsprodpb)/")
+_ICHEF_WIDTH = 2048
+# ABC's wcms image service honours any width and height pair. Its news policy
+# burns an "ABC NEWS" logo in; crop_resize serves the same crop clean. A width
+# without a height comes back 1600x100, so only a pair is rewritten.
+_ABC_WCMS_HOST = "wcms.abc-cdn.net.au"
+_ABC_CLEAN_POLICY = "wcms_crop_resize"
+# The Guardian's image service needs width and dpr together, and s=none is
+# its unsigned form. A signed URL with any parameter changed is a 401, so the
+# whole query is replaced, which also drops the orange "The Guardian
+# Opinions" overlay its share cards carry. /img/uploads/ holds byline avatars.
+_GUARDIAN_HOST = "i.guim.co.uk"
+_GUARDIAN_QUERY = "width=1600&dpr=1&s=none&crop=none"
+_SIZE_VALUE_RE = re.compile(r"\d{2,4}")
+_RESIZE_VALUE_RE = re.compile(r"(\d{2,4})(?:(,|%2c)(\d{2,4}))?", re.I)
+# A signed URL stops working when any parameter changes (``s`` is the
+# signature of imgix and the Guardian's image service; ``s=none`` is not).
+# Also Google Cloud Storage (V4 and legacy), Akamai tokens, Alibaba OSS,
+# Tencent COS, S3 credentials and a bare ``auth`` token.
+_SIGNED_QUERY_KEYS = {
+    "__token__", "auth", "expires", "googleaccessid", "hash", "hdnea", "hdnts", "hmac",
+    "key-pair-id", "ossaccesskeyid", "policy", "q-signature", "s", "sig", "sign",
+    "signature", "token", "x-amz-credential", "x-amz-security-token", "x-amz-signature",
+    "x-goog-credential", "x-goog-signature", "x-oss-signature",
+}
+# Beacons and pixels a page embeds: never media. yt-dlp's generic extractor
+# once turned a scorecardresearch pixel into an is_video=true pick.
+_TRACKING_HOSTS = (
+    "bat.bing.com", "doubleclick.net", "google-analytics.com", "googletagmanager.com",
+    "scorecardresearch.com",
+)
+
+
+def _is_junk_url(url: str) -> bool:
+    """True for URLs that are never cover media: data URIs, SVGs, tracking pixels."""
+    text = str(url or "").strip()
+    if text[:5].lower() == "data:":
+        return True
+    try:
+        parsed = urlparse(text)
+        host = (parsed.hostname or "").lower()
+    except ValueError:
+        return True
+    paths = [unquote(parsed.path).lower()]
+    inner = dict(parse_qsl(parsed.query)).get("url", "")
+    if inner:  # a picture served by a script: /_next/image?url=/logo.svg
+        paths.append(unquote(urlparse(inner).path).lower())
+    if any(path.endswith((".svg", ".svgz")) for path in paths):
+        return True
+    if any(host == name or host.endswith("." + name) for name in _TRACKING_HOSTS):
+        return True
+    facebook = host == "facebook.com" or host.endswith(".facebook.com")
+    return facebook and paths[0].rstrip("/") == "/tr"
+
+
+def _query_dpr(values: dict[str, str]) -> float:
+    """The device pixel ratio a query asks for (1 when absent or unreadable)."""
+    try:
+        return min(max(float(values.get("dpr") or 1.0), 1.0), 4.0)
+    except ValueError:
+        return 1.0
+
+
+def _query_values(pieces: list[str]) -> dict[str, str]:
+    """Raw ``key=value`` pieces as a dict with lower-case keys (first wins)."""
+    values: dict[str, str] = {}
+    for piece in pieces:
+        key, _, value = piece.partition("=")
+        values.setdefault(unquote(key).lower(), value)
+    return values
+
+
+def _query_width(pieces: list[str]) -> int:
+    """The width a raw query's ``w``/``width``/``resize`` delivers (0 if none).
+
+    ``dpr`` multiplies it: the Guardian's ``width=700&dpr=2`` is 1400 wide.
+    """
+    dpr = _query_dpr(_query_values(pieces))
+    for piece in pieces:
+        key, _, value = piece.partition("=")
+        key = unquote(key).lower()
+        if key in ("w", "width") and _SIZE_VALUE_RE.fullmatch(value):
+            return round(int(value) * dpr)
+        resize = _RESIZE_VALUE_RE.fullmatch(value) if key == "resize" else None
+        if resize:
+            return round(int(resize[1]) * dpr)
+    return 0
+
+
+def _is_signed(pieces: list[str]) -> bool:
+    """True when a query carries a signature (``s=none`` is the unsigned form)."""
+    for piece in pieces:
+        key, _, value = piece.partition("=")
+        name = unquote(key).lower()
+        if name in _SIGNED_QUERY_KEYS and not (name == "s" and value.lower() == "none"):
+            return True
+    return False
+
+
+def _is_abc_wcms(host: str) -> bool:
+    return host == _ABC_WCMS_HOST or host.endswith("." + _ABC_WCMS_HOST)
+
+
+def _ichef_path(path: str) -> str:
+    """A BBC ichef path at 2048 wide on the clean (unbranded) bucket."""
+
+    def rewrite(match: re.Match) -> str:
+        section, width, bucket = match[1], int(match[2]), match[3]
+        if bucket == "branded_news":
+            # Only /news/ serves the clean bucket at 2048.
+            return f"/news/{_ICHEF_WIDTH}/cpsprodpb/" if section == "news" else match[0]
+        return f"/{section}/{_ICHEF_WIDTH}/{bucket}/" if width < _ICHEF_WIDTH else match[0]
+
+    return _ICHEF_PATH_RE.sub(rewrite, path, count=1)
+
+
+def _abc_query(pieces: list[str]) -> str:
+    """An ABC wcms query without the logo policy, scaled to cover size.
+
+    Left alone unless it has both a width and a height (see
+    :data:`_ABC_WCMS_HOST`).
+    """
+    values = _query_values(pieces)
+    width, height = values.get("width") or "", values.get("height") or ""
+    if not (_SIZE_VALUE_RE.fullmatch(width) and _SIZE_VALUE_RE.fullmatch(height)):
+        return "&".join(pieces)
+    factor = _UPGRADE_WIDTH / int(width) if int(width) < _UPGRADE_BELOW_WIDTH else 1.0
+    out: list[str] = []
+    for piece in pieces:
+        key, _, value = piece.partition("=")
+        if unquote(key).lower() == "impolicy" and "watermark" in value.lower():
+            out.append(f"{key}={_ABC_CLEAN_POLICY}")
+        else:
+            out.append(_scaled_piece(piece, factor) if factor != 1.0 else piece)
+    return "&".join(out)
+
+
+def _scaled_piece(piece: str, factor: float) -> str:
+    """One raw ``key=value`` query piece with its size values scaled."""
+    key, _, value = piece.partition("=")
+    name = unquote(key).lower()
+
+    def scaled(number: str) -> str:
+        return str(round(int(number) * factor))
+
+    if name in ("w", "width", "h", "height") and _SIZE_VALUE_RE.fullmatch(value):
+        return f"{key}={scaled(value)}"
+    resize = _RESIZE_VALUE_RE.fullmatch(value) if name == "resize" else None
+    if resize:
+        height = f"{resize[2]}{scaled(resize[3])}" if resize[3] else ""
+        return f"{key}={scaled(resize[1])}{height}"
+    return piece
+
+
+def upgrade_image_variant(url: str) -> str:
+    """The cover-sized, logo-free variant of a CDN image, else ``url`` itself.
+
+    Pure string work, no I/O. Rewrites verified on 2026-09-26:
+
+    - BBC ichef ``/news/{W}/``, ``/ace/standard/{W}/``, ``/ace/ws/{W}/``
+      become 2048 wide, and ``/news/{W}/branded_news/`` (a burned-in "BBC
+      NEWS" logo) becomes ``/news/2048/cpsprodpb/``;
+    - ABC wcms: ``impolicy=wcms_watermark_news`` becomes
+      ``wcms_crop_resize``, and a width under 1080 is scaled to 1600 with its
+      height, only when both are present;
+    - Guardian ``i.guim.co.uk/img/media/``: the whole query becomes
+      ``width=1600&dpr=1&s=none&crop=none``, signed or not.
+
+    Elsewhere a ``w``/``width`` or ``resize=W[,H]`` delivering under 1080 px
+    (``dpr`` counted) becomes 1600 (1920 on Next.js/Vercel image routes), and
+    ``h``/``height`` scale by the same factor. Any other signed URL is never
+    touched, and the rest of the URL is kept byte for byte. Callers fall back
+    to the original when the variant fails.
+    """
+    text = str(url or "")
+    try:
+        parts = urlsplit(text)
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        return text
+    if host == _GUARDIAN_HOST and parts.path.startswith("/img/media/"):
+        return urlunsplit(parts._replace(query=_GUARDIAN_QUERY, fragment=""))
+    pieces = parts.query.split("&") if parts.query else []
+    if _is_signed(pieces):
+        return text
+    path = _ichef_path(parts.path) if host.startswith("ichef.") else parts.path
+    query = parts.query
+    if _is_abc_wcms(host):
+        query = _abc_query(pieces)
+    else:
+        width = _query_width(pieces)
+        if 0 < width < _UPGRADE_BELOW_WIDTH:
+            fixed = path.rstrip("/").endswith(_FIXED_WIDTH_IMAGE_ROUTES)
+            factor = (_FIXED_WIDTH_UPGRADE if fixed else _UPGRADE_WIDTH) / width
+            query = "&".join(_scaled_piece(piece, factor) for piece in pieces)
+    if path == parts.path and query == parts.query:
+        return text
+    return urlunsplit(parts._replace(path=path, query=query))
+
+
+def image_fits_cover(width: int, height: int) -> bool:
+    """Whether a ``width`` x ``height`` picture is big enough for a 1080x1350 cover."""
+    if width <= 0 or height <= 0:
+        return False
+    aspect = max(width / height, height / width)
+    return (
+        width * height >= _MIN_COVER_IMAGE_PIXELS
+        and min(width, height) >= _MIN_COVER_IMAGE_SIDE
+        and aspect <= _MAX_COVER_IMAGE_ASPECT
+    )
+
+
+def _webp_size(head: bytes) -> tuple[int, int]:
+    """A WebP's canvas size from its RIFF header; Pillow needs the whole file."""
+    if len(head) < 30 or head[:4] != b"RIFF" or head[8:12] != b"WEBP":
+        return 0, 0
+    chunk = head[12:16]
+    if chunk == b"VP8X":
+        return (
+            int.from_bytes(head[24:27], "little") + 1,
+            int.from_bytes(head[27:30], "little") + 1,
+        )
+    if chunk == b"VP8L" and head[20] == 0x2F:
+        bits = int.from_bytes(head[21:25], "little")
+        return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+    if chunk == b"VP8 " and head[23:26] == b"\x9d\x01\x2a":
+        return (
+            int.from_bytes(head[26:28], "little") & 0x3FFF,
+            int.from_bytes(head[28:30], "little") & 0x3FFF,
+        )
+    return 0, 0
+
+
+def probe_image_size(url: str, timeout: tuple[float, float] = (4, 6)) -> tuple[int, int]:
+    """Measure an image from its first 64 KB (a Range GET), without downloading it.
+
+    Returns:
+        ``(width, height)``, or ``(0, 0)`` when the size cannot be read or
+        the request fails in any way.
+    """
+    head = b""
+    headers = {**_headers_for(url), "Range": f"bytes=0-{_SIZE_PROBE_BYTES - 1}"}
+    try:
+        with requests.get(url, headers=headers, timeout=timeout, stream=True) as resp:
+            resp.raise_for_status()
+            parser = ImageFile.Parser()
+            for chunk in resp.iter_content(chunk_size=16_384):
+                if not chunk:
+                    continue
+                head += chunk
+                parser.feed(chunk)
+                if parser.image is not None:
+                    width, height = parser.image.size
+                    return int(width), int(height)
+                if len(head) >= _SIZE_PROBE_BYTES:
+                    break
+    except Exception:  # noqa: BLE001 - a probe is best-effort; unknown keeps the image
+        return 0, 0
+    return _webp_size(head)
+
+
+def _probe_image_sizes(urls: list[str]) -> dict[str, tuple[int, int]]:
+    """Probe up to :data:`_SIZE_PROBE_LIMIT` images at once, waiting about 10 s.
+
+    A probe still running when the wait ends is left to its own timeout and
+    its image counts as unknown.
+    """
+    urls = list(dict.fromkeys(urls))[:_SIZE_PROBE_LIMIT]
+    if not urls:
+        return {}
+    sizes: dict[str, tuple[int, int]] = {}
+    pool = ThreadPoolExecutor(max_workers=len(urls))
+    futures = {pool.submit(probe_image_size, url): url for url in urls}
+    try:
+        for future in as_completed(futures, timeout=_SIZE_PROBE_WAIT_S):
+            sizes[futures[future]] = future.result()
+    except FuturesTimeoutError:
+        pass
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return sizes
 
 
 def _image_identity(url: str) -> str:
@@ -643,7 +1085,12 @@ def _advertised_size(url: str) -> tuple[int, int]:
         resize[1] if len(resize) > 1 else 0
     )
     if width:
-        return width, height
+        dpr = _query_dpr(query)
+        return round(width * dpr), round(height * dpr)
+    # BBC ichef puts the width in the path (/news/1024/...), never the query.
+    ichef = _ICHEF_PATH_RE.match(parsed.path) if (parsed.hostname or "").startswith("ichef.") else None
+    if ichef:
+        return int(ichef[2]), 0
     name = unquote(parsed.path).rsplit("/", 1)[-1]
     dimensions = _IMAGE_DIMENSIONS_RE.findall(name)
     if dimensions:
@@ -712,6 +1159,8 @@ def _is_page_chrome(url: str) -> bool:
     the ``?url=`` it serves): see :data:`_PAGE_CHROME_NAME_RE` for the rules.
     """
     parsed = urlparse(url)
+    if (parsed.hostname or "").lower() == _GUARDIAN_HOST and parsed.path.startswith("/img/uploads/"):
+        return True  # the Guardian's byline avatars
     *folders, name = unquote(parsed.path).lower().split("/")
     stem = name
     while _IMAGE_EXT_RE.search(stem):
@@ -799,14 +1248,18 @@ def _scrape_lead_media(page_url: str) -> list[tuple[str, str, int]]:
     News pages carry dozens of sidebar and related-story images. The lead
     photo comes first (og:image, then the article's first images), so only
     the first :data:`_RESEARCH_LEAD_IMAGES` distinct pictures are kept. Site
-    furniture, AI-generated art and thumbnails too small for a cover are
-    dropped BEFORE counting (a header of social icons used to fill every
-    slot), and each picture keeps its best size variant on the page, not
-    the first one seen.
+    furniture, AI-generated art, SVGs, pixels and thumbnails too small for a
+    cover are dropped BEFORE counting (a header of social icons used to fill
+    every slot), and each picture keeps its best size variant on the page,
+    not the first one seen. A thumbnail is judged at the size its CDN serves
+    on request (:func:`upgrade_image_variant`), so an 862-wide lead photo
+    whose CDN also serves 1600 wide stays a candidate.
     """
     found: list[tuple[str, str, int]] = []
     pictures: dict[str, tuple[str, str, int]] = {}
     for url, kind, score in _scrape_page_media(page_url):
+        if _is_junk_url(url):
+            continue
         if kind != "image":
             found.append((url, kind, score))
             continue
@@ -819,8 +1272,28 @@ def _scrape_lead_media(page_url: str) -> list[tuple[str, str, int]]:
             continue
         better = _variant_rank(url) > _variant_rank(previous[0])
         pictures[key] = (url if better else previous[0], kind, max(score, previous[2]))
-    lead = [picture for picture in pictures.values() if not _is_thumbnail(picture[0])]
+    lead = [
+        picture for picture in pictures.values()
+        if not _is_thumbnail(upgrade_image_variant(picture[0]))
+    ]
     return found + lead[:_RESEARCH_LEAD_IMAGES]
+
+
+def _named_paths(url: str) -> str:
+    """The parts of a media URL that name the picture: its path, and the path
+    of the ``url=`` a script serves. Other query values can say anything."""
+    parsed = urlparse(url)
+    paths = [unquote(parsed.path)]
+    inner = dict(parse_qsl(parsed.query)).get("url", "")
+    if inner:
+        paths.append(unquote(urlparse(inner).path))
+    return " ".join(paths).lower()
+
+
+def _reference_year(news: dict) -> int:
+    """The story's year (its ``published_at``), else this year."""
+    match = re.match(r"\s*((?:19|20)\d\d)", str(news.get("published_at") or ""))
+    return int(match[1]) if match else datetime.now(timezone.utc).year
 
 
 def _rank_candidate(
@@ -832,9 +1305,13 @@ def _rank_candidate(
     score = candidate.score
     reasons = [candidate.reason] if candidate.reason else []
     context = f"{candidate.url} {candidate.context_url}".lower()
+    # Topic words count where they name the picture or its page, not in a
+    # query string: docs.mistral.ai//api/og?title=Mistral+Small+4 is a text
+    # card that merely prints the title.
+    named = f"{_named_paths(candidate.url)} {candidate.context_url.lower()}"
     overlap = sorted(
         token for token in _topic_tokens(news)
-        if _context_has_marker(context, token)
+        if _context_has_marker(named, token)
     )
     if overlap:
         bonus = min(len(overlap) * 3, 12)
@@ -875,14 +1352,20 @@ def _rank_candidate(
         score -= penalty
         reasons.append(f"generic asset -{penalty}")
 
+    media_url = candidate.url.lower()
     banner = sorted(
         marker for marker in _BANNER_VISUAL_MARKERS
-        if _context_has_marker(context, marker)
+        if _context_has_marker(media_url, marker)
     )
     if banner:
         penalty = min(len(banner) * 18, 36)
         score -= penalty
         reasons.append(f"banner/social card -{penalty}")
+
+    upload = _OLD_UPLOAD_RE.search(_named_paths(candidate.url))
+    if upload and int(upload[1]) <= _reference_year(news) - _OLD_UPLOAD_YEARS:
+        score -= 10
+        reasons.append("old upload -10")
 
     return _MediaCandidate(
         url=candidate.url,
@@ -894,27 +1377,63 @@ def _rank_candidate(
     )
 
 
+def _window_day(window: Optional[dict], key: str) -> Optional[datetime]:
+    """One ISO date of a K_TIME_WINDOW dict (None when unset or unreadable)."""
+    try:
+        return datetime.strptime(str((window or {}).get(key) or "")[:10], "%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _day_text(day: datetime) -> str:
+    """'20 September 2026' (Windows strftime has no %-d)."""
+    return f"{day.day} {day:%B %Y}"
+
+
 def _search_trending_pages(
     news: dict,
     search_query: str = "",
+    time_window: Optional[dict] = None,
+    subjects: Optional[list[str]] = None,
 ) -> tuple[list[str], str]:
     """Find current pages carrying prominent, source-grounded topic visuals.
 
     This deliberately searches beyond URLs already attached to the news item.
     The returned pages are scraped for their own og:image/og:video assets and
     ranked with a freshness/relevance bonus by :func:`find_source_clip`.
+    A typed request's ``time_window`` (app/time_window.py) bounds the search:
+    a strict one ("this week") to its dates, a soft one ("latest") to pages
+    published since its start. One 60 s attempt, never a retry.
     """
     topic = re.sub(
         r"\s+",
         " ",
-        (search_query or _default_visual_query(news)).strip(),
+        (search_query or _default_visual_query(news, subjects)).strip(),
     )
     if not topic:
         return [], "trend search skipped: empty topic"
-    published = str(news.get("published_at") or "").strip()
-    date_hint = published[:10] if published else str(datetime.now(timezone.utc).date())
-    query = (
-        f'As of {date_hint}, find the newest prominent visual coverage for "{topic}". '
+    start = _window_day(time_window, "start")
+    if start is not None and (time_window or {}).get("strict"):
+        end = (
+            _window_day(time_window, "end")
+            or _window_day(time_window, "requested_on")
+            or datetime.now(timezone.utc)
+        )
+        lead = (
+            f"Published between {_day_text(start)} and {_day_text(end)} (UTC), find the "
+            f'newest prominent visual coverage for "{topic}". '
+        )
+    elif start is not None:
+        asked = _window_day(time_window, "requested_on") or datetime.now(timezone.utc)
+        lead = (
+            f'As of {_day_text(asked)}, find the newest prominent visual coverage for "{topic}" '
+            f"published since {_day_text(start)}. "
+        )
+    else:
+        published = str(news.get("published_at") or "").strip()
+        date_hint = published[:10] if published else str(datetime.now(timezone.utc).date())
+        lead = f'As of {date_hint}, find the newest prominent visual coverage for "{topic}". '
+    query = lead + (
         "Prefer an official subject-led launch photo, product demo screenshot, "
         "keynote still, or current reputable news photo. Return pages that visibly "
         "carry a real person, product, place, or event from the story. Avoid text-only "
@@ -924,7 +1443,9 @@ def _search_trending_pages(
         # Local import keeps the media layer usable in minimal/offline contexts.
         from app.tools.research_tools import search_web
 
-        result = search_web(query)
+        result = search_web(
+            query, window=time_window, timeout_s=_TREND_SEARCH_TIMEOUT_S, attempts=1
+        )
     except Exception as exc:  # noqa: BLE001 - trend search is best-effort
         return [], f"trend search unavailable: {exc}"
     if result.get("status") != "ok":
@@ -957,6 +1478,10 @@ def _search_video_online(query: str) -> Optional[dict[str, Any]]:
         "socket_timeout": 20,
         "retries": 1,
         "skip_download": True,
+        # The search page lists title, duration and live status; resolving
+        # every hit in full took 60-300 s. download_and_trim finds out later
+        # whether the pick really downloads.
+        "extract_flat": "in_playlist",
         "http_headers": dict(_HTTP_HEADERS),
     }
     try:
@@ -970,6 +1495,8 @@ def _search_video_online(query: str) -> Optional[dict[str, Any]]:
         title = str(entry.get("title") or "").strip()
         if not _video_title_matches_topic(title, query):
             continue
+        if _unfit_video({**entry, "live_status": _live_status(entry)}, third_party=True):
+            continue  # "LIVE: ABC News Live" won the BBC replay
         url = str(entry.get("webpage_url") or entry.get("url") or "").strip()
         if url:
             return {
@@ -980,11 +1507,88 @@ def _search_video_online(query: str) -> Optional[dict[str, Any]]:
     return None
 
 
+def _few_per_page(ranked: list[_MediaCandidate]) -> list[_MediaCandidate]:
+    """Rank order, but no page's pictures ahead of other pages' beyond the first
+    :data:`_IMAGES_PER_PAGE`: the agent tries the top five, and five pictures of
+    one page left it nothing else when that page's style was wrong."""
+    first: list[_MediaCandidate] = []
+    later: list[_MediaCandidate] = []
+    seen: dict[str, int] = {}
+    for candidate in ranked:
+        page = _page_key(candidate.context_url or candidate.url)
+        seen[page] = seen.get(page, 0) + 1
+        (first if seen[page] <= _IMAGES_PER_PAGE else later).append(candidate)
+    return first + later
+
+
+def _wait_for(future: Any, ends: float, default: Any) -> Any:
+    """A future's result, or ``default`` when it fails or ``ends`` passes first."""
+    try:
+        return future.result(timeout=max(ends - time.monotonic(), 0.0))
+    except FuturesTimeoutError:
+        future.cancel()
+        return default
+    except Exception:  # noqa: BLE001 - every helper here is best-effort
+        return default
+
+
+def _scrape_pages(
+    pool: ThreadPoolExecutor,
+    jobs: list[tuple[str, Any, str]],
+    cache: dict,
+    ends: float,
+) -> tuple[dict[str, list[tuple[str, str, int]]], int]:
+    """Scrape ``(cache key, scraper, url)`` jobs side by side.
+
+    Pages already in ``cache`` are not fetched again: a re-call of
+    find_source_clip in the same step re-ran every scrape (7-10 minutes of a
+    20-minute step in the BBC replay). A page still loading after
+    :data:`_SCRAPE_WAIT_S` (or past ``ends``) counts as empty and is cached
+    that way, so it is not waited for twice.
+
+    Returns:
+        The results by cache key, and how many pages timed out.
+    """
+    results: dict[str, list[tuple[str, str, int]]] = {}
+    pending: dict[Any, str] = {}
+    for key, scraper, url in jobs:
+        if key in results or key in pending.values():
+            continue
+        if key in cache:
+            results[key] = [tuple(item) for item in cache[key]]
+            continue
+        pending[pool.submit(scraper, url)] = key
+    wait = max(min(_SCRAPE_WAIT_S, ends - time.monotonic()), 0.0)
+    try:
+        for future in as_completed(list(pending), timeout=wait):
+            try:
+                results[pending[future]] = list(future.result())
+            except Exception:  # noqa: BLE001 - scraping is best-effort
+                results[pending[future]] = []
+    except FuturesTimeoutError:
+        pass
+    slow = 0
+    for future, key in pending.items():
+        if key not in results:
+            future.cancel()
+            results[key] = []
+            slow += 1
+    for key, found in results.items():
+        cache[key] = [list(item) for item in found]
+    return results, slow
+
+
 def find_source_clip(
     news: dict,
     search_query: str = "",
     research_sources: Optional[list[str]] = None,
     research_media: Optional[list[str]] = None,
+    *,
+    time_window: Optional[dict] = None,
+    subjects: Optional[list[str]] = None,
+    page_cache: Optional[dict] = None,
+    budget_s: Optional[float] = None,
+    provenance: Optional[dict] = None,
 ) -> dict:
     """Pick the best sourced video (preferred) or image URL for the cover.
 
@@ -992,22 +1596,38 @@ def find_source_clip(
     ``source_url`` itself (it may be a YouTube/Vimeo watch page), media
     scraped off the source page (og:video / og:image / <video> / iframes),
     every page linked inside the item's body/summary text (each scraped the
-    same way - newsletter blurbs usually carry the links inline), and the
-    lead media of the articles the research brief cites. When no sourced
-    video is playable, a bounded web search (``ytsearch``) hunts for an
-    event/announcement clip before falling back to the best image. Images
-    whose own file name marks them AI-generated are never candidates.
+    same way - newsletter blurbs usually carry the links inline), the lead
+    media of the articles the research brief cites, and a live trend search
+    (one 60 s attempt, bounded by ``time_window``). When no sourced video is
+    playable, a bounded web search (``ytsearch``) hunts for an
+    event/announcement clip before falling back to the best image.
+
+    The pages are scraped side by side while the trend search runs, a page
+    already scraped in this step is read from ``page_cache``, and the whole
+    call keeps to ``budget_s``: what has not finished by then is skipped.
+
+    Every image, whatever page it came from, is first rewritten to the
+    cover-sized, logo-free variant its CDN serves
+    (:func:`upgrade_image_variant`: BBC ichef to 2048 wide and off the
+    branded path, ABC wcms without its watermark policy, the Guardian's
+    unsigned 1600 px form). Then site furniture, thumbnails and images whose
+    own file name marks them AI-generated are dropped, and so are SVGs,
+    ``data:`` URIs and tracking pixels of any kind (these are never scraped
+    as pages or probed with yt-dlp either). The top ranked images whose URL
+    gives no size are measured with a 64 KB range request
+    (:func:`probe_image_size`); one too small for a cover is never offered.
 
     A video from a page that is not the story's own (a web-search, trend or
-    cited-article hit) must have a title naming the topic, and it never
-    beats a photo from the story's own pages: when such a photo exists the
-    photo is the pick and the video is held back as ``video_url``.
+    cited-article hit) must have a title naming the topic, must not be a live
+    or past live stream or longer than two hours, and it never beats a photo
+    from the story's own pages: when any ranked image comes from one, an
+    image is the pick and the video is held back as ``video_url``.
 
     Args:
         news: A ``NewsItem``-shaped dict (keys: ``media_urls``, ``source_url``,
             ``title``, ``body``, ...).
         search_query: Optional web-search override for the video hunt; empty
-            uses the news title.
+            uses the news title and ``subjects``.
         research_sources: Article URLs the research agent read and cited.
             A run started from a headline alone has no other page about the
             story, so there their lead images get a boost; with a source
@@ -1018,6 +1638,21 @@ def find_source_clip(
             entry listed here is ranked as a cited article's instead
             (origin 'research_page': title-checked, held back behind a
             story photo).
+        time_window: The run's ``K_TIME_WINDOW`` (app/time_window.py) for
+            a typed request; it bounds the trend search's dates.
+        subjects: The story's people, organisations and products
+            (reference_photos.story_subjects); with the title they make the
+            video search and its title check.
+        page_cache: Scrape results of this cover step by page, read and
+            filled in place (JSON-safe lists).
+        budget_s: Wall-clock budget for the whole call (default
+            :data:`_FIND_BUDGET_S`).
+        provenance: Filled in place, keyed by every candidate URL, with
+            ``{"context_url": page it was found on, "original": the URL as
+            found before upgrade_image_variant rewrote it, or ''}``. The C1
+            keys carry no page for ``url`` and ``video_url``, and a video's
+            page is what shows it is the company's own; the original is the
+            fallback when a CDN refuses the rewritten size.
 
     Returns:
         Dict with keys: ``found`` (bool), ``url`` (str), ``is_video`` (bool),
@@ -1025,13 +1660,19 @@ def find_source_clip(
         ('media_urls' | 'media_page' | 'source_url' | 'source_page' | 'body_url' |
         'body_page' | 'research_page' | 'trend_search' | 'web_search' | ''),
         ``image_url`` + ``image_origin`` (the best still),
-        ``image_candidates`` (ranked, distinct still alternatives),
+        ``image_candidates`` (ranked, distinct still alternatives, each
+        ``{url, origin, score, reason, context_url, width, height}`` with
+        0 for a size that is unknown),
         ``image_first`` (true when the pick is a story-page image chosen over
         a third-party video), ``video_url`` / ``video_duration_s`` /
         ``video_origin`` (that held-back video; '' / 0.0 / '' otherwise),
         ``trend_search`` (live-search status), and ``note`` (str).
     """
+    budget = _FIND_BUDGET_S if budget_s is None else max(float(budget_s), 1.0)
+    ends = time.monotonic() + budget
+    cache: dict = page_cache if page_cache is not None else {}
     candidate_map: dict[str, _MediaCandidate] = {}
+    originals: dict[str, str] = {}  # upgraded image URL -> the URL as found
 
     def add(
         url: str,
@@ -1041,17 +1682,55 @@ def find_source_clip(
         context_url: str = "",
         reason: str = "",
     ) -> None:
+        if _is_junk_url(url):
+            return
+        if kind == "image":
+            sized = upgrade_image_variant(url)
+            if sized != url:
+                # Of several sizes rewritten to one variant, keep the largest.
+                previous = originals.get(sized)
+                if previous is None or _advertised_size(url)[0] > _advertised_size(previous)[0]:
+                    originals[sized] = url
+                url = sized
+                reason = f"{reason}; variant upgraded" if reason else "variant upgraded"
+            # Every origin, not just cited articles: in run-34fdc2b246c7 the
+            # source page and trend pages offered only thumbnails. The cover
+            # is never AI-generated (skills/cover-style.md).
+            if _is_page_chrome(url) or _is_thumbnail(url) or _looks_ai_generated(url):
+                return
         key = url.split("#", 1)[0]
         if not key:
             return
-        if kind == "image" and _looks_ai_generated(url):
-            return  # the cover is never AI-generated (skills/cover-style.md)
         candidate = _MediaCandidate(url, kind, score, origin, context_url, reason)
         previous = candidate_map.get(key)
         if previous is None or candidate.score > previous.score:
             candidate_map[key] = candidate
 
+    # Plan first, fetch together, then add in the original order: each step
+    # is a direct candidate or a page whose scrape is added through ``then``.
+    steps: list[tuple[str, Any, Any]] = []
+    jobs: list[tuple[str, Any, str]] = []
+
+    def scrape_step(url: str, lead: bool, then: Any) -> None:
+        key = f"{'lead' if lead else 'page'} {_page_key(url)}"
+        jobs.append((key, _scrape_lead_media if lead else _scrape_page_media, url))
+        steps.append(("scrape", key, then))
+
+    def add_step(*args: Any, **kwargs: Any) -> None:
+        steps.append(("add", args, kwargs))
+
+    def add_found(
+        found: list[tuple[str, str, int]],
+        origin: str,
+        page: str,
+        reason: str,
+        score_of: Any = lambda _kind, score: score,
+    ) -> None:
+        for media_url, media_kind, score in found:
+            add(media_url, media_kind, score_of(media_kind, score), origin, page, reason)
+
     scraped: set[str] = set()  # _page_key of every page already scraped
+    direct: set[str] = set()  # media URLs added without a scrape
     found_by_research = {
         _page_key(url) for url in research_media or [] if isinstance(url, str) and url.strip()
     }
@@ -1060,31 +1739,32 @@ def find_source_clip(
         if not isinstance(url, str) or not url.strip():
             continue
         url = url.strip()
+        if _is_junk_url(url):
+            continue  # never scraped as a page or probed as a video
         if _page_key(url) in found_by_research:
             research_listed.append(url)
             continue
         kind = _classify_url(url)
         score = {"video": 100, "image": 50}.get(kind, 25)
-        add(url, kind, score, "media_urls", reason="attached source media")
+        add_step(url, kind, score, "media_urls", reason="attached source media")
+        direct.add(url.split("#", 1)[0])
         if kind == "unknown":
             scraped.add(_page_key(url))
-            for media_url, media_kind, scraped_score in _scrape_page_media(url):
-                add(
-                    media_url,
-                    media_kind,
-                    max(scraped_score, 66 if media_kind == "image" else 94),
-                    "media_page",
-                    url,
-                    "media from an attached research source page",
-                )
+            scrape_step(url, False, partial(
+                add_found, origin="media_page", page=url,
+                reason="media from an attached research source page",
+                score_of=lambda kind, score: max(score, 66 if kind == "image" else 94),
+            ))
 
     source_url = str(news.get("source_url") or "").strip()
     if source_url and _classify_url(source_url) == "video":
-        add(source_url, "video", 95, "source_url", source_url, "official source video")
-    if source_url:
+        add_step(source_url, "video", 95, "source_url", source_url, "official source video")
+        direct.add(source_url.split("#", 1)[0])
+    if source_url and _url_ext(source_url) != ".pdf":
         scraped.add(_page_key(source_url))
-        for url, kind, score in _scrape_page_media(source_url):
-            add(url, kind, score, "source_page", source_url, "official source page")
+        scrape_step(source_url, False, partial(
+            add_found, origin="source_page", page=source_url, reason="official source page",
+        ))
 
     # Pages linked inside the body/summary text (ad-hoc runs put the links
     # there): direct media URLs become candidates, other pages are scraped
@@ -1095,25 +1775,24 @@ def find_source_clip(
     scraped_pages = 0
     for raw in _URL_IN_TEXT_RE.findall(body_text):
         url = raw.rstrip(".,;:!?")
-        if url.split("#", 1)[0] in candidate_map or _page_key(url) in scraped:
+        if url.split("#", 1)[0] in direct or _page_key(url) in scraped:
+            continue
+        if _is_junk_url(url):
             continue
         kind = _classify_url(url)
         if kind == "video":
-            add(url, "video", 92, "body_url", reason="linked from news body")
+            add_step(url, "video", 92, "body_url", reason="linked from news body")
+            direct.add(url.split("#", 1)[0])
         elif kind == "image":
-            add(url, "image", 48, "body_url", reason="linked from news body")
-        elif scraped_pages < _BODY_URL_SCRAPE_LIMIT:
+            add_step(url, "image", 48, "body_url", reason="linked from news body")
+            direct.add(url.split("#", 1)[0])
+        elif scraped_pages < _BODY_URL_SCRAPE_LIMIT and _url_ext(url) != ".pdf":
             scraped_pages += 1
             scraped.add(_page_key(url))
-            for media_url, media_kind, score in _scrape_page_media(url):
-                add(
-                    media_url,
-                    media_kind,
-                    max(score - 2, 1),
-                    "body_page",
-                    url,
-                    "page linked from news body",
-                )
+            scrape_step(url, False, partial(
+                add_found, origin="body_page", page=url, reason="page linked from news body",
+                score_of=lambda _kind, score: max(score - 2, 1),
+            ))
 
     # Articles the research agent cited. For a run started from a headline
     # these are the only pages about the story, and their lead photo is
@@ -1123,10 +1802,26 @@ def find_source_clip(
     # Media the research agent listed comes last, ranked the same way.
     headline_run = not _site(source_url)
     research_pages = 0
+
+    def add_lead(found: list[tuple[str, str, int]], page: str) -> None:
+        lead_given = False
+        for media_url, media_kind, score in found:
+            if media_kind == "image":
+                reason = "image in an article" if lead_given else "lead image of an article"
+                if headline_run:
+                    score = max(score, 54 if lead_given else 60)
+                lead_given = True
+            else:
+                reason = "video on an article"
+            add(
+                media_url, media_kind, score, "research_page", page,
+                f"{reason} cited by the research brief",
+            )
+
     cited = [(raw, False) for raw in _story_pages_first(research_sources or [], news)]
     for raw, listed in cited + [(raw, True) for raw in research_listed]:
         url = str(raw or "").strip()
-        if not url.startswith(("http://", "https://")):
+        if not url.startswith(("http://", "https://")) or _is_junk_url(url):
             continue
         key = _page_key(url)
         if key in scraped:
@@ -1140,191 +1835,251 @@ def find_source_clip(
             continue
         kind = _classify_url(url)
         if kind == "video":
-            add(url, "video", 90, "research_page", url, "video cited by the research brief")
+            add_step(url, "video", 90, "research_page", url, "video cited by the research brief")
             continue
         if kind == "image":
-            add(
+            add_step(
                 url, "image", 60 if headline_run else 48, "research_page", url,
                 "image cited by the research brief",
             )
             continue
-        if blocked or research_pages >= _RESEARCH_PAGE_LIMIT:
+        if blocked or research_pages >= _RESEARCH_PAGE_LIMIT or _url_ext(url) == ".pdf":
             continue
         research_pages += 1
-        lead_given = False
-        for media_url, media_kind, score in _scrape_lead_media(url):
-            if media_kind == "image":
-                reason = "image in an article" if lead_given else "lead image of an article"
-                if headline_run:
-                    score = max(score, 54 if lead_given else 60)
-                lead_given = True
+        scrape_step(url, True, partial(add_lead, page=url))
+
+    pool = ThreadPoolExecutor(max_workers=_SCRAPE_WORKERS)
+    try:
+        # The trend search is a billed call of up to a minute: it runs while
+        # the story's own pages load, not after them.
+        trend_future = pool.submit(
+            _search_trending_pages, news, search_query, time_window=time_window, subjects=subjects,
+        )
+        scrapes, slow = _scrape_pages(pool, jobs, cache, ends)
+        for step, first, second in steps:
+            if step == "add":
+                add(*first, **second)
             else:
-                reason = "video on an article"
-            add(
-                media_url, media_kind, score, "research_page", url,
-                f"{reason} cited by the research brief",
-            )
+                second(scrapes.get(first, []))
 
-    # Do not settle for the first attached/available image. Search the live web
-    # for the topic's current prominent visual coverage, scrape those pages,
-    # then rank the resulting assets alongside the source-owned candidates.
-    trend_pages, trend_note = _search_trending_pages(news, search_query)
-    for rank, page_url in enumerate(trend_pages, start=1):
-        page_kind = _classify_url(page_url)
-        if page_kind in {"image", "video"}:
-            direct_score = (58 if page_kind == "image" else 93) - rank * 2
-            add(
-                page_url,
-                page_kind,
-                direct_score,
-                "trend_search",
-                page_url,
-                f"direct live trend result rank {rank}",
+        # Do not settle for the first attached/available image. Search the
+        # live web for the topic's current prominent visual coverage, scrape
+        # those pages, then rank the resulting assets alongside the
+        # source-owned candidates.
+        trend_pages, trend_note = _wait_for(
+            trend_future, ends, ([], "trend search unavailable: time budget reached"),
+        )
+        trend_jobs: list[tuple[int, str, str]] = []
+        for rank, page_url in enumerate(trend_pages, start=1):
+            if _is_junk_url(page_url):
+                continue
+            page_kind = _classify_url(page_url)
+            if page_kind in {"image", "video"}:
+                direct_score = (58 if page_kind == "image" else 93) - rank * 2
+                add(
+                    page_url,
+                    page_kind,
+                    direct_score,
+                    "trend_search",
+                    page_url,
+                    f"direct live trend result rank {rank}",
+                )
+                continue
+            if _page_key(page_url) in scraped or _url_ext(page_url) == ".pdf":
+                # The story's own page came back from the search: it was
+                # scraped above and keeps its own origin.
+                continue
+            scraped.add(_page_key(page_url))
+            trend_jobs.append((rank, page_url, f"lead {_page_key(page_url)}"))
+        # A search hit's lead media only: with the Guardian's images served at
+        # cover size, one trend page's related-story pictures filled every
+        # candidate slot.
+        trend_scrapes, trend_slow = _scrape_pages(
+            pool, [(key, _scrape_lead_media, url) for _rank, url, key in trend_jobs], cache, ends,
+        )
+        slow += trend_slow
+        for rank, page_url, key in trend_jobs:
+            for media_url, media_kind, scraped_score in trend_scrapes.get(key, []):
+                if media_kind == "video":
+                    score = max(scraped_score, 93 - rank * 2)
+                elif media_kind == "image":
+                    score = max(scraped_score, 58 - rank * 2)
+                else:
+                    score = scraped_score
+                add(
+                    media_url,
+                    media_kind,
+                    score,
+                    "trend_search",
+                    page_url,
+                    f"live trend result rank {rank}",
+                )
+        if slow:
+            trend_note = f"{trend_note}; {slow} slow page(s) skipped".strip("; ")
+
+        candidates = [
+            _rank_candidate(candidate, news, source_url)
+            for candidate in candidate_map.values()
+        ]
+        candidates.sort(key=lambda candidate: candidate.score, reverse=True)
+        if provenance is not None:
+            for candidate in candidates:
+                provenance[candidate.url] = {
+                    "context_url": candidate.context_url,
+                    "original": originals.get(candidate.url, ""),
+                }
+
+        # Best image candidate - reported alongside every result so the caller
+        # can drop to the image path the moment video downloads fail, without
+        # re-searching.
+        ranked_images = _distinct_images(
+            [candidate for candidate in candidates if candidate.kind == "image"]
+        )
+        # Measure the leading pictures whose URL gives no size, so a 192x192 app
+        # icon or a 258x258 avatar is never offered (and never downloaded) as a
+        # cover. A picture that cannot be measured keeps its place.
+        sizes = {candidate.url: _advertised_size(candidate.url) for candidate in ranked_images}
+        unsized = [url for url, size in sizes.items() if size == (0, 0)]
+        if unsized and ends - time.monotonic() > 1.0:
+            for url, (width, height) in _probe_image_sizes(unsized[:_SIZE_PROBE_LIMIT]).items():
+                if width and height:
+                    sizes[url] = (width, height)
+        ranked_images = _few_per_page([
+            candidate for candidate in ranked_images
+            if not all(sizes[candidate.url]) or image_fits_cover(*sizes[candidate.url])
+        ])
+        image_candidates = [
+            {
+                "url": candidate.url,
+                "origin": candidate.origin,
+                "score": candidate.score,
+                "reason": candidate.reason,
+                "context_url": candidate.context_url,
+                "width": sizes[candidate.url][0],
+                "height": sizes[candidate.url][1],
+            }
+            for candidate in ranked_images[:_IMAGE_CANDIDATE_LIMIT]
+        ]
+        image_url = image_candidates[0]["url"] if image_candidates else ""
+        image_origin = image_candidates[0]["origin"] if image_candidates else ""
+        # Any photo from the story's own pages, not only the top one: in the
+        # BBC replay a trend-search share card ranked first, so the story's
+        # own photo in fifth place did not count and an ABC livestream won.
+        story_image = any(candidate.origin in _STORY_IMAGE_ORIGINS for candidate in ranked_images)
+
+        def result(found: bool, url: str, is_video: bool, duration: float,
+                   origin: str, note: str) -> dict:
+            return {
+                "found": found,
+                "url": url,
+                "is_video": is_video,
+                "duration_s": duration,
+                "origin": origin,
+                "image_url": image_url,
+                "image_origin": image_origin,
+                "image_candidates": image_candidates,
+                "image_first": False,
+                "video_url": "",
+                "video_duration_s": 0.0,
+                "video_origin": "",
+                "trend_search": trend_note,
+                "note": note,
+            }
+
+        def video_result(url: str, duration: float, origin: str, note: str) -> dict:
+            if origin not in _THIRD_PARTY_VIDEO_ORIGINS or not story_image or not image_url:
+                return result(True, url, True, duration, origin, note)
+            # Someone else's video (an explainer, a newsroom package) while the
+            # story's own pages supplied a photo: the photo is the pick, and the
+            # video is held back for when every inspected image is rejected.
+            picked = result(
+                True, image_url, False, 0.0, image_origin,
+                f"story-page image preferred over a {origin.replace('_', ' ')} "
+                f"video ({note})",
             )
-            continue
-        for media_url, media_kind, scraped_score in _scrape_page_media(page_url):
-            if media_kind == "video":
-                score = max(scraped_score, 93 - rank * 2)
-            elif media_kind == "image":
-                score = max(scraped_score, 58 - rank * 2)
+            picked.update(
+                image_first=True,
+                video_url=url,
+                video_duration_s=duration,
+                video_origin=origin,
+            )
+            return picked
+
+        # Confirm video candidates with yt-dlp probes, side by side: the
+        # story's own videos first, then third-party ones, at most
+        # _MAX_PROBES. Read in rank order, a video from the story's own pages
+        # wins at once; the first playable third-party one is held while the
+        # rest are checked for a story video.
+        topic = _visual_topic(news, subjects)
+        topic_query = search_query.strip() or topic
+        videos = [c for c in candidates if c.kind in ("video", "unknown")]
+        chosen = [c for c in videos if c.origin not in _THIRD_PARTY_VIDEO_ORIGINS]
+        chosen += [c for c in videos if c.origin in _THIRD_PARTY_VIDEO_ORIGINS]
+        chosen = chosen[:_MAX_PROBES]
+        probe_futures = {c.url: pool.submit(_probe_with_ytdlp, c.url) for c in chosen}
+        probed = {url: _wait_for(future, ends, None) for url, future in probe_futures.items()}
+        held: Optional[tuple[str, float, str, str]] = None
+        for candidate in videos:
+            if candidate.url not in probed:
+                continue
+            third_party = candidate.origin in _THIRD_PARTY_VIDEO_ORIGINS
+            if held is not None and third_party:
+                continue
+            info = probed[candidate.url]
+            if info is not None:
+                if third_party and not _video_title_matches_topic(
+                    str(info.get("title") or ""), topic_query
+                ):
+                    continue  # a site-wide player or an unrelated embed
+                if _unfit_video(info, third_party):
+                    continue
+                playable = (
+                    candidate.url,
+                    round(float(info.get("duration") or 0.0), 2),
+                    candidate.origin,
+                    info.get("title") or "probed with yt-dlp",
+                )
+            elif _url_ext(candidate.url) in VIDEO_EXTS:
+                # Direct video file that yt-dlp could not probe (e.g. signed CDN
+                # URL) - trust the extension and let download_and_trim try.
+                playable = (
+                    candidate.url, 0.0, candidate.origin,
+                    "direct video file (probe skipped/failed)",
+                )
             else:
-                score = scraped_score
-            add(
-                media_url,
-                media_kind,
-                score,
-                "trend_search",
-                page_url,
-                f"live trend result rank {rank}",
+                continue
+            if not third_party or not story_image:
+                return video_result(*playable)
+            held = held or playable
+        if held is not None:
+            return video_result(*held)
+
+        # No sourced video played - hunt the web for an event/announcement clip
+        # (the original spec: "a small video piece on that event from web").
+        searched = None
+        if ends - time.monotonic() > 5.0:
+            searched = _wait_for(pool.submit(_search_video_online, topic_query), ends, None)
+        if searched is not None:
+            return video_result(
+                searched["url"], round(float(searched.get("duration") or 0.0), 2), "web_search",
+                f"web search hit: {searched.get('title') or topic_query}",
             )
 
-    candidates = [
-        _rank_candidate(candidate, news, source_url)
-        for candidate in candidate_map.values()
-    ]
-    candidates.sort(key=lambda candidate: candidate.score, reverse=True)
-
-    # Best image candidate - reported alongside every result so the caller
-    # can drop to the image path the moment video downloads fail, without
-    # re-searching.
-    ranked_images = _distinct_images(
-        [candidate for candidate in candidates if candidate.kind == "image"]
-    )
-    image_candidates = [
-        {
-            "url": candidate.url,
-            "origin": candidate.origin,
-            "score": candidate.score,
-            "reason": candidate.reason,
-            "context_url": candidate.context_url,
-        }
-        for candidate in ranked_images[:_IMAGE_CANDIDATE_LIMIT]
-    ]
-    image_url = image_candidates[0]["url"] if image_candidates else ""
-    image_origin = image_candidates[0]["origin"] if image_candidates else ""
-    story_image = image_origin in _STORY_IMAGE_ORIGINS
-
-    def result(found: bool, url: str, is_video: bool, duration: float,
-               origin: str, note: str) -> dict:
-        return {
-            "found": found,
-            "url": url,
-            "is_video": is_video,
-            "duration_s": duration,
-            "origin": origin,
-            "image_url": image_url,
-            "image_origin": image_origin,
-            "image_candidates": image_candidates,
-            "image_first": False,
-            "video_url": "",
-            "video_duration_s": 0.0,
-            "video_origin": "",
-            "trend_search": trend_note,
-            "note": note,
-        }
-
-    def video_result(url: str, duration: float, origin: str, note: str) -> dict:
-        if origin not in _THIRD_PARTY_VIDEO_ORIGINS or not story_image:
-            return result(True, url, True, duration, origin, note)
-        # Someone else's video (an explainer, a newsroom package) while the
-        # story's own pages supplied a photo: the photo is the pick, and the
-        # video is held back for when every inspected image is rejected.
-        picked = result(
-            True, image_url, False, 0.0, image_origin,
-            f"story-page image preferred over a {origin.replace('_', ' ')} "
-            f"video ({note})",
-        )
-        picked.update(
-            image_first=True,
-            video_url=url,
-            video_duration_s=duration,
-            video_origin=origin,
-        )
-        return picked
-
-    # Confirm video candidates (bounded number of network probes). A video
-    # from the story's own pages wins at once; the first playable third-party
-    # one is held while the remaining probes look for a story video.
-    topic_query = search_query.strip() or _default_visual_query(news)
-    held: Optional[tuple[str, float, str, str]] = None
-    probes = 0
-    for candidate in candidates:
-        if candidate.kind not in ("video", "unknown"):
-            continue
-        third_party = candidate.origin in _THIRD_PARTY_VIDEO_ORIGINS
-        if held is not None and third_party:
-            continue
-        if probes >= _MAX_PROBES:
-            break
-        probes += 1
-        info = _probe_with_ytdlp(candidate.url)
-        if info is not None:
-            if third_party and not _video_title_matches_topic(
-                str(info.get("title") or ""), topic_query
-            ):
-                continue  # a site-wide player or an unrelated embed
-            playable = (
-                candidate.url,
-                round(info["duration"], 2),
-                candidate.origin,
-                info["title"] or "probed with yt-dlp",
+        if image_url:
+            return result(
+                True, image_url, False, 0.0, image_origin,
+                "no playable video found; image fallback",
             )
-        elif _url_ext(candidate.url) in VIDEO_EXTS:
-            # Direct video file that yt-dlp could not probe (e.g. signed CDN
-            # URL) - trust the extension and let download_and_trim try.
-            playable = (
-                candidate.url, 0.0, candidate.origin,
-                "direct video file (probe skipped/failed)",
-            )
-        else:
-            continue
-        if not third_party or not story_image:
-            return video_result(*playable)
-        held = held or playable
-    if held is not None:
-        return video_result(*held)
 
-    # No sourced video played - hunt the web for an event/announcement clip
-    # (the original spec: "a small video piece on that event from web").
-    searched = _search_video_online(topic_query)
-    if searched is not None:
-        return video_result(
-            searched["url"], round(searched["duration"], 2), "web_search",
-            f"web search hit: {searched['title'] or topic_query}",
-        )
-
-    if image_url:
         return result(
-            True, image_url, False, 0.0, image_origin,
-            "no playable video found; image fallback",
+            False, "", False, 0.0, "",
+            "no video or image candidates found (media_urls, source page, body "
+            "links, cited articles and web search came up empty) - call "
+            "find_reference_photo for a free-licensed photo of the story's people, "
+            "organisation or place",
         )
-
-    return result(
-        False, "", False, 0.0, "",
-        "no video or image candidates found (media_urls, source page, "
-        "body links and web search all came up empty) - use "
-        "placeholder_background for a text-only cover",
-    )
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1498,10 +2253,12 @@ def next_scene_cut(
 def placeholder_background(workdir: str = "") -> str:
     """Build the deterministic dark 1080x1350 fallback background still.
 
-    Used when NO sourced media exists at all: a subtle top-to-bottom dark
-    gradient the cover overlay + title composite onto, so a cover is
-    ALWAYS produced. Pure Pillow - this is a drawn background, not AI-generated
-    imagery, so it does not violate the sourced-cover rule.
+    The LAST resort, after every sourced candidate and the cover agent's
+    free reference-photo rung: a subtle top-to-bottom dark gradient the
+    cover overlay + title composite onto, so a cover is ALWAYS produced.
+    Pure Pillow - this is a drawn background, not AI-generated imagery, so
+    it does not violate the sourced-cover rule. The file is always named
+    :data:`PLACEHOLDER_NAME`, which is how a drawn cover is recognised.
 
     Args:
         workdir: Run-specific folder (empty falls back to workdir/adhoc).
@@ -1510,7 +2267,7 @@ def placeholder_background(workdir: str = "") -> str:
         Path of the written PNG as a string.
     """
     out_dir = _ensure_workdir(workdir, "cover")
-    out_path = out_dir / "placeholder-bg.png"
+    out_path = out_dir / PLACEHOLDER_NAME
     width, height = 1080, 1350
     top, bottom = 30, 6  # near-black gradient, slightly lighter at the top
     img = Image.new("RGB", (width, height))
@@ -1522,8 +2279,72 @@ def placeholder_background(workdir: str = "") -> str:
     return str(out_path)
 
 
+def _fetch_image_bytes(url: str) -> tuple[bytes, str]:
+    """An image's bytes and Content-Type, streamed under a time and size cap."""
+    try:
+        with requests.get(
+            url, headers=_headers_for(url), timeout=_IMAGE_TIMEOUT, stream=True
+        ) as resp:
+            resp.raise_for_status()
+            ctype = (resp.headers.get("Content-Type") or "").lower()
+            data = bytearray()
+            ends = time.monotonic() + _IMAGE_READ_S
+            for chunk in resp.iter_content(chunk_size=65_536):
+                data += chunk
+                if len(data) > _IMAGE_MAX_BYTES:
+                    raise RuntimeError(
+                        f"image download failed for {url}: larger than "
+                        f"{_IMAGE_MAX_BYTES // 1_000_000} MB"
+                    )
+                if time.monotonic() > ends:
+                    raise RuntimeError(
+                        f"image download failed for {url}: slower than {_IMAGE_READ_S:g} s"
+                    )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"image download failed for {url}: {exc}") from exc
+    return bytes(data), ctype
+
+
+def _download_image_file(url: str, wd: Path) -> str:
+    """Fetch one image URL into ``wd`` and keep it only if it fits a cover."""
+    data, ctype = _fetch_image_bytes(url)
+    ext = _url_ext(url)
+    if ext not in IMAGE_EXTS:
+        ext = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+        }.get(ctype.split(";", 1)[0].strip(), ".jpg")
+    path = wd / f"img-{uuid.uuid4().hex[:12]}{ext}"
+    path.write_bytes(data)
+    try:
+        with Image.open(path) as img:
+            img.load()
+            width, height = img.size
+    except OSError as exc:
+        path.unlink(missing_ok=True)
+        raise RuntimeError(f"downloaded file is not a readable image: {url}") from exc
+    if not image_fits_cover(width, height):
+        path.unlink(missing_ok=True)
+        aspect = max(width / max(height, 1), height / max(width, 1))
+        raise RuntimeError(
+            "image is unsuitable for a 1080x1350 cover "
+            f"({width}x{height}, aspect {aspect:.2f}); try the next ranked "
+            "image_candidates entry"
+        )
+    return str(path)
+
+
 def download_image(url: str, workdir: str = "") -> str:
     """Download a still image (the cover fallback source) and validate it.
+
+    A small CDN size variant is fetched at cover size first
+    (:func:`upgrade_image_variant`); when that variant fails to download or
+    is still too small, the URL exactly as given is tried, unless the URL
+    itself says it is too small for a cover (an ABC 862x485 original cost a
+    second slow GET that could only fail). Bodies are streamed with a size
+    and time cap.
 
     Args:
         url: Direct image URL.
@@ -1533,47 +2354,23 @@ def download_image(url: str, workdir: str = "") -> str:
         Absolute path (str) of the downloaded image file.
 
     Raises:
-        RuntimeError: On HTTP failure or when the payload is not a readable image.
+        RuntimeError: On HTTP failure or when the payload is not a readable
+            image big enough for a cover (the last attempt's error).
     """
     wd = _ensure_workdir(workdir, "images")
-    try:
-        resp = requests.get(url, headers=_HTTP_HEADERS, timeout=_IMAGE_TIMEOUT)
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        raise RuntimeError(f"image download failed for {url}: {exc}") from exc
-
-    ext = _url_ext(url)
-    if ext not in IMAGE_EXTS:
-        ctype = (resp.headers.get("Content-Type") or "").lower()
-        ext = {
-            "image/jpeg": ".jpg",
-            "image/png": ".png",
-            "image/webp": ".webp",
-            "image/gif": ".gif",
-        }.get(ctype.split(";", 1)[0].strip(), ".jpg")
-    path = wd / f"img-{uuid.uuid4().hex[:12]}{ext}"
-    path.write_bytes(resp.content)
-    try:
-        with Image.open(path) as img:
-            img.load()
-            width, height = img.size
-    except OSError as exc:
-        path.unlink(missing_ok=True)
-        raise RuntimeError(f"downloaded file is not a readable image: {url}") from exc
-    short_side = min(width, height)
-    aspect = max(width / max(height, 1), height / max(width, 1))
-    if (
-        width * height < _MIN_COVER_IMAGE_PIXELS
-        or short_side < _MIN_COVER_IMAGE_SIDE
-        or aspect > _MAX_COVER_IMAGE_ASPECT
-    ):
-        path.unlink(missing_ok=True)
-        raise RuntimeError(
-            "image is unsuitable for a 1080x1350 cover "
-            f"({width}x{height}, aspect {aspect:.2f}); try the next ranked "
-            "image_candidates entry"
-        )
-    return str(path)
+    sized = upgrade_image_variant(url)
+    if sized != url:
+        try:
+            return _download_image_file(sized, wd)
+        except RuntimeError as exc:
+            width, height = _advertised_size(url)
+            if _is_thumbnail(url) or (width and height and not image_fits_cover(width, height)):
+                raise RuntimeError(
+                    f"image is unsuitable for a 1080x1350 cover: its cover-size "
+                    f"variant failed ({exc}) and {url} itself is too small; try the "
+                    "next ranked image_candidates entry"
+                ) from exc
+    return _download_image_file(url, wd)
 
 
 # ---------------------------------------------------------------------------

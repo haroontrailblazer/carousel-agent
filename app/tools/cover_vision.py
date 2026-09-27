@@ -8,7 +8,9 @@ recording of a PDF, a web page screenshot and a TV news anchor all pass as
 1. :func:`contact_sheet` lays out numbered frames of a video (or the still
    itself) on one image, so a single vision call can compare moments.
 2. :func:`judge_cover_media` asks the workspace's utility model which frame
-   makes the strongest cover, what is wrong with it, and where the subject is.
+   makes the strongest cover, what is wrong with it, where the subject is,
+   and what kind of picture it is (:data:`KINDS`): a real photo, the story
+   subject's own official visual, a text graphic, or third-party AI art.
 3. :func:`apply_focus` crops the media to that subject, placed in the upper
    part of the 4:5 cover so the title shadow does not bury it.
 
@@ -23,10 +25,12 @@ import logging
 import re
 import subprocess
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -64,9 +68,60 @@ PROBLEMS = (
     "unrelated",
     "low_quality",
 )
-# Problems that rule a candidate out whatever the model's verdict says. The
-# cover must be real, sourced media; an AI picture or illustration never is.
-_HARD_REJECT_PROBLEMS = ("ai_illustration",)
+# What the picture is, which decides whether it may become the cover at all.
+# A company's own key art or product render is sourced (the subject published
+# it; we generated nothing), so only AI art made by a third party, such as a
+# news site's generated header, is ruled out whatever the verdict says.
+KINDS = ("real_photo", "official_visual", "text_graphic", "ai_art", "unusable")
+_TEXT_PROBLEMS = frozenset({"document_or_slide", "text_heavy", "screen_recording_or_webpage"})
+_UNUSABLE_PROBLEMS = frozenset({"logo_only", "unrelated", "talking_head", "low_quality"})
+# How sure the code is that a picture's page belongs to the story's own
+# organisation (see official_source). Only an exact match lets the company's
+# own key art count as sourced when the judge calls it AI art.
+OFFICIAL_EXACT = "exact"
+OFFICIAL_FUZZY = "fuzzy"
+# Parts of a URL host that never make an image the story subject's own: news
+# outlets (fan sites named after a brand too: appleinsider starts with
+# "apple"), platforms, shared hosting and Wikimedia (anyone uploads there).
+_NEVER_OFFICIAL_LABELS = frozenset({
+    "abc", "aljazeera", "amazonaws", "androidauthority", "androidcentral", "androidpolice",
+    "apnews", "appleinsider", "arstechnica", "axios", "bbc", "bbci", "blogspot", "bloomberg",
+    "businessinsider", "cbsnews", "cloudfront", "cnbc", "cnet", "cnn", "engadget", "facebook",
+    "forbes", "foxnews", "gizmodo", "githubusercontent", "googleusercontent", "guardian",
+    "imgur", "instagram", "linkedin", "mashable", "medium", "msn", "nbcnews", "nytimes",
+    "pinimg", "reddit", "reuters", "scmp", "skynews", "staticflickr", "substack", "techcrunch",
+    "techradar", "teslarati", "theguardian", "theregister", "theverge", "tiktok", "twimg",
+    "twitter", "venturebeat", "washingtonpost", "wikimedia", "wikipedia", "windowscentral",
+    "wired", "wordpress", "wp", "wsj", "yahoo", "youtube", "ytimg", "zdnet",
+})
+# Words that sit in fan and news site names next to the brand they cover
+# (xiaomitoday.it, xiaomitime.com, openaimaster.com). A host that only
+# resembles a subject's name is never its own when it holds one of them.
+_FAN_SITE_WORDS = (
+    "blog", "central", "daily", "fans", "forum", "geek", "guide", "hub", "insider", "leaks",
+    "magazine", "master", "news", "report", "rumor", "rumour", "time", "today", "tips",
+    "update", "week", "world", "zone",
+)
+# What a company's own asset hosts add to its name (mistralcdn, openaiassets).
+_OFFICIAL_HOST_SUFFIXES = ("cdn", "static", "assets", "media", "ai", "labs", "hq")
+# Words of a subject name that never identify it alone ("Mistral Small",
+# "Services Australia"), and company-form words dropped from a full name.
+_GENERIC_TOKENS = frozenset({
+    "about", "after", "also", "and", "audio", "breaking", "business", "but", "culture",
+    "earth", "flash", "for", "from", "health", "home", "how", "large", "live", "max",
+    "medium", "mini", "model", "models", "new", "news", "official", "open", "portal", "pro",
+    "said", "service", "services", "small", "sport", "system", "technology", "that", "the",
+    "their", "these", "this", "today", "travel", "ultra", "video", "watch", "weather",
+    "what", "when", "where", "which", "who", "why", "with", "world",
+})
+_COMPANY_FORM_WORDS = ("ai", "inc", "labs", "lab", "group", "corp", "corporation", "company",
+                       "technologies", "technology", "ltd", "limited", "hq")
+# Country suffixes with two parts: the name sits one label further left.
+_TWO_PART_SUFFIXES = frozenset({
+    "ac.uk", "co.in", "co.jp", "co.kr", "co.nz", "co.uk", "co.za", "com.au", "com.br",
+    "com.cn", "com.hk", "com.sg", "com.tw", "edu.au", "gov.au", "gov.cn", "gov.in",
+    "gov.sg", "gov.uk", "govt.nz", "net.au", "org.au", "org.uk",
+})
 # A video only passes when this many sampled frames would each work as a
 # cover. One good B-roll frame in a presenter-led news package is not a clip.
 _MIN_USABLE_VIDEO_FRAMES = 3
@@ -193,6 +248,22 @@ A strong cover shows the real subject of the story: the person, product,
 robot, device, place, object or scene the story is about, ideally doing
 something. One clear focal point. Emotion or action beats a static shot.
 
+The message says where the picture was found and whether that page belongs
+to the story's own organisation. Say what kind of picture the best frame is:
+- real_photo: a camera photo or real footage of the story's subject, of a
+  person, place, building, product or event the story names (a Wikimedia
+  Commons photo of one of them included), or the story article's own photo
+- official_visual: key art, a product or device render, a UI render or
+  keynote graphic with little text, or demo or launch footage published by
+  the company, lab or government the story is about. It is sourced whatever
+  tool made it: the subject published it, nobody generated it for this cover
+- text_graphic: a chart, benchmark table, slide, document, text card, or a
+  page or UI screenshot where the text is the content
+- ai_art: AI-generated or illustrative art made by a third party, such as a
+  news site's generated header picture
+- unusable: unrelated, a logo alone, tiny or blurred, or another outlet's
+  presenter
+
 Reject (verdict "reject") when the best frame is mainly:
 - text_heavy: paragraphs, captions or UI text are the main content
 - document_or_slide: a PDF, slide, paper page or chart
@@ -203,10 +274,17 @@ Reject (verdict "reject") when the best frame is mainly:
   is not the story's subject
 - publisher_branding: another news outlet's or channel's logo, watermark,
   channel bug, lower-third or burned-in caption that cannot be left outside
-  the "clean" box below
-- ai_illustration: an AI-generated picture, drawing, digital illustration
-  or 3D render rather than a real photo or real footage
+  the "clean" box below. The story subject's own logo or name (the company,
+  product or team the story is about) is not publisher_branding
+- ai_illustration: AI-generated art, a drawing or a digital illustration
+  made by a third party, such as a news site's generated header. Key art,
+  renders and demo footage published by the story's own organisation are
+  official_visual, not ai_illustration
 - logo_only, generic_stock, unrelated, low_quality
+
+A chart, slide or page that holds a photo or render covering about a third
+of the frame or more: box that photo or render as focus, judge that region
+as the cover, and take the kind from the region.
 
 Several frames means a video. Judge the video, not just its luckiest frame:
 a news channel's explainer or report (a presenter talking, their logo in a
@@ -219,6 +297,7 @@ Answer with JSON only:
 {"best_frame": <number on the frame's label>,
  "score": <0-10 for the best frame as a cover>,
  "verdict": "use" | "reject",
+ "kind": "real_photo" | "official_visual" | "text_graphic" | "ai_art" | "unusable",
  "problems": [<zero or more of the problem names above, for the best frame>],
  "usable_frames": <how many of the frames would each work as the cover>,
  "focus": {"x": 0-1, "y": 0-1, "w": 0-1, "h": 0-1} or null,
@@ -271,7 +350,222 @@ def _box(raw: Any) -> Optional[dict]:
     return {"x": x, "y": y, "w": w, "h": h}
 
 
-def _parse_verdict(text: str, frame_count: int) -> dict:
+def official_level(value: Any) -> str:
+    """:data:`OFFICIAL_EXACT`, :data:`OFFICIAL_FUZZY` or '' for any stored form.
+
+    Records from before the levels existed hold a bool; True meant the full
+    override was applied, so it reads as exact.
+    """
+    if value is True:
+        return OFFICIAL_EXACT
+    text = str(value or "").strip().lower()
+    return text if text in (OFFICIAL_EXACT, OFFICIAL_FUZZY) else ""
+
+
+def kind_from_problems(problems: Sequence[str], verdict: str = "reject") -> str:
+    """The kind a verdict implies when the model gave none (older verdicts).
+
+    A text problem makes a text graphic whatever the verdict. An unusable
+    problem (a presenter, a logo, something unrelated) only decides a
+    rejection: an approved photo with a presenter in it is still a photo. A
+    rejection that names no known problem says nothing about the picture, so
+    it is not assumed to be a real photo (that would rank it first).
+    """
+    named = {str(problem).strip().lower() for problem in problems or ()}
+    rejected = str(verdict or "").strip().lower() != "use"
+    if "ai_illustration" in named:
+        return "ai_art"
+    if named & _TEXT_PROBLEMS:
+        return "text_graphic"
+    if rejected and named & _UNUSABLE_PROBLEMS:
+        return "unusable"
+    if rejected and not named & set(PROBLEMS):
+        return "unusable"
+    return "real_photo"
+
+
+def _rejected_kind(kind: str, problems: Sequence[str]) -> str:
+    """The kind of a REJECTED picture, from its problems, not the model's label.
+
+    A "real photo" rejected as a presenter, a logo or unrelated is none of
+    those things for a cover, and one rejected as a slide, a page or a text
+    card is a text graphic (a vendor's share card must not pass as a photo or
+    as official art).
+    """
+    named = set(problems)
+    if kind == "ai_art":
+        return kind
+    if named & _UNUSABLE_PROBLEMS:
+        return "unusable"
+    if named & _TEXT_PROBLEMS:
+        return "text_graphic"
+    return kind
+
+
+def tier_for(
+    kind: str, origin: str = "", problems: Sequence[str] = (), official: Any = "",
+) -> int:
+    """How far down the sourcing ladder a picture sits; higher is better.
+
+    3 is a real photo of the story, 2 an official visual from the subject's
+    own site or a Wikimedia reference photo (real, but of the subject in
+    general, not of this news), 1 a text graphic (a chart or card, weak as a
+    cover), an official-looking visual whose page is not verifiably the
+    subject's own, or anything flagged generic stock; 0 is never a cover.
+    ``official`` is the page's :func:`official_source` level.
+    """
+    if kind == "real_photo":
+        tier = 2 if origin == "wikimedia" else 3
+    elif kind == "official_visual":
+        # Fan sites carry AI art in the company's style; only the company's
+        # own site vouches for it.
+        tier = 2 if official_level(official) == OFFICIAL_EXACT else 1
+    else:
+        tier = 1 if kind == "text_graphic" else 0
+    if "generic_stock" in {str(problem).strip().lower() for problem in problems or ()}:
+        tier = min(tier, 1)
+    return tier
+
+
+def _host_label(url: str) -> str:
+    """The name part of a URL's host: 'mistral' for cdn.mistral.ai."""
+    text = str(url or "").strip().lower()
+    host = urlparse(text if "//" in text else f"//{text}").hostname or ""
+    parts = [part for part in host.split(".") if part]
+    if len(parts) < 2:
+        return re.sub(r"[^a-z0-9]", "", parts[0]) if parts else ""
+    index = -3 if len(parts) >= 3 and ".".join(parts[-2:]) in _TWO_PART_SUFFIXES else -2
+    return re.sub(r"[^a-z0-9]", "", parts[index])
+
+
+def _host(url: str) -> str:
+    text = str(url or "").strip().lower()
+    host = urlparse(text if "//" in text else f"//{text}").hostname or ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def _squashed(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(text or "").lower())
+
+
+def _subject_names(subjects: Sequence[str]) -> tuple[set[str], set[str]]:
+    """Each subject's whole name run together, and its distinctive words.
+
+    'Mistral AI' gives the names 'mistralai' and 'mistral' (a company-form
+    word dropped), and 'Mistral Small 4' gives 'mistralsmall4',
+    'mistralsmall' and 'mistral' (a version and a size word dropped).
+    'Services Australia' gives 'servicesaustralia' and the word 'australia'
+    ('services' names nothing); 'Anthony Albanese' never becomes 'anthony'.
+    """
+    names: set[str] = set()
+    words: set[str] = set()
+    for subject in subjects or ():
+        parts = [part for part in re.findall(r"[a-z0-9]+", str(subject or "").lower()) if part]
+        if not parts:
+            continue
+        names.add("".join(parts))
+        while len(parts) > 1 and (
+            parts[-1] in _COMPANY_FORM_WORDS
+            or parts[-1] in _GENERIC_TOKENS
+            or re.fullmatch(r"v?\d+[a-z]?", parts[-1])
+        ):
+            parts = parts[:-1]
+            names.add("".join(parts))
+        words.update(
+            part for part in parts
+            if len(part) >= 3 and any(ch.isalpha() for ch in part) and part not in _GENERIC_TOKENS
+        )
+    return {name for name in names if len(name) >= 3 and name not in _GENERIC_TOKENS}, words
+
+
+def official_source(
+    urls: Sequence[str],
+    subjects: Sequence[str],
+    publishers: Sequence[str] = (),
+    sites: Sequence[str] = (),
+) -> str:
+    """How surely a picture comes from the story subject's own site.
+
+    Matched on the subject NAMES (reference_photos.story_subjects), never on
+    every capitalised word of the page: that made xiaomitoday.it,
+    speedtest.net ("SPEED" in a shouted title) and standard.co.uk ("Standard"
+    in a BBC menu) the subject's own.
+
+    - :data:`OFFICIAL_EXACT`: the host is a subject's official website on
+      Wikidata (P856, passed as ``sites``: mi.com for Xiaomi, openai.com for
+      OpenAI), or its name part and domain together spell a subject's whole
+      name (liquid.ai for "Liquid AI", cms.mistral.ai for "Mistral AI"; an
+      .ai domain spells the company form, so mistral.ai for "Mistral" too)
+      and no known official website of that name sits on another host.
+    - :data:`OFFICIAL_FUZZY`: it only resembles one: the name part alone is
+      a subject's name on some domain (xiaomi.eu is a community ROM site,
+      liquid.com a crypto exchange, medicare.gov the US scheme in a story
+      about Australia's; only P856 tells them from the real sites), two
+      subject words run together (xiaomimimo.com for Xiaomi and MiMo), a
+      subject plus a CDN word (openaicdn), or one word of a longer name. Fan
+      sites look exactly like that, so a fuzzy match never turns "AI art"
+      into official art.
+    - '': anything else, any news outlet, platform or fan site, and a host
+      whose name a known official website uses on another domain (liquid.com
+      when Liquid AI's P856 is liquid.ai).
+
+    A publisher that reported the story (its URL or name) is excluded unless
+    it is itself a subject: a company's own press page is official.
+    """
+    names, words = _subject_names([subjects] if isinstance(subjects, str) else subjects)
+    if not names and not words and not sites:
+        return ""
+    excluded: set[str] = set()
+    for publisher in publishers or ():
+        text = str(publisher or "").strip()
+        if not text:
+            continue
+        label = _host_label(text) if ("/" in text or ("." in text and " " not in text)) else _squashed(text)
+        if label and label not in names:
+            excluded.add(label)
+    official_hosts = {_host(site) for site in sites or () if _host(site)}
+    official_labels = {_host_label(site) for site in official_hosts}
+    best = ""
+    for url in urls or ():
+        host = _host(url)
+        label = _host_label(url)
+        if not label or label in _NEVER_OFFICIAL_LABELS:
+            continue
+        if any(host == site or host.endswith("." + site) for site in official_hosts):
+            return OFFICIAL_EXACT
+        if label in excluded or label in official_labels:
+            # The subject's own site of this name is elsewhere (liquid.ai).
+            continue
+        tld = host.rsplit(".", 1)[-1] if "." in host else ""
+        if f"{label}{tld}" in names or (tld == "ai" and label in names):
+            # The domain spells the company's form: mistral.ai is "Mistral
+            # AI" for a story that only says "Mistral" (Wikidata's "Mistral"
+            # is a warship, so P856 cannot confirm it).
+            return OFFICIAL_EXACT
+        if label in names:
+            best = OFFICIAL_FUZZY
+            continue
+        if any(word in label for word in _FAN_SITE_WORDS):
+            continue
+        stems = names | words
+        if (
+            label in words
+            or any(label == stem + suffix for stem in stems for suffix in _OFFICIAL_HOST_SUFFIXES)
+            or any(label.startswith(first) and label[len(first):] in stems for first in stems)
+        ):
+            best = OFFICIAL_FUZZY
+    return best
+
+
+def _parse_verdict(text: str, frame_count: int, official: Any = "") -> dict:
+    """The judge's answer as a verdict dict; ``official`` is an official_source level.
+
+    The code, not the model, has the last word on the kind: the official
+    override comes first (only for an exact match), then a rejected picture
+    takes its kind from its problems (:func:`_rejected_kind`), and last AI
+    art made by a third party is rejected whatever the verdict said.
+    """
+    official = official_level(official)
     match = re.search(r"\{.*\}", text or "", re.S)
     data = json.loads(match.group(0) if match else text)
     best = int(data.get("best_frame") or 1)
@@ -283,6 +577,26 @@ def _parse_verdict(text: str, frame_count: int) -> dict:
         raw_problems = [raw_problems]
     named = (str(p).strip().lower() for p in raw_problems)
     problems = [p for p in named if p in PROBLEMS]
+    kind = str(data.get("kind") or "").strip().lower()
+    if kind not in KINDS:
+        kind = kind_from_problems(problems, verdict)
+    exact = official == OFFICIAL_EXACT
+    if "ai_illustration" in problems and not exact:
+        kind = "ai_art"
+    if exact:
+        # The story's own company published it: its key art is sourced, and
+        # its own logo on it is not another outlet's branding.
+        overruled = kind == "ai_art" or "ai_illustration" in problems
+        if kind == "ai_art":
+            kind = "official_visual"
+            problems = [p for p in problems if p != "publisher_branding"]
+        problems = [p for p in problems if p != "ai_illustration"]
+        if overruled and not problems:
+            # Its only fault was looking AI-made: Mistral's key art on
+            # mistral.ai stayed "rejected" and the QA gate re-ran the step.
+            verdict = "use"
+    elif kind == "ai_art" and "ai_illustration" not in problems:
+        problems.append("ai_illustration")
     try:
         usable = int(data.get("usable_frames"))
     except (TypeError, ValueError):
@@ -294,10 +608,15 @@ def _parse_verdict(text: str, frame_count: int) -> dict:
     if frame_count >= 4 and verdict == "use" and usable < _MIN_USABLE_VIDEO_FRAMES:
         verdict = "reject"
         reason = f"only {usable} of {frame_count} frames work as a cover. {reason}".strip()
-    hard = [p for p in problems if p in _HARD_REJECT_PROBLEMS]
-    if hard and verdict == "use":
+    # Last, after the official override: a rejected "real photo" of a
+    # presenter is unusable, and a vendor's text card or page screenshot is
+    # a text graphic, whatever it was called (text_heavy included).
+    if verdict == "reject":
+        kind = _rejected_kind(kind, problems)
+    # The cover must be real, sourced media: AI art by a third party never is.
+    if kind == "ai_art" and verdict == "use":
         verdict = "reject"
-        reason = f"not a real photo or footage ({', '.join(hard)}). {reason}".strip()
+        reason = f"not a real photo or footage (ai_illustration). {reason}".strip()
     focus = _box(data.get("focus"))
     clean = _box(data.get("clean"))
     if clean is not None and clean["w"] * clean["h"] > 0.97:
@@ -311,10 +630,19 @@ def _parse_verdict(text: str, frame_count: int) -> dict:
         "focus": focus,
         "clean": clean,
         "reason": reason,
+        "kind": kind,
     }
 
 
-def judge_cover_media(sheet: Sheet, story: str, hook: str, client: Any = None) -> dict:
+def judge_cover_media(
+    sheet: Sheet,
+    story: str,
+    hook: str,
+    client: Any = None,
+    *,
+    provenance: str = "",
+    official: Any = "",
+) -> dict:
     """Ask the utility model which frame makes the best cover, and why.
 
     Args:
@@ -323,6 +651,12 @@ def judge_cover_media(sheet: Sheet, story: str, hook: str, client: Any = None) -
         hook: The cover headline that will sit under the picture.
         client: An OpenAI client; the workspace client when omitted (tests
             inject a fake here).
+        provenance: Where the media was found (page and origin), shown to the
+            judge as "Found on".
+        official: The :func:`official_source` level of the media's pages.
+            Exact: its key art is an official visual, never third-party AI
+            art. Fuzzy: the judge is told the site only resembles the
+            subject's, and nothing is overridden.
 
     Returns:
         The parsed verdict (see :func:`_parse_verdict`).
@@ -336,9 +670,17 @@ def judge_cover_media(sheet: Sheet, story: str, hook: str, client: Any = None) -
     client = client or _client()
     image_b64 = base64.b64encode(sheet.path.read_bytes()).decode("ascii")
     frames = len(sheet.timestamps)
+    found_on = f"Found on: {provenance.strip()[:300]}\n" if provenance.strip() else ""
+    level = official_level(official)
+    own = {
+        OFFICIAL_EXACT: "yes",
+        OFFICIAL_FUZZY: "unverified (the site's name only resembles the organisation's)",
+    }.get(level, "no")
     prompt = (
         f"Story: {story.strip()[:600]}\n"
         f"Cover headline: {hook.strip()}\n"
+        f"{found_on}"
+        f"Published by the story's own organisation: {own}\n"
         f"The image holds {frames} numbered frame(s). Pick the best one for the cover."
     )
     kwargs: dict[str, Any] = {
@@ -378,7 +720,7 @@ def judge_cover_media(sheet: Sheet, story: str, hook: str, client: Any = None) -
         )
     try:
         text = response.choices[0].message.content or ""
-        return _parse_verdict(text, frames)
+        return _parse_verdict(text, frames, official=official)
     except (IndexError, AttributeError, ValueError, TypeError) as exc:
         raise RuntimeError(f"vision check returned an unreadable answer: {exc}") from exc
 

@@ -1,0 +1,1202 @@
+{
+ "subjects": [
+  "OpenAI"
+ ],
+ "responses": {
+  "https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=5&search=OpenAI&type=item&uselang=en": {
+   "searchinfo": {
+    "search": "OpenAI"
+   },
+   "search": [
+    {
+     "id": "Q21708200",
+     "title": "Q21708200",
+     "pageid": 23747017,
+     "concepturi": "http://www.wikidata.org/entity/Q21708200",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q21708200",
+     "display": {
+      "label": {
+       "value": "OpenAI",
+       "language": "en"
+      },
+      "description": {
+       "value": "American artificial intelligence research organization",
+       "language": "en"
+      }
+     },
+     "label": "OpenAI",
+     "description": "American artificial intelligence research organization",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "OpenAI"
+     }
+    },
+    {
+     "id": "Q96237091",
+     "title": "Q96237091",
+     "pageid": 95006143,
+     "concepturi": "http://www.wikidata.org/entity/Q96237091",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q96237091",
+     "display": {
+      "label": {
+       "value": "OpenAI API",
+       "language": "en"
+      },
+      "description": {
+       "value": "various AI APIs, products of OpenAI",
+       "language": "en"
+      }
+     },
+     "label": "OpenAI API",
+     "description": "various AI APIs, products of OpenAI",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "OpenAI API"
+     }
+    },
+    {
+     "id": "Q101366575",
+     "title": "Q101366575",
+     "pageid": 98719715,
+     "concepturi": "http://www.wikidata.org/entity/Q101366575",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q101366575",
+     "display": {
+      "label": {
+       "value": "OpenAir Sessions",
+       "language": "en"
+      },
+      "description": {
+       "value": "podcast from CPR News",
+       "language": "en"
+      }
+     },
+     "label": "OpenAir Sessions",
+     "description": "podcast from CPR News",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "OpenAir Sessions"
+     }
+    },
+    {
+     "id": "Q25106053",
+     "title": "Q25106053",
+     "pageid": 27065217,
+     "concepturi": "http://www.wikidata.org/entity/Q25106053",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q25106053",
+     "display": {
+      "label": {
+       "value": "OpenAIRE",
+       "language": "en"
+      },
+      "description": {
+       "value": "network of Open Access repositories, archives and journals that support Open Access policies",
+       "language": "en"
+      }
+     },
+     "label": "OpenAIRE",
+     "description": "network of Open Access repositories, archives and journals that support Open Access policies",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "OpenAIRE"
+     }
+    },
+    {
+     "id": "Q124544998",
+     "title": "Q124544998",
+     "pageid": 118724232,
+     "concepturi": "http://www.wikidata.org/entity/Q124544998",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q124544998",
+     "display": {
+      "label": {
+       "value": "Sora",
+       "language": "en"
+      },
+      "description": {
+       "value": "text-to-video model developed by OpenAI",
+       "language": "en"
+      }
+     },
+     "label": "Sora",
+     "description": "text-to-video model developed by OpenAI",
+     "match": {
+      "type": "alias",
+      "language": "en",
+      "text": "OpenAI Sora"
+     },
+     "aliases": [
+      "OpenAI Sora"
+     ]
+    }
+   ],
+   "search-continue": 5,
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=Q21708200&props=claims": {
+   "entities": {
+    "Q21708200": {
+     "type": "item",
+     "id": "Q21708200",
+     "claims": {
+      "P18": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "1a60cfc9bf52cbf1907036d5a4214c41642bb715",
+         "datavalue": {
+          "value": "Pioneer Building, San Francisco (2019) -1.jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P2096": [
+          {
+           "snaktype": "value",
+           "property": "P2096",
+           "hash": "78082d9c107233272167c1e7d6d32832b268e608",
+           "datavalue": {
+            "value": {
+             "text": "Ancien siège social d'OpenAI à [[San Francisco]] en Californie.",
+             "language": "fr"
+            },
+            "type": "monolingualtext"
+           },
+           "datatype": "monolingualtext"
+          },
+          {
+           "snaktype": "value",
+           "property": "P2096",
+           "hash": "455b779bf5fa62c6b83aa8fbd367ed3fbe1ea7a7",
+           "datavalue": {
+            "value": {
+             "text": "Pioneer Building i San Francisco der Neuralink og OpenAI har hovudkvarter.",
+             "language": "nn"
+            },
+            "type": "monolingualtext"
+           },
+           "datatype": "monolingualtext"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P2096"
+        ],
+        "id": "Q21708200$7B3EF9B8-83AB-4877-AFF0-C59F4AC0E6FC",
+        "rank": "normal"
+       }
+      ],
+      "P169": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P169",
+         "hash": "4a9398f222cbfa3f36562cc8e287b3963f35ea56",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 7407093,
+           "id": "Q7407093"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P580": [
+          {
+           "snaktype": "value",
+           "property": "P580",
+           "hash": "2296e06ed934d87c227932ad6bdbc65c08719d66",
+           "datavalue": {
+            "value": {
+             "time": "+2019-03-00T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 10,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ],
+         "P582": [
+          {
+           "snaktype": "value",
+           "property": "P582",
+           "hash": "6b2c158e5f2dd7bc10e578efd5a576b350044d6b",
+           "datavalue": {
+            "value": {
+             "time": "+2023-11-17T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ],
+         "P1366": [
+          {
+           "snaktype": "value",
+           "property": "P1366",
+           "hash": "587adbe09d52be723bdfb70029e3532e99d0b2da",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 116706551,
+             "id": "Q116706551"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ],
+         "P805": [
+          {
+           "snaktype": "value",
+           "property": "P805",
+           "hash": "dac1f664eeaea446295405697f215868e14034ec",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 123567706,
+             "id": "Q123567706"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P580",
+         "P582",
+         "P1366",
+         "P805"
+        ],
+        "id": "Q21708200$37b36c66-4676-f9d5-cd47-d9ea7a7fc64d",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P169",
+         "hash": "5bdb64f876b61e01d7585814bc09762203c19c21",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 116706551,
+           "id": "Q116706551"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P580": [
+          {
+           "snaktype": "value",
+           "property": "P580",
+           "hash": "2649b26e4915c47f674a4123f655e1b1da201a68",
+           "datavalue": {
+            "value": {
+             "time": "+2023-11-17T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ],
+         "P582": [
+          {
+           "snaktype": "value",
+           "property": "P582",
+           "hash": "94f3fb50e23e03f826d4c43be11f6de51e70e388",
+           "datavalue": {
+            "value": {
+             "time": "+2023-11-19T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ],
+         "P1365": [
+          {
+           "snaktype": "value",
+           "property": "P1365",
+           "hash": "9f229b6e3e42733a1aefeb6e10f0502fc3df55bb",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 7407093,
+             "id": "Q7407093"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ],
+         "P1366": [
+          {
+           "snaktype": "value",
+           "property": "P1366",
+           "hash": "39144baf528401a16c3541c24397315f6749d4ab",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 5373565,
+             "id": "Q5373565"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ],
+         "P5102": [
+          {
+           "snaktype": "value",
+           "property": "P5102",
+           "hash": "88af458f1b32b71f4d45e2f656614f4024bf06a1",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 4676846,
+             "id": "Q4676846"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P580",
+         "P582",
+         "P1365",
+         "P1366",
+         "P5102"
+        ],
+        "id": "Q21708200$66df9b64-4c4d-0812-3fb9-444ad635f2de",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P169",
+         "hash": "fc18a1bd5068ea2940b658407390311a124f0ca7",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 5373565,
+           "id": "Q5373565"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P580": [
+          {
+           "snaktype": "value",
+           "property": "P580",
+           "hash": "f06f0b7cdf7dd6366b13fab83831a3d260e76814",
+           "datavalue": {
+            "value": {
+             "time": "+2023-11-19T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ],
+         "P582": [
+          {
+           "snaktype": "value",
+           "property": "P582",
+           "hash": "138835a29cdbe5e8975240638f903ee1091ad0e9",
+           "datavalue": {
+            "value": {
+             "time": "+2023-11-21T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ],
+         "P1365": [
+          {
+           "snaktype": "value",
+           "property": "P1365",
+           "hash": "830ad02b065cacf08c6d4aee2fc97a8b98a529e8",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 116706551,
+             "id": "Q116706551"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ],
+         "P1366": [
+          {
+           "snaktype": "value",
+           "property": "P1366",
+           "hash": "5a0e8f348537644ffebbcf1e232e7ab368616256",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 7407093,
+             "id": "Q7407093"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ],
+         "P5102": [
+          {
+           "snaktype": "value",
+           "property": "P5102",
+           "hash": "88af458f1b32b71f4d45e2f656614f4024bf06a1",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 4676846,
+             "id": "Q4676846"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P580",
+         "P582",
+         "P1365",
+         "P1366",
+         "P5102"
+        ],
+        "id": "Q21708200$84b70518-45c3-9c74-b7f6-a60f30b438be",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P169",
+         "hash": "4a9398f222cbfa3f36562cc8e287b3963f35ea56",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 7407093,
+           "id": "Q7407093"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P580": [
+          {
+           "snaktype": "value",
+           "property": "P580",
+           "hash": "a0883945686b6841cfe225c2c6c26064c44c4f8e",
+           "datavalue": {
+            "value": {
+             "time": "+2023-11-22T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ],
+         "P1365": [
+          {
+           "snaktype": "value",
+           "property": "P1365",
+           "hash": "d4d649a32ee123c52848da6848a3500bb5b9f1cc",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 5373565,
+             "id": "Q5373565"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ],
+         "P7452": [
+          {
+           "snaktype": "value",
+           "property": "P7452",
+           "hash": "22ea48be6d30f4e44b5aba1bfaf4eca5c8cc4a56",
+           "datavalue": {
+            "value": {
+             "entity-type": "item",
+             "numeric-id": 71536244,
+             "id": "Q71536244"
+            },
+            "type": "wikibase-entityid"
+           },
+           "datatype": "wikibase-item"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P580",
+         "P1365",
+         "P7452"
+        ],
+        "id": "Q21708200$ffa2ac13-4b24-d9cc-dedb-15282ee7479f",
+        "rank": "preferred"
+       }
+      ],
+      "P488": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P488",
+         "hash": "c628bffe6569a634d7ed8ee904b02be23895b298",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 4961964,
+           "id": "Q4961964"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P580": [
+          {
+           "snaktype": "value",
+           "property": "P580",
+           "hash": "8bb1dabbdec03ebc45d2d0c93e8d08d407766944",
+           "datavalue": {
+            "value": {
+             "time": "+2023-11-00T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 10,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P580"
+        ],
+        "id": "Q21708200$84f4c516-4f41-a280-ea6c-372f4159056c",
+        "rank": "normal"
+       }
+      ],
+      "P112": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "b137a8000ed85bf3abc78b47f3b3678d8d02c501",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 7407093,
+           "id": "Q7407093"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$b12aa35e-4172-2320-de1d-681f746df17b",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "7e2f1ddcb07229a512693c690bcca86559689a52",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 21712134,
+           "id": "Q21712134"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$eb65c1a1-40d6-8351-8d3f-1edc28e360f4",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "db1e6fa91c745f81246941821465a8ecb1d5a2b8",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 100604534,
+           "id": "Q100604534"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$0b125687-4ebe-a9f8-e421-440e2190b109",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "b59ec30f7f035f392510e8e5bf7180735f751c83",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 27733815,
+           "id": "Q27733815"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$76a98286-4390-40d9-100e-032379f5b3c4",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "c989110876d234c4044e70a7795d653ca3bd3a7f",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 56037405,
+           "id": "Q56037405"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$83f89f1b-40f0-d449-3588-295063d8b36a",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "8af610331ede32fe35efe3749b7e03a83dee165e",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 103236782,
+           "id": "Q103236782"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$f70a2a68-4ee7-cc78-b719-d68159910b2f",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "634a5fe07f2c5ad87c81ec83851102077e01d594",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 4088422,
+           "id": "Q4088422"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$4eaa30e5-4eba-e727-2575-cc5266fc2830",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "749ae16186ce7d238ecc8e4c0a3b75753ec8759b",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 128804411,
+           "id": "Q128804411"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$bb8405f7-4112-02dd-27c1-712ed4e37844",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "ea0157ea42d0029809be7f6c64bda504d2938cbe",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 29022624,
+           "id": "Q29022624"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$5e974ef8-4a06-208b-7ce4-4f54cb9641d2",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "45a4d14cd9d6e6c0a01881d44566b6efcd61f4a4",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 135493411,
+           "id": "Q135493411"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$015c6703-415d-a0d8-0a37-b6fd0e303b10",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P112",
+         "hash": "b35fefbfc29d491520989edccebfe6abd4832a21",
+         "datavalue": {
+          "value": {
+           "entity-type": "item",
+           "numeric-id": 317521,
+           "id": "Q317521"
+          },
+          "type": "wikibase-entityid"
+         },
+         "datatype": "wikibase-item"
+        },
+        "type": "statement",
+        "id": "Q21708200$bce1e569-40af-b9ff-7b85-95c5924d9e88",
+        "rank": "normal"
+       }
+      ]
+     }
+    }
+   },
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=Q7407093%7CQ4961964&languages=en&props=claims%7Clabels": {
+   "entities": {
+    "Q7407093": {
+     "type": "item",
+     "id": "Q7407093",
+     "labels": {
+      "en": {
+       "language": "en",
+       "value": "Sam Altman"
+      }
+     },
+     "claims": {
+      "P18": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "9859777c565450586230737c679c3b1ebb9b33f0",
+         "datavalue": {
+          "value": "Sam Altman speaking at TED (cropped).jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P2096": [
+          {
+           "snaktype": "value",
+           "property": "P2096",
+           "hash": "fc21c09a8b191957f86c71c8a0666b58ed6cc821",
+           "datavalue": {
+            "value": {
+             "text": "Sam Altman en avril 2025.",
+             "language": "mul"
+            },
+            "type": "monolingualtext"
+           },
+           "datatype": "monolingualtext"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P2096"
+        ],
+        "id": "Q7407093$c271aa24-4ed9-2ec8-3d1e-06bd83892000",
+        "rank": "normal"
+       }
+      ]
+     }
+    },
+    "Q4961964": {
+     "type": "item",
+     "id": "Q4961964",
+     "labels": {
+      "en": {
+       "language": "en",
+       "value": "Bret Taylor"
+      }
+     },
+     "claims": {
+      "P18": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "18d57c1342b23e0379c19d626b8b22cbc3731ede",
+         "datavalue": {
+          "value": "Bret Taylor - TechCrunch Real-Time Stream Crunchup - 2009.jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P585": [
+          {
+           "snaktype": "value",
+           "property": "P585",
+           "hash": "1bdb0c9c778a1c902aec98cc65c043e3b2fb3f6d",
+           "datavalue": {
+            "value": {
+             "time": "+2009-07-10T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P585"
+        ],
+        "id": "q4961964$732E2FF0-4AE4-40BB-8015-3EE2B5146902",
+        "rank": "normal"
+       }
+      ]
+     }
+    }
+   },
+   "success": 1
+  },
+  "https://commons.wikimedia.org/w/api.php?action=query&cllimit=50&format=json&formatversion=2&iiextmetadatafilter=LicenseShortName%7CArtist%7CCategories%7CNonFree&iiprop=url%7Csize%7Cmime%7Cextmetadata&iiurlwidth=1920&prop=imageinfo%7Ccategories&titles=File%3APioneer+Building%2C+San+Francisco+%282019%29+-1.jpg%7CFile%3ASam+Altman+speaking+at+TED+%28cropped%29.jpg%7CFile%3ABret+Taylor+-+TechCrunch+Real-Time+Stream+Crunchup+-+2009.jpg": {
+   "batchcomplete": true,
+   "query": {
+    "pages": [
+     {
+      "pageid": 8803333,
+      "ns": 6,
+      "title": "File:Bret Taylor - TechCrunch Real-Time Stream Crunchup - 2009.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 4623735,
+        "width": 5616,
+        "height": 3744,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg/1920px-Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 1280,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg/3840px-Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg/1920px-Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1280,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cf/Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg/3840px-Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/c/cf/Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Bret_Taylor_-_TechCrunch_Real-Time_Stream_Crunchup_-_2009.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=8803333",
+        "extmetadata": {
+         "Categories": {
+          "value": "Bret Taylor|Taken with Canon EOS 5D Mark II|Personality rights warning|Unidentified men|Flickr images uploaded by Flickr upload bot|Information field template with formatting|TechCrunch Real-Time Stream Crunchup|Men sitting|Men looking right|Portrait photographs of men with black background",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/photos/50698336@N00\">Brian Solis</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 2.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Bret Taylor"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-2.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Flickr images uploaded by Flickr upload bot"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Information field template with formatting"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Men looking right"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Men sitting"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Personality rights warning"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Portrait photographs of men with black background"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Taken with Canon EOS 5D Mark II"
+       },
+       {
+        "ns": 14,
+        "title": "Category:TechCrunch Real-Time Stream Crunchup"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Unidentified men"
+       }
+      ]
+     },
+     {
+      "pageid": 87849278,
+      "ns": 6,
+      "title": "File:Pioneer Building, San Francisco (2019) -1.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 10039473,
+        "width": 5408,
+        "height": 2717,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/33/Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg/1920px-Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 965,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/33/Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg/3840px-Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/33/Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg/1920px-Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 965,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/33/Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg/3840px-Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/3/33/Pioneer_Building%2C_San_Francisco_%282019%29_-1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Pioneer_Building,_San_Francisco_(2019)_-1.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=87849278",
+        "extmetadata": {
+         "Categories": {
+          "value": "Pioneer Building (San Francisco)|Office buildings in San Francisco|Self-published work|National Register of Historic Places with known IDs",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:HaeB\" title=\"User:HaeB\">HaeB</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-SA-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:National Register of Historic Places with known IDs"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Office buildings in San Francisco"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Pioneer Building (San Francisco)"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       }
+      ]
+     },
+     {
+      "pageid": 170912794,
+      "ns": 6,
+      "title": "File:Sam Altman speaking at TED (cropped).jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 273693,
+        "width": 1216,
+        "height": 1140,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/2/2f/Sam_Altman_speaking_at_TED_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1800,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/2/2f/Sam_Altman_speaking_at_TED_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1800
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/2f/Sam_Altman_speaking_at_TED_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Sam_Altman_speaking_at_TED_(cropped).jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=170912794",
+        "extmetadata": {
+         "Categories": {
+          "value": "Extracted images|Files with coordinates missing SDC location of creation|Sam Altman in 2025",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "Steve Jurvetson",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 2.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-2.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files with coordinates missing SDC location of creation"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Sam Altman in 2025"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

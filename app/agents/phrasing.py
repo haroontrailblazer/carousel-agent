@@ -22,6 +22,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 from app.llm import resolve_role_model
 from app.editorial_voice import with_editorial_voice
+from app.time_window import with_time_context
 
 from app.config import agent_instructions, settings
 from app.schemas import CopySet
@@ -282,7 +283,9 @@ def build_phrasing_agent() -> LlmAgent:
             "design) and the Instagram caption with 3-5 hashtags; outputs a "
             "CopySet."
         ),
-        instruction=with_editorial_voice(instruction),
+        # {time_context?}: today's date and the request's window, so the
+        # copy only calls a fact new when its research date says it is.
+        instruction=with_editorial_voice(with_time_context(instruction)),
         output_schema=CopySet,
         output_key=K_COPY,
         # Leaf pipeline agent driven by the orchestrator - never delegates.

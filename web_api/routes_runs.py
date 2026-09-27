@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from app import runtime
 from app.config import settings
+from app.cover_notice import cover_notice_lines
 from app.design_limits import MAX_SUPPORTED_SLIDES
 from app.schemas import CarouselDesign
 from app.review.verdict import REJECT_QUESTION, submit_verdict
@@ -539,6 +540,10 @@ async def run_artifacts(
             # must not render a <video> element for it.
             "is_still": bool(cover.get("used_fallback_image")),
             "duration_s": cover.get("duration_s", 0),
+            # No picture at all: the viewer shows the warning above the cover.
+            "drawn_background": bool(cover.get("drawn_background")),
+            "credit": cover.get("source_credit") or "",
+            "notices": cover_notice_lines(cover),
         },
         "slides": [
             {**(signed or {}), "index": slide.get("index")}

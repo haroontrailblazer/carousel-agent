@@ -1,7 +1,7 @@
 import * as React from "react"
 import { StudioEmblem } from "@/components/layout/studio-emblem"
 import { preload } from "react-dom"
-import { Check, ChevronLeft, ChevronRight, Copy, ImageOff, Play } from "lucide-react"
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, ImageOff, Play } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -118,6 +118,81 @@ function SlideFrame({
   )
 }
 
+type CoverProps = {
+  cover: RunArtifacts["cover"]
+  choice: CoverChoice
+  onChoose: (choice: CoverChoice) => void
+  onExpired?: () => void
+  fit?: boolean
+}
+
+/**
+ * The cover plus what the reviewer must know about its picture.
+ *
+ * A cover with no picture (the drawn plain background) used to look like any
+ * finished cover, so it was approved without anyone noticing. The warning
+ * sits above the frame, where it cannot be missed. A free-licensed reference
+ * photo's credit is shown underneath; it is in the caption as well.
+ */
+function Cover(props: CoverProps) {
+  const { cover, fit = false } = props
+  // The backend words every warning: no picture at all, or a picture the
+  // automatic check did not approve (a chart, a rejected or unchecked photo).
+  const notices = cover.notices?.length
+    ? cover.notices
+    : cover.drawn_background
+      ? ["Cover warning: no picture could be found for this story, so the cover is a plain background."]
+      : []
+  const credit = cover.credit?.trim()
+
+  if (!notices.length && !credit) return <CoverMedia {...props} />
+
+  return (
+    <div
+      className={cn(
+        "space-y-2",
+        fit && "md:flex md:h-full md:min-h-0 md:flex-col md:space-y-0 md:gap-2",
+      )}
+    >
+      {notices.length > 0 && (
+        <div
+          role="alert"
+          className={cn(
+            "flex gap-2.5 rounded-[var(--radius-md)] px-3 py-2 text-xs",
+            fit && "md:shrink-0",
+          )}
+          style={{
+            background: "var(--phase-failed-soft)",
+            color: "var(--phase-failed-fg)",
+          }}
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div className="space-y-1">
+            {notices.map((notice) => (
+              <p key={notice} className="font-medium">
+                {notice}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className={cn(fit && "md:min-h-0 md:flex-1")}>
+        <CoverMedia {...props} />
+      </div>
+      {credit && (
+        <p
+          className={cn(
+            "text-[11px] text-[var(--muted-foreground)]",
+            fit && "md:shrink-0",
+          )}
+        >
+          Cover photo: {credit}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /**
  * The cover, which may be a clip, a still, or a choice between the two.
  *
@@ -126,19 +201,13 @@ function SlideFrame({
  * default would mean posting a video when someone wanted the still, and the
  * post is public before anyone notices.
  */
-function Cover({
+function CoverMedia({
   cover,
   choice,
   onChoose,
   onExpired,
   fit = false,
-}: {
-  cover: RunArtifacts["cover"]
-  choice: CoverChoice
-  onChoose: (choice: CoverChoice) => void
-  onExpired?: () => void
-  fit?: boolean
-}) {
+}: CoverProps) {
   // Both are offered whenever both FILES exist.
   //
   // `is_still` does not mean "there is no video" - it means no source clip

@@ -1,0 +1,1628 @@
+{
+ "subjects": [
+  "Anthony Albanese",
+  "Services Australia"
+ ],
+ "responses": {
+  "https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=5&search=Anthony+Albanese&type=item&uselang=en": {
+   "searchinfo": {
+    "search": "Anthony Albanese"
+   },
+   "search": [
+    {
+     "id": "Q335697",
+     "title": "Q335697",
+     "pageid": 321710,
+     "concepturi": "http://www.wikidata.org/entity/Q335697",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q335697",
+     "display": {
+      "label": {
+       "value": "Anthony Albanese",
+       "language": "en"
+      },
+      "description": {
+       "value": "31st prime minister of Australia",
+       "language": "en"
+      }
+     },
+     "label": "Anthony Albanese",
+     "description": "31st prime minister of Australia",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "Anthony Albanese"
+     }
+    },
+    {
+     "id": "Q92228512",
+     "title": "Q92228512",
+     "pageid": 91399963,
+     "concepturi": "http://www.wikidata.org/entity/Q92228512",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q92228512",
+     "display": {
+      "label": {
+       "value": "Anthony P Albanese",
+       "language": "en"
+      },
+      "description": {
+       "value": "researcher (ORCID 0000-0001-6677-4189)",
+       "language": "en"
+      }
+     },
+     "label": "Anthony P Albanese",
+     "description": "researcher (ORCID 0000-0001-6677-4189)",
+     "match": {
+      "type": "alias",
+      "language": "en",
+      "text": "Anthony Albanese"
+     },
+     "aliases": [
+      "Anthony Albanese"
+     ]
+    }
+   ],
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=Q335697&props=claims": {
+   "entities": {
+    "Q335697": {
+     "type": "item",
+     "id": "Q335697",
+     "claims": {
+      "P18": [
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "d4bb923e109bbe4c9a3e7dc4b225b3e61862be5c",
+         "datavalue": {
+          "value": "Anthony Albanese portrait (re-crop).jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P585": [
+          {
+           "snaktype": "value",
+           "property": "P585",
+           "hash": "6fe9b8bc0480177c063de6bd77ecee2413663f80",
+           "datavalue": {
+            "value": {
+             "time": "+2022-02-28T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P585"
+        ],
+        "id": "Q335697$059d788b-4ec6-8393-b943-a1117a77e4bb",
+        "rank": "preferred"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "534a106d280a6220ec43fac876571f62111b0346",
+         "datavalue": {
+          "value": "Anthony Albanese-CHOGM 2024.jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P585": [
+          {
+           "snaktype": "value",
+           "property": "P585",
+           "hash": "ccc92edf19f0076ff9e9b77294be6506e7f94a3a",
+           "datavalue": {
+            "value": {
+             "time": "+2024-10-24T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P585"
+        ],
+        "id": "Q335697$34a9dba3-4f01-2322-4d8a-706f6b45156e",
+        "rank": "normal"
+       },
+       {
+        "mainsnak": {
+         "snaktype": "value",
+         "property": "P18",
+         "hash": "4b208ede14fdf62403bd40e07513cab66b89131d",
+         "datavalue": {
+          "value": "Anthony Albanese Official Portrait (cropped).jpg",
+          "type": "string"
+         },
+         "datatype": "commonsMedia"
+        },
+        "type": "statement",
+        "qualifiers": {
+         "P585": [
+          {
+           "snaktype": "value",
+           "property": "P585",
+           "hash": "fb60eb9e198c9554b546bfb95d2ef3ba561fb4a6",
+           "datavalue": {
+            "value": {
+             "time": "+2022-02-14T00:00:00Z",
+             "timezone": 0,
+             "before": 0,
+             "after": 0,
+             "precision": 11,
+             "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            },
+            "type": "time"
+           },
+           "datatype": "time"
+          }
+         ]
+        },
+        "qualifiers-order": [
+         "P585"
+        ],
+        "id": "Q335697$511eeb0e-4223-6762-7a5e-e26c6c5259a3",
+        "rank": "normal"
+       }
+      ]
+     }
+    }
+   },
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&language=en&limit=5&search=Services+Australia&type=item&uselang=en": {
+   "searchinfo": {
+    "search": "Services Australia"
+   },
+   "search": [
+    {
+     "id": "Q4294705",
+     "title": "Q4294705",
+     "pageid": 4105074,
+     "concepturi": "http://www.wikidata.org/entity/Q4294705",
+     "repository": "wikidata",
+     "url": "//www.wikidata.org/wiki/Q4294705",
+     "display": {
+      "label": {
+       "value": "Services Australia",
+       "language": "en"
+      },
+      "description": {
+       "value": "federal welfare agency of the Australian Government",
+       "language": "en"
+      }
+     },
+     "label": "Services Australia",
+     "description": "federal welfare agency of the Australian Government",
+     "match": {
+      "type": "label",
+      "language": "en",
+      "text": "Services Australia"
+     }
+    }
+   ],
+   "success": 1
+  },
+  "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&ids=Q4294705&props=claims": {
+   "entities": {
+    "Q4294705": {
+     "type": "item",
+     "id": "Q4294705",
+     "claims": {}
+    }
+   },
+   "success": 1
+  },
+  "https://commons.wikimedia.org/w/api.php?action=query&cllimit=50&format=json&formatversion=2&iiextmetadatafilter=LicenseShortName%7CArtist%7CCategories%7CNonFree&iiprop=url%7Csize%7Cmime%7Cextmetadata&iiurlwidth=1920&prop=imageinfo%7Ccategories&titles=File%3AAnthony+Albanese+portrait+%28re-crop%29.jpg%7CFile%3AAnthony+Albanese-CHOGM+2024.jpg%7CFile%3AAnthony+Albanese+Official+Portrait+%28cropped%29.jpg": {
+   "batchcomplete": true,
+   "query": {
+    "pages": [
+     {
+      "pageid": 129586213,
+      "ns": 6,
+      "title": "File:Anthony Albanese Official Portrait (cropped).jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 3599593,
+        "width": 1981,
+        "height": 2444,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/Anthony_Albanese_Official_Portrait_%28cropped%29.jpg/1920px-Anthony_Albanese_Official_Portrait_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 2369,
+        "responsiveUrls": {
+         "2": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Anthony_Albanese_Official_Portrait_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/Anthony_Albanese_Official_Portrait_%28cropped%29.jpg/1920px-Anthony_Albanese_Official_Portrait_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2369,
+         "srcset": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Anthony_Albanese_Official_Portrait_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Anthony_Albanese_Official_Portrait_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese_Official_Portrait_(cropped).jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=129586213",
+        "extmetadata": {
+         "Categories": {
+          "value": "Extracted images|Files from websites of the Australian Department of Foreign Affairs and Trade|Portraits of male politicians|Anthony Albanese in 2022|Official portraits of Anthony Albanese",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "David Foote (AUSPIC/Department of Parliamentary Service)",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese in 2022"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files from websites of the Australian Department of Foreign Affairs and Trade"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Official portraits of Anthony Albanese"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Portraits of male politicians"
+       }
+      ]
+     },
+     {
+      "pageid": 157983484,
+      "ns": 6,
+      "title": "File:Anthony Albanese portrait (re-crop).jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 3692671,
+        "width": 1677,
+        "height": 2237,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Anthony_Albanese_portrait_%28re-crop%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2561,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Anthony_Albanese_portrait_%28re-crop%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2561
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Anthony_Albanese_portrait_%28re-crop%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese_portrait_(re-crop).jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=157983484",
+        "extmetadata": {
+         "Categories": {
+          "value": "People of Australia of Italian descent|Extracted images|Portraits of male politicians|Anthony Albanese in 2022|Official portraits of Prime Ministers of Australia|Official portraits of Anthony Albanese",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "Australian Government",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese in 2022"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Official portraits of Anthony Albanese"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Official portraits of Prime Ministers of Australia"
+       },
+       {
+        "ns": 14,
+        "title": "Category:People of Australia of Italian descent"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Portraits of male politicians"
+       }
+      ]
+     },
+     {
+      "pageid": 158907606,
+      "ns": 6,
+      "title": "File:Anthony Albanese-CHOGM 2024.jpg",
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1181761,
+        "width": 1536,
+        "height": 2046,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Anthony_Albanese-CHOGM_2024.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2558,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Anthony_Albanese-CHOGM_2024.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2558
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Anthony_Albanese-CHOGM_2024.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese-CHOGM_2024.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=158907606",
+        "extmetadata": {
+         "Categories": {
+          "value": "Extracted images|Files uploaded by RandomUserGuy1738|Anthony Albanese in 2024|Photographs by Simon Dawson|CHOGM 2024",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/49707497@N06\">Number 10</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 2.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese in 2024"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-2.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CHOGM 2024"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files uploaded by RandomUserGuy1738"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Photographs by Simon Dawson"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "https://commons.wikimedia.org/w/api.php?action=query&cllimit=50&format=json&formatversion=2&generator=search&gsrlimit=8&gsrnamespace=6&gsrsearch=Services+Australia+filetype%3Abitmap&iiextmetadatafilter=LicenseShortName%7CArtist%7CCategories%7CNonFree&iiprop=url%7Csize%7Cmime%7Cextmetadata&iiurlwidth=1920&prop=imageinfo%7Ccategories": {
+   "continue": {
+    "clcontinue": "85339934|Photographs_by_Dietmar_Rabich/Featured_pictures_on_Wikimedia_Commons",
+    "continue": "||imageinfo"
+   },
+   "query": {
+    "pages": [
+     {
+      "pageid": 29228380,
+      "ns": 6,
+      "title": "File:Boeing 717-23S, QantasLink (Cobham Aviation Services Australia) JP6625726.jpg",
+      "index": 5,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 187076,
+        "width": 1020,
+        "height": 763,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/4/45/Boeing_717-23S%2C_QantasLink_%28Cobham_Aviation_Services_Australia%29_JP6625726.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1436,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/4/45/Boeing_717-23S%2C_QantasLink_%28Cobham_Aviation_Services_Australia%29_JP6625726.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1436
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/4/45/Boeing_717-23S%2C_QantasLink_%28Cobham_Aviation_Services_Australia%29_JP6625726.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Boeing_717-23S,_QantasLink_(Cobham_Aviation_Services_Australia)_JP6625726.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=29228380",
+        "extmetadata": {
+         "Categories": {
+          "value": "Taken with Pentax K200D|GFDL-1.2|Images uploaded by Fæ|Items with VRTS permission confirmed|Images with infobox aircraft|2009 at Darwin International Airport|VH-NXD (aircraft)|Files uploaded in cooperation with blocked accounts|Photos by Eugene Butler",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<div class=\"fn value\">\nEugene Butler</div>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "GFDL 1.2",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:2009 at Darwin International Airport"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files uploaded in cooperation with blocked accounts"
+       },
+       {
+        "ns": 14,
+        "title": "Category:GFDL-1.2"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Images uploaded by Fæ"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Images with infobox aircraft"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Items with VRTS permission confirmed"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Photos by Eugene Butler"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Taken with Pentax K200D"
+       },
+       {
+        "ns": 14,
+        "title": "Category:VH-NXD (aircraft)"
+       }
+      ]
+     },
+     {
+      "pageid": 41121915,
+      "ns": 6,
+      "title": "File:Passenger rail services in Australia en.png",
+      "index": 7,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1743926,
+        "width": 1500,
+        "height": 1274,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/d/de/Passenger_rail_services_in_Australia_en.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1631,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/d/de/Passenger_rail_services_in_Australia_en.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1631
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/de/Passenger_rail_services_in_Australia_en.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Passenger_rail_services_in_Australia_en.png",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=41121915",
+        "extmetadata": {
+         "Categories": {
+          "value": "Self-published work|Topographic maps of Australia|Rail transport maps of Australia",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Lencer\" title=\"User:Lencer\">Lencer</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 3.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/png"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-SA-3.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Rail transport maps of Australia"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Topographic maps of Australia"
+       }
+      ]
+     },
+     {
+      "pageid": 58511008,
+      "ns": 6,
+      "title": "File:Lake MacKay Australia.jpg",
+      "index": 4,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 10350207,
+        "width": 4101,
+        "height": 3288,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/62/Lake_MacKay_Australia.jpg/1920px-Lake_MacKay_Australia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 1539,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/62/Lake_MacKay_Australia.jpg/3840px-Lake_MacKay_Australia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/62/Lake_MacKay_Australia.jpg/1920px-Lake_MacKay_Australia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1539,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/62/Lake_MacKay_Australia.jpg/3840px-Lake_MacKay_Australia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/62/Lake_MacKay_Australia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Lake_MacKay_Australia.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=58511008",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-BY-SA-3.0-IGO|Files from external sources with reviewed licenses|Featured pictures by others nominated by Yann Forget|Files uploaded by Yann Forget|Content created by the European Space Agency|Featured pictures of Western Australia|Attribution Copernicus|Files with coordinates missing SDC location of creation|Satellite pictures of Lake Mackay|Photos of Australia by Sentinel-2|Space in Images entries from March 2017",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "ESA / Copernicus Sentinel",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 3.0 igo",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Attribution Copernicus"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-SA-3.0-IGO"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Content created by the European Space Agency"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Featured pictures by others nominated by Yann Forget"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Featured pictures of Western Australia"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Featured pictures on Wikimedia Commons"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files from external sources with reviewed licenses"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files uploaded by Yann Forget"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files with coordinates missing SDC location of creation"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Photos of Australia by Sentinel-2"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Satellite pictures of Lake Mackay"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Space in Images entries from March 2017"
+       }
+      ]
+     },
+     {
+      "pageid": 85339934,
+      "ns": 6,
+      "title": "File:Sydney (AU), Coast, Australian Fur Seals -- 2019 -- 3489.jpg",
+      "index": 6,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 25407715,
+        "width": 6670,
+        "height": 4447,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3b/Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg/1920px-Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 1280,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3b/Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg/3840px-Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3b/Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg/1920px-Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1280,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3b/Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg/3840px-Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Sydney_%28AU%29%2C_Coast%2C_Australian_Fur_Seals_--_2019_--_3489.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Sydney_(AU),_Coast,_Australian_Fur_Seals_--_2019_--_3489.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=85339934",
+        "extmetadata": {
+         "Categories": {
+          "value": "Photographs by Dietmar Rabich/Quality images of Australia|Photographs by Dietmar Rabich/Featured pictures of Australia|Arctocephalus pusillus doriferus|Steep coasts|Views from sea|Photographs with aspect ratio of 3:2|Sea spray|Self-published work|F-number f/5.6|Photographs by Dietmar Rabich/Australia|Photographs by Dietmar Rabich/Featured pictures|Photographs by Dietmar Rabich/Quality images|Information field template with formatting|Featured pictures of Sydney|Featured pictures of landscapes|ISO speed rating 640|Mammals of Sydney|Exposure time 1/2000 sec|October 2019 in Sydney|Oceanic whitecaps|Featured pictures of coasts|Changes of XRay's photographs of the recent weeks|Images by XRay (flat list)|Photographs by Dietmar Rabich/Quality images of animals|Uploaded with LrMediaWiki|Lens focal length 105 mm|Featured pictures of Pinnipedia|Rock formations in New South Wales|Australia photographs taken on 2019-10-26|Nature of Australia in October 2019|Seascapes of New South Wales|Photographs by Dietmar Rabich/Landscape photography|Coasts of New South Wales|Photographs by Dietmar Rabich/Featured pictures on Wikimedia Commons|Photographs by Dietmar Rabich/Animal photography|Sea cliffs of Australia|Photographs by Dietmar Rabich/Quality images of natural phenomena|Photographs by Dietmar Rabich/Quality images of coasts|Photographs by Dietmar Rabich/Quality images of oceans and seas|Views from boats|Taken with Canon EOS 5D Mark IV and Canon EF 24-105mm F4L IS II USM|Splashing water waves in Australia|Photographs by Dietmar Rabich/Year/2019|Arctocephalus pusillus (groups)",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<bdi><a href=\"https://www.wikidata.org/wiki/Q34788025\" class=\"extiw\" title=\"d:Q34788025\"><span title=\"German photographer and mathematician\">Dietmar Rabich</span></a></bdi>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Arctocephalus pusillus (groups)"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Arctocephalus pusillus doriferus"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Australia photographs taken on 2019-10-26"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-SA-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Changes of XRay's photographs of the recent weeks"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Coasts of New South Wales"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Exposure time 1/2000 sec"
+       },
+       {
+        "ns": 14,
+        "title": "Category:F-number f/5.6"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Featured pictures of Pinnipedia"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Featured pictures of Sydney"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Featured pictures of coasts"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Featured pictures of landscapes"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Featured pictures on Wikimedia Commons"
+       },
+       {
+        "ns": 14,
+        "title": "Category:ISO speed rating 640"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Images by XRay (flat list)"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Information field template with formatting"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Lens focal length 105 mm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Mammals of Sydney"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Nature of Australia in October 2019"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Oceanic whitecaps"
+       },
+       {
+        "ns": 14,
+        "title": "Category:October 2019 in Sydney"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Photographs by Dietmar Rabich/Animal photography"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Photographs by Dietmar Rabich/Australia"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Photographs by Dietmar Rabich/Featured pictures"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Photographs by Dietmar Rabich/Featured pictures of Australia"
+       }
+      ]
+     },
+     {
+      "pageid": 129639299,
+      "ns": 6,
+      "title": "File:Liverpool Service Centre, Services Australia 03.jpg",
+      "index": 3,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 399021,
+        "width": 1024,
+        "height": 768,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/a/aa/Liverpool_Service_Centre%2C_Services_Australia_03.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1440,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/a/aa/Liverpool_Service_Centre%2C_Services_Australia_03.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1440
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/a/aa/Liverpool_Service_Centre%2C_Services_Australia_03.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Liverpool_Service_Centre,_Services_Australia_03.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=129639299",
+        "extmetadata": {
+         "Categories": {
+          "value": "Liverpool Service Centre, Services Australia|Self-published work|January 2023 in Liverpool, New South Wales|Files with coordinates missing SDC location of creation (34° S, 150° E)",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Chris.sherlock2\" title=\"User:Chris.sherlock2\">Chris.sherlock2</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     {
+      "pageid": 129639300,
+      "ns": 6,
+      "title": "File:Liverpool Service Centre, Services Australia 02.jpg",
+      "index": 2,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 357483,
+        "width": 1024,
+        "height": 768,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Liverpool_Service_Centre%2C_Services_Australia_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1440,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Liverpool_Service_Centre%2C_Services_Australia_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1440
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Liverpool_Service_Centre%2C_Services_Australia_02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Liverpool_Service_Centre,_Services_Australia_02.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=129639300",
+        "extmetadata": {
+         "Categories": {
+          "value": "Liverpool Service Centre, Services Australia|Self-published work|January 2023 in Liverpool, New South Wales|Files with coordinates missing SDC location of creation (34° S, 150° E)",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Chris.sherlock2\" title=\"User:Chris.sherlock2\">Chris.sherlock2</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     {
+      "pageid": 129639301,
+      "ns": 6,
+      "title": "File:Liverpool Service Centre, Services Australia 01.jpg",
+      "index": 1,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 401934,
+        "width": 1024,
+        "height": 768,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/6/60/Liverpool_Service_Centre%2C_Services_Australia_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 1440,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/6/60/Liverpool_Service_Centre%2C_Services_Australia_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1440
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/60/Liverpool_Service_Centre%2C_Services_Australia_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Liverpool_Service_Centre,_Services_Australia_01.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=129639301",
+        "extmetadata": {
+         "Categories": {
+          "value": "Liverpool Service Centre, Services Australia|Self-published work|January 2023 in Liverpool, New South Wales|Files with coordinates missing SDC location of creation (34° S, 150° E)",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Chris.sherlock2\" title=\"User:Chris.sherlock2\">Chris.sherlock2</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     {
+      "pageid": 173371576,
+      "ns": 6,
+      "title": "File:Broome RSL, Broome, WA, Australia 04.jpg",
+      "index": 8,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 5183068,
+        "width": 4608,
+        "height": 2592,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg/1920px-Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 1080,
+        "responsiveUrls": {
+         "2": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg/3840px-Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg/1920px-Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 1080,
+         "srcset": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/36/Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg/3840px-Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/3/36/Broome_RSL%2C_Broome%2C_WA%2C_Australia_04.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Broome_RSL,_Broome,_WA,_Australia_04.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=173371576",
+        "extmetadata": {
+         "Categories": {
+          "value": "CC-Zero|Returned and Services League of Australia|Self-published work|Returned and Services League buildings in Western Australia|Files with coordinates missing SDC location of creation|Returned and Services League buildings in Australia",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:Ridiculopathy\" title=\"User:Ridiculopathy\">Ridiculopathy</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "https://commons.wikimedia.org/w/api.php?action=query&cllimit=50&format=json&formatversion=2&generator=search&gsrlimit=8&gsrnamespace=6&gsrsearch=Anthony+Albanese+filetype%3Abitmap&iiextmetadatafilter=LicenseShortName%7CArtist%7CCategories%7CNonFree&iiprop=url%7Csize%7Cmime%7Cextmetadata&iiurlwidth=1920&prop=imageinfo%7Ccategories": {
+   "continue": {
+    "clcontinue": "157983484|Official_portraits_of_Prime_Ministers_of_Australia",
+    "continue": "||imageinfo"
+   },
+   "query": {
+    "pages": [
+     {
+      "pageid": 15990570,
+      "ns": 6,
+      "title": "File:Anthony Albanese.jpg",
+      "index": 2,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1899934,
+        "width": 2239,
+        "height": 3193,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Anthony_Albanese.jpg/1920px-Anthony_Albanese.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 2738,
+        "responsiveUrls": {
+         "2": "https://upload.wikimedia.org/wikipedia/commons/c/cb/Anthony_Albanese.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Anthony_Albanese.jpg/1920px-Anthony_Albanese.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2738,
+         "srcset": "https://upload.wikimedia.org/wikipedia/commons/c/cb/Anthony_Albanese.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/c/cb/Anthony_Albanese.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=15990570",
+        "extmetadata": {
+         "Categories": {
+          "value": "Taken with Canon EOS 400D|Personality rights warning|Taken with Canon EF 100mm F2.8L Macro IS USM|Gillard Government|Rudd Government|Self-published work|Supported by Wikimedia Australia|With consent|Australia photographs taken on 2011-08-03|Photographs by User:99of9|Lens focal length 100 mm|Wikimedia Australia Toby Hudson's Small Grant|Anthony Albanese in 2011|Files with coordinates missing SDC location of creation (34° S, 151° E)",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/wiki/User:99of9\" title=\"User:99of9\">Toby Hudson</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 3.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese in 2011"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Australia photographs taken on 2011-08-03"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-SA-3.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files with coordinates missing SDC location of creation (34° S, 151° E)"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Gillard Government"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Lens focal length 100 mm"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Personality rights warning"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Photographs by User:99of9"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Quality images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Quality images by User:99of9"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Quality images of politicians"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Rudd Government"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Supported by Wikimedia Australia"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Taken with Canon EF 100mm F2.8L Macro IS USM"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Taken with Canon EOS 400D"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images by User:99of9"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images demoted in 2023"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images of people of Australia"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Wikimedia Australia Toby Hudson's Small Grant"
+       },
+       {
+        "ns": 14,
+        "title": "Category:With consent"
+       }
+      ]
+     },
+     {
+      "pageid": 119681812,
+      "ns": 6,
+      "title": "File:Approval Rating of Anthony Albanese, 23 May 2022 to 21 June 2022.png",
+      "index": 7,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 60079,
+        "width": 720,
+        "height": 1163,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Approval_Rating_of_Anthony_Albanese%2C_23_May_2022_to_21_June_2022.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 3101,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Approval_Rating_of_Anthony_Albanese%2C_23_May_2022_to_21_June_2022.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 3101
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Approval_Rating_of_Anthony_Albanese%2C_23_May_2022_to_21_June_2022.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Approval_Rating_of_Anthony_Albanese,_23_May_2022_to_21_June_2022.png",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=119681812",
+        "extmetadata": {
+         "Categories": {
+          "value": "Politics of Australia|Anthony Albanese|Self-published work|Approval ratings|Charts on white background",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Stevan_Mitnick&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Stevan Mitnick (page does not exist)\">Stevan Mitnick</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY-SA 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/png"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Approval ratings"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-SA-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Charts on white background"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Politics of Australia"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Self-published work"
+       }
+      ]
+     },
+     {
+      "pageid": 130373947,
+      "ns": 6,
+      "title": "File:Anthony Albanese Portrait 2022.jpg",
+      "index": 1,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 4464812,
+        "width": 2124,
+        "height": 2780,
+        "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Anthony_Albanese_Portrait_2022.jpg/1920px-Anthony_Albanese_Portrait_2022.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+        "thumbwidth": 1920,
+        "thumbheight": 2513,
+        "responsiveUrls": {
+         "2": "https://upload.wikimedia.org/wikipedia/commons/d/de/Anthony_Albanese_Portrait_2022.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled"
+        },
+        "thumbattribs": {
+         "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/de/Anthony_Albanese_Portrait_2022.jpg/1920px-Anthony_Albanese_Portrait_2022.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2513,
+         "srcset": "https://upload.wikimedia.org/wikipedia/commons/d/de/Anthony_Albanese_Portrait_2022.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled 2x"
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/de/Anthony_Albanese_Portrait_2022.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese_Portrait_2022.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=130373947",
+        "extmetadata": {
+         "Categories": {
+          "value": "Extracted images|Files from websites of the Australian Department of Foreign Affairs and Trade|Anthony Albanese in 2022|Official portraits of Anthony Albanese",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "David Foote (AUSPIC/Department of Parliamentary Service)",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese in 2022"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Files from websites of the Australian Department of Foreign Affairs and Trade"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Official portraits of Anthony Albanese"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images missing SDC Commons quality assessment"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images missing SDC creator"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images missing SDC depicts"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images missing SDC source of file"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images promoted 2023-11"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Valued images sorted by promotion date"
+       }
+      ]
+     },
+     {
+      "pageid": 143571708,
+      "ns": 6,
+      "title": "File:Anthony Albanese official portrait 2022.jpg",
+      "index": 6,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1859961,
+        "width": 1170,
+        "height": 1600,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/6/61/Anthony_Albanese_official_portrait_2022.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2626,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/6/61/Anthony_Albanese_official_portrait_2022.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2626
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/6/61/Anthony_Albanese_official_portrait_2022.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese_official_portrait_2022.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=143571708",
+        "extmetadata": {
+         "Categories": {
+          "value": "Anthony Albanese|Extracted images",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "Australian Government",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       }
+      ]
+     },
+     {
+      "pageid": 150095434,
+      "ns": 6,
+      "title": "File:Anthony Albanese election infobox.jpg",
+      "index": 5,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1133992,
+        "width": 906,
+        "height": 1208,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Anthony_Albanese_election_infobox.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2560,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Anthony_Albanese_election_infobox.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2560
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Anthony_Albanese_election_infobox.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese_election_infobox.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=150095434",
+        "extmetadata": {
+         "Categories": {
+          "value": "Anthony Albanese|Extracted images|Anthony Albanese in 2022|Official portraits of Anthony Albanese",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "Australian Government",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese in 2022"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Official portraits of Anthony Albanese"
+       }
+      ]
+     },
+     {
+      "pageid": 157983484,
+      "ns": 6,
+      "title": "File:Anthony Albanese portrait (re-crop).jpg",
+      "index": 3,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 3692671,
+        "width": 1677,
+        "height": 2237,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Anthony_Albanese_portrait_%28re-crop%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2561,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Anthony_Albanese_portrait_%28re-crop%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2561
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/7/7b/Anthony_Albanese_portrait_%28re-crop%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese_portrait_(re-crop).jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=157983484",
+        "extmetadata": {
+         "Categories": {
+          "value": "People of Australia of Italian descent|Extracted images|Portraits of male politicians|Anthony Albanese in 2022|Official portraits of Prime Ministers of Australia|Official portraits of Anthony Albanese",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "Australian Government",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ],
+      "categories": [
+       {
+        "ns": 14,
+        "title": "Category:Anthony Albanese in 2022"
+       },
+       {
+        "ns": 14,
+        "title": "Category:CC-BY-4.0"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Extracted images"
+       },
+       {
+        "ns": 14,
+        "title": "Category:Official portraits of Anthony Albanese"
+       }
+      ]
+     },
+     {
+      "pageid": 158907606,
+      "ns": 6,
+      "title": "File:Anthony Albanese-CHOGM 2024.jpg",
+      "index": 4,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 1181761,
+        "width": 1536,
+        "height": 2046,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Anthony_Albanese-CHOGM_2024.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2558,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Anthony_Albanese-CHOGM_2024.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2558
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/f/f5/Anthony_Albanese-CHOGM_2024.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese-CHOGM_2024.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=158907606",
+        "extmetadata": {
+         "Categories": {
+          "value": "Extracted images|Files uploaded by RandomUserGuy1738|Anthony Albanese in 2024|Photographs by Simon Dawson|CHOGM 2024",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/49707497@N06\">Number 10</a>",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 2.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     },
+     {
+      "pageid": 181211381,
+      "ns": 6,
+      "title": "File:Anthony Albanese 2022 portrait.jpg",
+      "index": 8,
+      "imagerepository": "local",
+      "imageinfo": [
+       {
+        "size": 158174,
+        "width": 921,
+        "height": 1200,
+        "thumburl": "https://upload.wikimedia.org/wikipedia/commons/d/da/Anthony_Albanese_2022_portrait.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+        "thumbwidth": 1920,
+        "thumbheight": 2502,
+        "thumbattribs": {
+         "src": "https://upload.wikimedia.org/wikipedia/commons/d/da/Anthony_Albanese_2022_portrait.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+         "decoding": "async",
+         "loading": "lazy",
+         "width": 1920,
+         "height": 2502
+        },
+        "url": "https://upload.wikimedia.org/wikipedia/commons/d/da/Anthony_Albanese_2022_portrait.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+        "descriptionurl": "https://commons.wikimedia.org/wiki/File:Anthony_Albanese_2022_portrait.jpg",
+        "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=181211381",
+        "extmetadata": {
+         "Categories": {
+          "value": "Anthony Albanese|Images with extracted images|Anthony Albanese in 2022",
+          "source": "commons-categories",
+          "hidden": ""
+         },
+         "Artist": {
+          "value": "© Commonwealth of Australia (National Archives of Australia) 2023",
+          "source": "commons-desc-page"
+         },
+         "LicenseShortName": {
+          "value": "CC BY 4.0",
+          "source": "commons-desc-page",
+          "hidden": ""
+         }
+        },
+        "mime": "image/jpeg"
+       }
+      ]
+     }
+    ]
+   }
+  }
+ }
+}
