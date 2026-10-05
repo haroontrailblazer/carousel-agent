@@ -261,6 +261,27 @@ def _news_summary(state: dict) -> dict:
     }
 
 
+def _hook_options(plan: dict, current_title: str) -> list[dict]:
+    """The planner's other drafted hooks, minus the one already on the cover."""
+    current = " ".join(current_title.split()).upper()
+    options: list[dict] = []
+    seen = {current}
+    for raw in plan.get("hook_candidates") or []:
+        if not isinstance(raw, dict):
+            continue
+        text = " ".join(str(raw.get("text") or "").split())
+        if not text or text.upper() in seen:
+            continue
+        seen.add(text.upper())
+        highlight = " ".join(str(raw.get("highlight") or "").split())
+        options.append({
+            "text": text,
+            "highlight": highlight if highlight.upper() in text.upper() else "",
+            "lever": str(raw.get("lever") or ""),
+        })
+    return options
+
+
 # ---------------------------------------------------------------------------
 # Runs
 # ---------------------------------------------------------------------------
@@ -544,6 +565,10 @@ async def run_artifacts(
             "drawn_background": bool(cover.get("drawn_background")),
             "credit": cover.get("source_credit") or "",
             "notices": cover_notice_lines(cover),
+            "title": cover.get("title") or "",
+            # The other hooks the planner drafted, so the reviewer can swap
+            # the cover's line in one click instead of typing a rework.
+            "hook_options": _hook_options(state.get(K_PLAN) or {}, cover.get("title") or ""),
         },
         "slides": [
             {**(signed or {}), "index": slide.get("index")}

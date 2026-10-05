@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { ApprovalCard } from "@/components/review/approval-card"
 import { CarouselViewer } from "@/components/review/carousel-viewer"
+import { HookOptions, hookSwapFeedback } from "@/components/review/hook-options"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ApiError, downloadFile, get, post } from "@/lib/api"
@@ -153,6 +154,15 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
         resending={resend.isPending}
         embedded={!!artifacts.data}
       />
+      {/* Only while a decision is open: using a hook IS a reject-and-rework. */}
+      {cover?.hook_options && run.pending_review && run.status !== "running" && (
+        <HookOptions
+          options={cover.hook_options}
+          currentTitle={cover.title}
+          disabled={decide.isPending}
+          onUse={(option) => decide.mutate({ status: "rejected", feedback: hookSwapFeedback(option) })}
+        />
+      )}
       {artifacts.data && (
         <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
           <Button

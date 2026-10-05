@@ -3,6 +3,7 @@ from typing import Any
 from app import state as s
 from app.copy_budget import copy_problems
 from app.design_limits import design_slide_limit
+from app.hook_rules import hook_problems
 from app.schemas import ResearchBrief, CarouselDesign, CarouselPlan, CoverSpec, CopySet, RenderedSlide, CTASlide
 from app.time_window import window_problems, window_rule
 
@@ -76,6 +77,17 @@ def validate_output(
             raise ValueError("Plan must contain exactly one body slide at every index from 2 to slide_count - 1")
         if not plan.hook_title.strip() or any(not slide.key_points for slide in plan.slides):
             raise ValueError("Plan needs a cover title and researched points for every slide")
+        # The hook is advice-level: checked once, never on a re-check of a
+        # saved plan, the last attempt, or a reviewer's rework (who may have
+        # dictated the title word for word).
+        if not (checkpoint or final_attempt or under_rework):
+            problems = hook_problems(plan, _saved_design(state))
+            if problems:
+                raise ValueError(
+                    "Rewrite the cover hook before the plan is used: " + "; ".join(problems)
+                    + ". Keep the slides as they are; change only hook_candidates, hook_title "
+                    "and hook_highlight (skills/cover-style.md)"
+                )
     elif name == s.AGENT_FIRST_PAGE_VISUAL:
         cover = CoverSpec.model_validate(raw)
         if not cover.poster_artifact or not cover.video_artifact or not cover.title.strip():

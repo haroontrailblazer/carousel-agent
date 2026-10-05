@@ -78,6 +78,15 @@ export type RunDetail = RunSummary & {
   notice_failed?: boolean
 }
 
+/** A cover hook the planner drafted but did not pick. */
+export type HookOption = {
+  text: string
+  /** Verbatim substring of `text` shown in the highlight colour; may be "". */
+  highlight: string
+  /** The technique it uses, e.g. "two_beat_contrast". */
+  lever: string
+}
+
 export type SignedArtifact = {
   filename: string | null
   url: string | null
@@ -106,6 +115,10 @@ export type RunArtifacts = {
     credit?: string
     /** Warning lines for the reviewer, worded by the backend. */
     notices?: string[]
+    /** The hook currently on the cover. */
+    title?: string
+    /** The planner's other drafted hooks, for a one-click swap. */
+    hook_options?: HookOption[]
   }
   slides: (SignedArtifact & { index: number })[]
   cta: SignedArtifact & { cta_type: string | null; link_url: string }

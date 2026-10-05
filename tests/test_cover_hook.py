@@ -23,7 +23,7 @@ from app.tools import media_tools
 REPO = Path(__file__).resolve().parents[1]
 
 # A hook at the budget that carries a stake, not just a stat.
-GOOD_HOOK = "GPT-6 SAID YES TO 98 UNSAFE ROBOT ORDERS"
+GOOD_HOOK = "THE CHATBOT SAID NO. THE ROBOT DIDN'T."
 # Under the word budget, but wide enough that the renderer shrinks it anyway.
 # This is the case word-counting alone cannot catch.
 WIDE_HOOK = "ANTHROPIC'S INTERPRETABILITY BREAKTHROUGH EXPLAINED"
@@ -88,7 +88,7 @@ def test_a_hook_over_the_word_budget_is_flagged():
 
 def test_a_hook_within_budget_draws_no_complaints():
     assert first_page_visual.hook_warnings(
-        GOOD_HOOK, "98 UNSAFE ROBOT ORDERS", CarouselDesign()
+        GOOD_HOOK, "THE ROBOT DIDN'T", CarouselDesign()
     ) == []
 
 

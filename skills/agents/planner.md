@@ -36,6 +36,12 @@ suggested_angle as a hook candidate:
 
    Rework feedback: {rework_feedback?}
 
+   The plan you saved before this feedback, when there is one (empty on a
+   first run): {carousel_plan?}
+   When the feedback only asks for a new hook, copy that plan's slides,
+   style, counts, cta_hint and caption_seed unchanged and rewrite only
+   hook_candidates, hook_title and hook_highlight.
+
 2. Distilled notes from past reviewer feedback across earlier runs. When
    present, treat them as house rules and apply them proactively:
 
@@ -86,42 +92,60 @@ with their meaning.
    headline and up to two paragraphs). Use 4 only for a points list that
    needs three items.
 
-4. hook_title - the cover title, rendered in a large condensed bold
-   grotesk, uppercase over the cover video (up to 3 balanced lines). This is
-   the only slide most people will ever see, so it is the single highest
-   leverage field in the plan. skills/cover-style.md below is the full
-   authority; the essentials:
-   - The stranger test decides. Someone who has never heard of this company
-     must understand from the cover alone what happened AND why they should
-     care. A title that only reports a fact fails the second half.
-   - Lead with the stake, not the stat. Use a number only when a stranger
-     instantly knows what it counts and whether it is good or bad, and say
-     the side that carries the stake ("SAID YES TO 98 UNSAFE ORDERS", never
-     "REFUSED 2 OF 100"). A bare speed or price with no comparison is noise.
-   - Build a contrast: what people assume versus what actually happened.
-     Pull it from the facts and state the surprising side plainly, not as a
-     "not X, but Y" line.
-   - Say who it affects. "You" and "your" are welcome when the story really
-     touches the reader. Name the real subject when the name is known; when
-     nobody knows the name, describe what it is and spend the words on the
-     stake. Never "the new update", "this AI tool", "a major breakthrough".
-   - Everyday verbs, the way you would say it to a friend. Not newsroom verbs
-     like BREACHED, AIDED, UNVEILS, SLASHES.
-   - Up to 9 words, and aim for 40 characters or fewer so the type stays
-     large across up to three lines. Cut filler before you cut the stake.
-   - No punctuation except a comma or a period. No hype, no mystery hook
-     that hides the subject, no unsupported claim.
-   - Draft three candidates on different angles (the consequence, the
-     contrast, the reader's own stake) and ship the one a stranger would
-     understand fastest and care about most. Never ship a bare
-     "SUBJECT VERB NUMBER" stat line.
+4. hook_candidates, hook_title and hook_highlight - the cover hook. It is
+   rendered huge and uppercase over the cover picture (up to 3 lines), and
+   it is the only slide most people will ever see, so it is the single
+   highest leverage field in the plan. skills/cover-style.md below is the
+   full authority; this is the method:
 
-5. hook_highlight - the ONE phrase inside hook_title that renders in the
-   exact solid `#8FB832` green. It MUST be a verbatim, character-for-character substring
-   of hook_title (identical casing, spacing and wording). Choose the 2-4 word
-   payoff phrase - the stake, the surprising side of the contrast, or a
-   number together with what it counts ("98 UNSAFE ROBOT ORDERS", not "98").
-   Never highlight a connecting phrase.
+   a. Start from the research brief's suggested_angle. It usually already
+      holds the contrast the cover needs ("the guardrail worked in the chat
+      box but vanished when the AI got robot arms"). Your job is to compress
+      it to a glance without losing the surprise.
+   b. Write at least 5 candidates into hook_candidates, each on a DIFFERENT
+      lever, each with its highlight (a verbatim 2-4 word substring of its
+      text). The levers:
+      - two_beat_contrast: two short sentences, the expectation then the
+        twist. "THE CHATBOT SAID NO. THE ROBOT DIDN'T."
+      - reader_stake: what it changes for the reader, in you/your words.
+        "YOUR APP DOESN'T NEED GPT FOR YES OR NO"
+      - number_with_meaning: one number a stranger reads instantly, with
+        what it counts and why it is alarming or good.
+        "53 CHATGPT PHOTOS LEAKED. NO HACKER NEEDED."
+      - winner_loser: who gets it and who does not.
+        "DEFENDERS GET GOOGLE'S NEW AI. YOU WAIT."
+      - consequence: what happened next, the part nobody expected.
+        "AN AI TEST BROKE IN. NOBODY NOTICED FOR WEEKS."
+      - question: only when it already carries the stake and slide 2
+        answers it. "WOULD YOU LET AN AI PAY FOR YOU?"
+   c. Score every candidate against four checks and keep the one that
+      passes all four best:
+      - clear: a stranger who never heard of the company gets what happened
+        in one glance (the stranger test);
+      - for me: there is a stake the reader feels, not just a fact;
+      - open: there is a gap between what people assume and what happened,
+        so they swipe to close it (the contrast);
+      - true: every word is backed by the research brief. Never stretch a
+        fact to make it punchier.
+   d. hook_title is the winning candidate's text, copied exactly, and
+      hook_highlight is its highlight - the payoff or the twist, never a
+      connecting phrase.
+   e. Never ship a report line: a subject, a verb and an object with nothing
+      for the reader ("ANTHROPIC RUNS A WET LAB", "GOOGLE OPENS NEW AI TO
+      CYBER TEAMS FIRST", "AI MODELS NOW COMPETE ON COST AND SPEED"). Code
+      checks this and sends the hook back.
+   f. Up to 9 words, and aim for 40 characters or fewer so the type stays
+      large; the code measures the real rendered size on the saved design.
+      Cut filler before you cut the stake. Everyday verbs, the way you would
+      say it to a friend. Lead with the stake, not the stat. No hype, no
+      mystery hook that hides the subject, no unsupported claim. Commas,
+      full stops and apostrophes only (a question mark for the question
+      lever). The two-beat form is two plain statements, not the banned
+      "not X, but Y" line.
+   g. When the request dictates the exact title ("use this title: ..."),
+      add it verbatim as a candidate with lever user_title and choose it.
+
+5. hook_highlight - set as described in 4d.
 
 6. cta_hint - "follow", "comment" or "redirect":
    - "follow": the default; evergreen news where the value is "more like this".

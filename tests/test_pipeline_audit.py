@@ -25,7 +25,14 @@ from web_api.auth import Identity
 def outputs():
     return {
         s.K_RESEARCH: {"summary": "A verified release adds faster local processing.", "key_facts": [{"fact": "The release supports local processing.", "source_url": "https://example.com/release"}]},
-        s.K_PLAN: {"style": "points", "slide_count": 3, "hook_title": "A faster release", "slides": [{"index": 2, "purpose": "Explain the change", "key_points": ["Local processing is supported."]}]},
+        s.K_PLAN: {"style": "points", "slide_count": 3, "hook_title": "A faster release", "slides": [{"index": 2, "purpose": "Explain the change", "key_points": ["Local processing is supported."]}],
+                   # A plan as the planner now writes it: drafted hooks on different levers, the title among them.
+                   "hook_candidates": [
+                       {"text": "A faster release", "highlight": "faster", "lever": "consequence"},
+                       {"text": "Your laptop runs it now. No cloud.", "highlight": "No cloud", "lever": "two_beat_contrast"},
+                       {"text": "Your data stays on your machine", "highlight": "your machine", "lever": "reader_stake"},
+                       {"text": "Would you run AI offline?", "highlight": "offline", "lever": "question"},
+                   ]},
         s.K_COVER: {"title": "A faster release", "poster_artifact": "cover.png", "video_artifact": "cover.mp4", "duration_s": 6},
         s.K_COPY: {"slides": [{"index": 2, "lines": ["Local processing", "The new release supports local processing."]}], "caption": "The facts behind the release."},
         s.K_BODY_SLIDES: [{"index": 2, "artifact": "slide_2.png"}],

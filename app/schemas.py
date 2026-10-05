@@ -257,17 +257,36 @@ class SlidePlan(PublishedTextModel):
     key_points: list[str] = Field(default_factory=list)
 
 
+class HookCandidate(PublishedTextModel):
+    """One cover hook the planner drafted before choosing (shown to the reviewer)."""
+
+    text: str  # the hook exactly as it would render, <= 9 words
+    highlight: str = ""  # its payoff phrase, a verbatim substring of text
+    lever: str = ""  # the technique it uses, e.g. two_beat_contrast (see skills/cover-style.md)
+
+    @field_validator("text", "highlight", mode="before")
+    @classmethod
+    def straighten_quotes(cls, value: Any) -> Any:
+        return straight_quotes(value) if isinstance(value, str) else value
+
+
 class CarouselPlan(PublishedTextModel):
     """The Editorial Planner's decision for the whole carousel."""
 
     style: CarouselStyle
     slide_count: int  # total including cover and CTA slide (Instagram max 10)
     max_lines_per_slide: int = 4
-    hook_title: str  # cover title, <= 9 words, uppercase on render
-    hook_highlight: str = ""  # the phrase inside hook_title rendered in orange
+    slides: list[SlidePlan] = Field(default_factory=list)  # body slides only
+    # The hook fields come AFTER the slides on purpose: structured output is
+    # written in field order, so the model has planned the whole story before
+    # it writes the line that sells it, and it drafts the candidates before it
+    # picks one. Written the other way round, the plan's first field was the
+    # hook and it came out as a flat news headline.
+    hook_candidates: list[HookCandidate] = Field(default_factory=list)
+    hook_title: str  # cover title, the chosen candidate, <= 9 words, uppercase on render
+    hook_highlight: str = ""  # the phrase inside hook_title rendered in the highlight colour
     cta_hint: CTAType = "follow"
     caption_seed: str = ""
-    slides: list[SlidePlan] = Field(default_factory=list)  # body slides only
 
     @field_validator("hook_title", "hook_highlight", mode="before")
     @classmethod

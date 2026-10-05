@@ -55,7 +55,7 @@ question and fail the second.
 - A number earns the cover only when a stranger instantly knows what is
   being counted and whether it is good or bad. "REFUSED 2 OF 100" fails:
   2 of 100 what, and is that good? Say the side that carries the stake:
-  "SAID YES TO 98 UNSAFE ORDERS".
+  "DIDN'T REFUSE 98 UNSAFE ORDERS".
 - A speed, price or size means nothing without a comparison. "33 MS" is just
   a number. Say what it replaces or beats, or say what it lets people do.
 - When the facts have no number that passes this test, leave numbers out.
@@ -70,10 +70,15 @@ happened. Find that gap in the facts and put it on the cover.
   model makes the same yes or no call. Hook: "YOUR APP DOES NOT NEED GPT FOR
   YES OR NO".
 - Assumed: AI models refuse dangerous requests. Happened: in robot tests
-  they mostly did not. Hook: "GPT-6 SAID YES TO 98 UNSAFE ROBOT ORDERS".
+  they mostly did not. Hook: "GPT-6 DIDN'T REFUSE 98 UNSAFE ROBOT ORDERS".
 
 State the surprising side plainly. The reader should feel the gap without
 being told "you won't believe this".
+
+The fastest way to fit a contrast on a cover is two short sentences: the
+expectation, then the twist. "THE CHATBOT SAID NO. THE ROBOT DIDN'T." Each
+beat is a plain statement. That is not the banned "not X, but Y" line, which
+denies one thing to assert another in a single breath.
 
 ### Make it about people
 
@@ -95,8 +100,8 @@ being told "you won't believe this".
   ("STOP PAYING GPT FOR YES OR NO"). A question is fine only when the answer
   is on slide 2 and the question already carries the stake.
 - No hype adjectives, no mystery hooks that hide the subject, no unsupported
-  claims, no emoji, no hashtags, no em dashes. Only a comma or a period as
-  punctuation.
+  claims, no emoji, no hashtags, no em dashes. Commas, full stops and
+  apostrophes only, plus a question mark for a question hook.
 - Never these shapes: A GAME CHANGER, THE FUTURE IS HERE, HERE IS WHY,
   YOU WON'T BELIEVE, EVERYTHING CHANGES NOW, THE TRUTH ABOUT X,
   WHAT NOBODY IS TELLING YOU.
@@ -115,30 +120,58 @@ consequence, the number with its meaning, the surprise.
   is an unread hook. Characters matter more than words: count the letters.
 - Do not cut the stake to save characters. Cut filler words first.
 
-### Write three, ship one
+### Never a report line
 
-Draft three different hooks, each built on a different angle: the
-consequence, the contrast, and the reader's own stake. Run each through the
-stranger test. Ship the one a stranger would understand fastest AND care
-about most. If two tie, ship the shorter. Never ship the first line you
-thought of, and never ship a bare "SUBJECT VERB NUMBER" stat line.
+A subject, a verb and an object with nothing for the reader is a press
+release, not a hook: "ANTHROPIC RUNS A WET LAB", "GOOGLE OPENS NEW AI TO
+CYBER TEAMS FIRST", "AI MODELS NOW COMPETE ON COST AND SPEED". Each passes
+the first half of the stranger test and fails the second. The planner's
+output is checked in code for this shape and sent back once.
 
-### Weak to strong
+### Draft five, keep one
 
-    Stat, no stake:  GPT-6 ASTRA REFUSED 2 OF 100      -> 2 of 100 what? good or bad?
-    Strong:          GPT-6 SAID YES TO 98 UNSAFE ROBOT ORDERS
+Start from the research brief's suggested_angle: it usually holds the
+contrast already. Then write at least five candidates, each on a different
+lever, and keep the one that is clear, for me, open and true.
 
-    Number, no meaning: LAYA ANSWERS LOCALLY IN 33 MS  -> who is Laya, why care?
-    Strong:             YOUR APP DOES NOT NEED GPT FOR YES OR NO
+- two_beat_contrast: the expectation, then the twist.
+- reader_stake: what changes for the reader, in you/your words.
+- number_with_meaning: one number a stranger reads instantly, with what it
+  counts and whether that is good or bad.
+- winner_loser: who gets it, and who does not.
+- consequence: what happened next, the part nobody expected.
+- question: only when it carries the stake and slide 2 answers it.
 
-    Newsroom verb:  COMPANY BREACHED 3 REAL FIRMS      -> who did what to whom?
-    Strong:         HACKERS USED AI TO BREAK INTO 3 COMPANIES
+The four checks, in order:
 
-    Vague:  A MAJOR AI UPDATE ARRIVES                   -> no subject, no change
-    Strong: OPENAI CUT GPT-5 PRICES 80%
+1. Clear: a stranger gets what happened in one glance.
+2. For me: there is a stake the reader feels, not just a fact.
+3. Open: there is a gap between what people assume and what happened.
+4. True: every word is backed by the research. Never stretch a fact to
+   make it punchier; a hook the slides cannot back up loses the follow.
 
-    Hyped:  AN ABSOLUTELY INSANE NEW BREAKTHROUGH       -> says nothing
-    Strong: THIS MODEL RUNS ON YOUR LAPTOP
+If two candidates tie, keep the shorter. Never keep the first line you
+thought of. When the request dictates the exact title, that title wins.
+
+### Weak to strong (from real runs)
+
+    Report line:  GPT-6 ASTRA REFUSED 2 OF 100          -> 2 of 100 what? good or bad?
+    Two beats:    THE CHATBOT SAID NO. THE ROBOT DIDN'T.
+
+    Report line:  GOOGLE OPENS NEW AI TO CYBER TEAMS FIRST  -> so what, for me?
+    Winner/loser: DEFENDERS GET GOOGLE'S NEW AI. YOU WAIT.
+
+    Report line:  OPENAI AGENTS PUT USER IMAGES ONLINE   -> how, and why care?
+    Number:       53 CHATGPT PHOTOS LEAKED. NO HACKER NEEDED.
+
+    Report line:  OPENAI AGENT GOT AROUND MEDICARE BLOCKS  -> what's the surprise?
+    Consequence:  AN AI TEST BROKE IN. NOBODY NOTICED FOR WEEKS.
+
+    Number only:  LAYA ANSWERS LOCALLY IN 33 MS          -> who is Laya, why care?
+    Your stake:   YOUR APP DOESN'T NEED GPT FOR YES OR NO
+
+    Hyped:        AN ABSOLUTELY INSANE NEW BREAKTHROUGH  -> says nothing
+    Your stake:   THIS MODEL RUNS ON YOUR LAPTOP
 
 ### Highlight
 
