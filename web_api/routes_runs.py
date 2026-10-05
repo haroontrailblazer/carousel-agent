@@ -566,6 +566,9 @@ async def run_artifacts(
             "credit": cover.get("source_credit") or "",
             "notices": cover_notice_lines(cover),
             "title": cover.get("title") or "",
+            "highlight": cover.get("highlight") or "",
+            # A saved untitled picture means a new hook re-renders instantly.
+            "can_retitle": bool(cover.get("base_artifact")),
             # The other hooks the planner drafted, so the reviewer can swap
             # the cover's line in one click instead of typing a rework.
             "hook_options": _hook_options(state.get(K_PLAN) or {}, cover.get("title") or ""),
@@ -843,6 +846,71 @@ async def _apply_cover_choice(run_id: str, choice: Optional[str]) -> Optional[st
     )
     logger.info("Run %s will publish %r as its cover.", run_id, wanted)
     return wanted
+
+
+class CoverTitleRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    highlight: str = ""
+    #: "picked" from the drafted alternatives, or "typed" by the reviewer.
+    source: str = Field("picked", pattern="^(picked|typed)$")
+
+
+async def _write_state_key(run_id: str, key: str, value: Any) -> None:
+    """Set one session-state key in place (same write as the cover choice)."""
+    pool = await db.get_pool()
+    await pool.execute(
+        "UPDATE public.sessions SET state = jsonb_set("
+        "CASE WHEN jsonb_typeof(state)='string' THEN (state #>> '{}')::jsonb "
+        "ELSE COALESCE(state,'{}'::jsonb) END, ARRAY[$5::text], $4::jsonb), update_time = now() "
+        "WHERE app_name = $1 AND user_id = $2 AND id = $3",
+        settings.app_name,
+        PIPELINE_USER_ID,
+        run_id,
+        value,
+        key,
+    )
+
+
+@router.post("/runs/{run_id}/cover-title")
+async def set_cover_title(
+    run_id: str,
+    payload: CoverTitleRequest,
+    _identity: Identity = Depends(current_identity),
+) -> dict:
+    """Swap the cover's hook while the carousel waits for review.
+
+    No model and no rework: the saved untitled picture is re-composed with the
+    new words in the run's design, and the choice is remembered as an example
+    of what this client approves (app/hook_examples.py).
+    """
+    from app import cover_retitle, hook_examples
+    from app.review.eligibility import validate_review_state, ReviewNotReady
+
+    state = await _session_state(run_id)
+    try:
+        validate_review_state(state)
+    except ReviewNotReady as exc:
+        raise HTTPException(409, {"code": "not_pending", "message": str(exc)}) from exc
+    if await db.load_pending_review(run_id) is None:
+        raise HTTPException(409, {"code": "not_pending", "message": "This carousel is no longer waiting for review."})
+    try:
+        result = await cover_retitle.retitle_cover(
+            run_id, state, payload.title, payload.highlight, runtime.artifact_service(),
+        )
+    except cover_retitle.RetitleUnavailable as exc:
+        raise HTTPException(409, {"code": "retitle_unavailable", "message": str(exc)}) from exc
+    except ValueError as exc:
+        raise HTTPException(422, {"code": "bad_title", "message": str(exc)}) from exc
+    for key, value in result["state"].items():
+        await _write_state_key(run_id, key, value)
+    cover = result["cover"]
+    await hook_examples.record(
+        cover["title"], cover["highlight"], str((state.get(K_NEWS_ITEM) or {}).get("title") or ""),
+        payload.source,
+    )
+    logger.info("Run %s cover retitled (%s): %r", run_id, payload.source, cover["title"])
+    return {"run_id": run_id, "title": cover["title"], "highlight": cover["highlight"],
+            "warnings": result["warnings"]}
 
 
 @router.post("/runs/{run_id}/verdict")

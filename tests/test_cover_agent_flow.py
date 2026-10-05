@@ -630,3 +630,17 @@ def test_a_rejected_candidate_at_the_floor_can_still_be_the_fallback(cover_fakes
     cover_fakes.answer = _verdict(verdict="reject", problems=["publisher_branding"])  # score 3
     _inspect(ctx, image, is_video=False)
     assert _build(ctx, image, is_video=False)["ok"]
+
+
+def test_the_untitled_picture_is_saved_so_the_hook_can_be_swapped_later(cover_fakes, workdir):
+    """app/cover_retitle.py re-composes this exact file with a reviewer's new hook."""
+    image = workdir / "photo.png"
+    image.write_bytes(b"png")
+    ctx = _Ctx()
+    cover_fakes.answer = _verdict(focus=None, clean=None)
+    _inspect(ctx, image, is_video=False)
+
+    assert _build(ctx, image, is_video=False)["ok"]
+    assert "cover-base.png" in ctx.saved
+    from app.state import K_COVER
+    assert ctx.state[K_COVER]["base_artifact"] == "cover-base.png"

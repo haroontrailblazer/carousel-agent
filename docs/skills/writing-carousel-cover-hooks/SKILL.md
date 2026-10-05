@@ -33,6 +33,7 @@ WHY: <one line naming the check it wins on>
 
 | Lever | Shape | Example |
 |---|---|---|
+| curiosity_gap | Subject and setup plain; hold back the one detail slide 2 delivers | 53 CHATGPT PHOTOS LEAKED. NOBODY HACKED IN. |
 | two_beat_contrast | Expectation. Twist. | THE CHATBOT SAID NO. THE ROBOT DIDN'T. |
 | reader_stake | What changes for you | YOUR APP DOESN'T NEED GPT FOR YES OR NO |
 | number_with_meaning | One number + what it counts + good/bad | 53 CHATGPT PHOTOS LEAKED. NO HACKER NEEDED. |
@@ -50,7 +51,12 @@ line). It usually holds the contrast; the hook compresses it.
 3. **Open**: a gap between what people assume and what happened, so they swipe to close it.
 4. **True**: every word is backed by the source. Never stretch a fact to make it punchier.
 
-Ship the row that passes all four; on a tie, the shorter one.
+Ship the row that passes all four. When several pass, prefer curiosity_gap
+and two_beat_contrast. Tone: bold but factual, confident verbs, no hype
+words (insane, crazy, mind-blowing, game-changing). On a tie, the shorter.
+
+If the account has hooks its reviewer approved before, read them first and
+match their voice and shape. They outrank every example in this skill.
 
 ## Hard rules
 
@@ -86,6 +92,6 @@ press release. Rewrite it from the angle.
 | Five rewordings of one idea | Five different levers, not synonyms |
 | Leading with the stat | Lead with the stake; give the number its meaning |
 | Punchier than the facts | Run the True check against the source, word by word |
-| Mystery hook that hides the subject ("YOU WON'T BELIEVE THIS") | Name the subject; the gap comes from the contrast, not from hiding things |
+| Mystery hook that hides the subject ("YOU WON'T BELIEVE THIS") | Name the subject and the setup; a curiosity gap holds back one detail, never the subject |
 | Newsroom verbs (BREACHED, UNVEILS, SLASHES) | Say it like a friend: broke into, launched, cut |
 | Hook the slides can't back up | Readers punish bait; keep the promise on slide 2 |

@@ -115,8 +115,11 @@ export type RunArtifacts = {
     credit?: string
     /** Warning lines for the reviewer, worded by the backend. */
     notices?: string[]
-    /** The hook currently on the cover. */
+    /** The hook currently on the cover, and its highlighted words. */
     title?: string
+    highlight?: string
+    /** True when a new hook can be re-rendered instantly (no rework). */
+    can_retitle?: boolean
     /** The planner's other drafted hooks, for a one-click swap. */
     hook_options?: HookOption[]
   }

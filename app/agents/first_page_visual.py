@@ -23,6 +23,7 @@ import asyncio
 import copy
 import logging
 import math
+import mimetypes
 import os
 import re
 import subprocess
@@ -70,6 +71,8 @@ logger = logging.getLogger(__name__)
 # rework rounds simply create a new version under the same name.
 COVER_VIDEO_ARTIFACT = "cover.mp4"
 COVER_POSTER_ARTIFACT = "cover-poster.png"
+# The untitled picture the title is composed onto, plus its extension.
+COVER_BASE_ARTIFACT = "cover-base"
 
 _RETRIM_FFMPEG_TIMEOUT_S = 300
 # Each inspection is one small billed vision call; this caps a run's spend
@@ -2038,8 +2041,23 @@ async def _build_cover(
         # ValueError: artifact service not initialized on the runner.
         return {"ok": False, "error": f"could not save cover artifacts: {exc}"}
 
-    # Only the duration is new, and it is a number: no text rule can fail now.
-    set_model(tool_context.state, K_COVER, spec.model_copy(update={"duration_s": duration_s}))
+    # Keep the picture exactly as it went into compose_cover, so a reviewer
+    # who picks or types a different hook gets the same framing re-titled in
+    # seconds. Best effort: a cover without it falls back to a rework.
+    base_artifact = ""
+    try:
+        base = Path(media_path)
+        base_name = f"{COVER_BASE_ARTIFACT}{base.suffix.lower() or ('.mp4' if is_video else '.png')}"
+        base_bytes = await asyncio.to_thread(base.read_bytes)
+        mime = "video/mp4" if is_video else (mimetypes.guess_type(base_name)[0] or "image/png")
+        await tool_context.save_artifact(base_name, types.Part.from_bytes(data=base_bytes, mime_type=mime))
+        base_artifact = base_name
+    except (ValueError, OSError) as exc:
+        warnings.append(f"cover base not saved, so retitling needs a rework: {exc}")
+
+    # Only the duration and the base file are new, and neither is checked text.
+    set_model(tool_context.state, K_COVER, spec.model_copy(
+        update={"duration_s": duration_s, "base_artifact": base_artifact}))
     # What this cover shows, so a reviewer's "wrong picture" in the next
     # round takes it (and what it was cut from) out of best_so_far.
     tool_context.state[_K_BUILT] = {

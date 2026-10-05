@@ -134,6 +134,10 @@ Start from the research brief's suggested_angle: it usually holds the
 contrast already. Then write at least five candidates, each on a different
 lever, and keep the one that is clear, for me, open and true.
 
+- curiosity_gap: name the subject and the setup plainly and hold back the
+  one detail slide 2 delivers ("53 CHATGPT PHOTOS LEAKED. NOBODY HACKED
+  IN." - how, then?). Never hide the subject; never promise what slide 2
+  cannot pay off.
 - two_beat_contrast: the expectation, then the twist.
 - reader_stake: what changes for the reader, in you/your words.
 - number_with_meaning: one number a stranger reads instantly, with what it
@@ -150,7 +154,12 @@ The four checks, in order:
 4. True: every word is backed by the research. Never stretch a fact to
    make it punchier; a hook the slides cannot back up loses the follow.
 
-If two candidates tie, keep the shorter. Never keep the first line you
+When several pass, prefer curiosity_gap and two_beat_contrast: they are the
+shapes reviewers approve most. Be bold but factual: confident verbs and a
+firm claim, never hype words (insane, crazy, mind-blowing, game-changing).
+The hooks a workspace's reviewer picked or wrote on the review screen are
+shown to the planner and outrank every example here. If two candidates
+still tie, keep the shorter. Never keep the first line you
 thought of. When the request dictates the exact title, that title wins.
 
 ### Weak to strong (from real runs)

@@ -75,6 +75,7 @@ K_COVER = "cover"                    # CoverSpec dict
 K_COVER_DEADLINE = "cover_step_deadline"  # float
 K_COPY = "copy_set"                  # CopySet dict
 K_COPY_BUDGET = "copy_budget"        # str - the saved design's text budget, injected for planner/phrasing
+K_HOOK_EXAMPLES = "hook_examples"    # str - hooks this workspace's reviewer chose, injected for the planner
 K_BODY_SLIDES = "body_slides"        # list[RenderedSlide dict]
 K_CTA_SLIDE = "cta_slide"            # CTASlide dict
 K_BUNDLE = "bundle"                  # Bundle dict

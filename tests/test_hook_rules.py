@@ -145,8 +145,9 @@ def test_the_review_screen_gets_the_other_drafted_hooks():
 def test_the_prompts_teach_the_method():
     planner_md = (REPO / "skills/agents/planner.md").read_text(encoding="utf-8")
     cover_style = (REPO / "skills/cover-style.md").read_text(encoding="utf-8")
-    for lever in ("two_beat_contrast", "reader_stake", "number_with_meaning", "winner_loser", "consequence", "question"):
+    for lever in ("curiosity_gap", "two_beat_contrast", "reader_stake", "number_with_meaning", "winner_loser", "consequence", "question"):
         assert lever in planner_md and lever in cover_style
     assert "suggested_angle" in planner_md and "suggested_angle" in cover_style
     assert "{carousel_plan?}" in planner_md
+    assert "{hook_examples?}" in planner_md  # the reviewer's own choices reach the planner
     assert "Never ship a report line" in planner_md and "Never a report line" in cover_style

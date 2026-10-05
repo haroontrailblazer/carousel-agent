@@ -110,6 +110,18 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
     },
   })
 
+  // A new hook drawn onto the saved cover picture: seconds, no model, no rework.
+  const retitle = useMutation({
+    mutationFn: (payload: { title: string; highlight: string; source: "picked" | "typed" }) =>
+      post<{ title: string; warnings: string[] }>(`/api/runs/${runId}/cover-title`, payload),
+    onSuccess: (data) => {
+      toast.success("Cover updated", { description: data.title })
+      for (const warning of data.warnings ?? []) toast.info(warning)
+      void queryClient.invalidateQueries({ queryKey: ["artifacts", runId] })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not update the cover."),
+  })
+
   // Both covers present and nothing picked: approving now would publish
   // whichever the pipeline happened to order first, which is not a decision
   // anyone made.
@@ -154,13 +166,19 @@ export function ReviewPanel({ run, fit = false }: { run: RunDetail; fit?: boolea
         resending={resend.isPending}
         embedded={!!artifacts.data}
       />
-      {/* Only while a decision is open: using a hook IS a reject-and-rework. */}
-      {cover?.hook_options && run.pending_review && run.status !== "running" && (
+      {/* Only while a decision is open: the carousel is still being shaped. */}
+      {cover && run.pending_review && run.status !== "running" && (
         <HookOptions
-          options={cover.hook_options}
+          options={cover.hook_options ?? []}
           currentTitle={cover.title}
-          disabled={decide.isPending}
-          onUse={(option) => decide.mutate({ status: "rejected", feedback: hookSwapFeedback(option) })}
+          currentHighlight={cover.highlight}
+          canRetitle={!!cover.can_retitle}
+          busy={retitle.isPending || decide.isPending}
+          onApply={(text, highlight, source) =>
+            cover.can_retitle
+              ? retitle.mutate({ title: text, highlight, source })
+              : decide.mutate({ status: "rejected", feedback: hookSwapFeedback(text, highlight) })
+          }
         />
       )}
       {artifacts.data && (

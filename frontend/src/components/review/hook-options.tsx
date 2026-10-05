@@ -1,11 +1,12 @@
 import * as React from "react"
-import { Sparkles } from "lucide-react"
+import { PenLine, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import type { HookOption } from "@/lib/types"
-import { cn } from "@/lib/utils"
 
 const LEVER_LABELS: Record<string, string> = {
+  curiosity_gap: "Curiosity gap",
   two_beat_contrast: "Two beats",
   reader_stake: "Your stake",
   number_with_meaning: "Number",
@@ -15,11 +16,11 @@ const LEVER_LABELS: Record<string, string> = {
   user_title: "Your title",
 }
 
-/** The rework request that swaps only the cover's line. */
-export function hookSwapFeedback(option: HookOption): string {
-  const highlight = option.highlight ? ` with the highlighted words "${option.highlight}"` : ""
+/** The rework request that swaps only the cover's line (older covers only). */
+export function hookSwapFeedback(text: string, highlight: string): string {
+  const marked = highlight ? ` with the highlighted words "${highlight}"` : ""
   return (
-    `[first visual] Cover title only: change the cover title to exactly "${option.text}"${highlight}. ` +
+    `[first visual] Cover title only: change the cover title to exactly "${text}"${marked}. ` +
     "Keep the cover picture, the body slides and the caption as they are."
   )
 }
@@ -37,73 +38,126 @@ function Highlighted({ text, highlight }: { text: string; highlight: string }) {
 }
 
 /**
- * The other hooks the planner drafted for this cover.
+ * Choose the cover's hook: one of the planner's drafts, or your own words.
  *
- * The planner writes several candidates on different levers and picks one;
- * the rest used to be thrown away, so a reviewer who liked a different line
- * had to type it into a rework. Here it is one click and a confirm - two
- * steps, because using one starts a cover rework.
+ * Twelve rounds of rules could not guess what this client approves, so the
+ * reviewer decides. On a cover with a saved untitled picture (`canRetitle`)
+ * the new hook is drawn on in seconds, with no model and no rework, and every
+ * choice is remembered as an example for future carousels. An older cover
+ * falls back to a cover-only rework, behind a confirm.
  */
 export function HookOptions({
   options,
   currentTitle,
-  disabled,
-  onUse,
+  currentHighlight,
+  canRetitle,
+  busy,
+  onApply,
 }: {
   options: HookOption[]
   currentTitle?: string
-  disabled: boolean
-  onUse: (option: HookOption) => void
+  currentHighlight?: string
+  canRetitle: boolean
+  busy: boolean
+  onApply: (text: string, highlight: string, source: "picked" | "typed") => void
 }) {
   const [armed, setArmed] = React.useState<string | null>(null)
-  if (!options.length) return null
+  const [own, setOwn] = React.useState("")
+  const [ownHighlight, setOwnHighlight] = React.useState("")
+  const highlightMissing = !!ownHighlight.trim() && !own.toUpperCase().includes(ownHighlight.trim().toUpperCase())
+
+  const use = (text: string, highlight: string, source: "picked" | "typed") => {
+    // Instant swaps are free and reversible; a rework is not, so it confirms.
+    if (!canRetitle && armed !== text) {
+      setArmed(text)
+      return
+    }
+    setArmed(null)
+    onApply(text, highlight, source)
+  }
+
   return (
-    <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
+    <div className="mt-4 space-y-3 border-t border-[var(--border)] pt-4">
       <p className="flex items-center gap-1.5 text-sm font-medium">
-        <Sparkles className="size-4" /> Other cover hooks
+        <Sparkles className="size-4" /> Cover hook
       </p>
       {currentTitle && (
-        <p className="text-xs text-[var(--muted-foreground)]">
-          On the cover now: <span className="font-medium uppercase">{currentTitle}</span>
+        <p className="rounded-[var(--radius-md)] bg-[var(--muted)] p-2.5 text-sm font-semibold uppercase leading-snug">
+          <Highlighted text={currentTitle} highlight={currentHighlight ?? ""} />
         </p>
       )}
-      <ul className="space-y-2">
-        {options.map((option) => {
-          const isArmed = armed === option.text
-          return (
-            <li
-              key={option.text}
-              className="rounded-[var(--radius-md)] border border-[var(--border)] p-2.5"
-            >
-              <p className="text-sm font-semibold uppercase leading-snug">
-                <Highlighted text={option.text} highlight={option.highlight} />
-              </p>
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  {LEVER_LABELS[option.lever] ?? option.lever}
-                </span>
-                <div className="flex gap-1.5">
-                  {isArmed && (
-                    <Button size="sm" variant="ghost" onClick={() => setArmed(null)}>
-                      Cancel
+      <p className="text-xs text-[var(--muted-foreground)]">
+        {canRetitle
+          ? "Pick another or write your own. The cover updates in seconds, and your choice teaches future hooks."
+          : "This cover is older: swapping its hook runs a short cover-only rework."}
+      </p>
+
+      {options.length > 0 && (
+        <ul className="space-y-2">
+          {options.map((option) => {
+            const isArmed = armed === option.text
+            return (
+              <li key={option.text} className="rounded-[var(--radius-md)] border border-[var(--border)] p-2.5">
+                <p className="text-sm font-semibold uppercase leading-snug">
+                  <Highlighted text={option.text} highlight={option.highlight} />
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="text-xs text-[var(--muted-foreground)]">
+                    {LEVER_LABELS[option.lever] ?? option.lever}
+                  </span>
+                  <div className="flex gap-1.5">
+                    {isArmed && (
+                      <Button size="sm" variant="ghost" onClick={() => setArmed(null)}>
+                        Cancel
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant={isArmed ? "brand" : "secondary"}
+                      disabled={busy}
+                      onClick={() => use(option.text, option.highlight, "picked")}
+                    >
+                      {isArmed ? "Rework cover with this" : "Use this hook"}
                     </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant={isArmed ? "brand" : "secondary"}
-                    className={cn(!isArmed && "text-xs")}
-                    disabled={disabled}
-                    onClick={() => (isArmed ? onUse(option) : setArmed(option.text))}
-                    title={isArmed ? undefined : "Rebuilds only the cover with this line"}
-                  >
-                    {isArmed ? "Rework cover with this" : "Use this hook"}
-                  </Button>
+                  </div>
                 </div>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <div className="space-y-2 rounded-[var(--radius-md)] border border-dashed border-[var(--border)] p-2.5">
+        <p className="flex items-center gap-1.5 text-xs font-medium">
+          <PenLine className="size-3.5" /> Write your own
+        </p>
+        <Input
+          value={own}
+          onChange={(e) => setOwn(e.target.value)}
+          placeholder="e.g. 53 CHATGPT PHOTOS LEAKED. NOBODY HACKED IN."
+          maxLength={120}
+          aria-label="Your cover hook"
+        />
+        <Input
+          value={ownHighlight}
+          onChange={(e) => setOwnHighlight(e.target.value)}
+          placeholder="Words to highlight (optional, must be in the hook)"
+          maxLength={60}
+          aria-label="Words to highlight"
+        />
+        {highlightMissing && (
+          <p className="text-xs text-[var(--destructive)]">The highlighted words must appear in the hook.</p>
+        )}
+        <Button
+          size="sm"
+          variant={armed === own.trim() && !!own.trim() ? "brand" : "secondary"}
+          className="w-full"
+          disabled={busy || own.trim().length < 3 || highlightMissing}
+          onClick={() => use(own.trim(), ownHighlight.trim(), "typed")}
+        >
+          {armed === own.trim() && !!own.trim() ? "Rework cover with this" : canRetitle ? "Put this on the cover" : "Use my hook"}
+        </Button>
+      </div>
     </div>
   )
 }

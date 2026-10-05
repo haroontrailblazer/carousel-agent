@@ -98,6 +98,13 @@ suggested_angle as a hook candidate:
 
    Recent feedback notes: {recent_feedback_notes?}
 
+3. Cover hooks this account's reviewer picked or wrote for earlier
+   carousels (empty until they choose one on the review screen). When
+   present they outrank the hook examples in this document: they are what
+   this client actually approves.
+
+   {hook_examples?}
+
    A past note or learned rule that caps the words on a body-slide line, or
    asks for short, snappy, or bullet-style lines, is a request for shorter
    slides: give a prose slide only its payoff fact, stay well inside the
@@ -156,6 +163,11 @@ with their meaning.
    b. Write at least 5 candidates into hook_candidates, each on a DIFFERENT
       lever, each with its highlight (a verbatim 2-4 word substring of its
       text). The levers:
+      - curiosity_gap: name the subject and the setup plainly, and hold
+        back the one detail slide 2 delivers, so the reader swipes to
+        close the gap. "53 CHATGPT PHOTOS LEAKED. NOBODY HACKED IN."
+        (how, then?) Never hide the subject, and never promise what
+        slide 2 cannot pay off.
       - two_beat_contrast: two short sentences, the expectation then the
         twist. "THE CHATBOT SAID NO. THE ROBOT DIDN'T."
       - reader_stake: what it changes for the reader, in you/your words.
@@ -178,6 +190,10 @@ with their meaning.
         so they swipe to close it (the contrast);
       - true: every word is backed by the research brief. Never stretch a
         fact to make it punchier.
+      When more than one candidate passes, prefer curiosity_gap and
+      two_beat_contrast: they are the shapes reviewers approve most. Be
+      bold but factual: confident verbs and a firm claim are good; hype
+      words (insane, crazy, mind-blowing, game-changing) are not.
    d. hook_title is the winning candidate's text, copied exactly, and
       hook_highlight is its highlight - the payoff or the twist, never a
       connecting phrase.

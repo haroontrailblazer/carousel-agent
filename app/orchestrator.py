@@ -59,6 +59,7 @@ from app.pipeline_outputs import OUTPUT_KEYS, TimeWindowError, validate_output
 from app.agents.publisher import K_PUBLISH_RESULT
 from app.config import settings
 from app.copy_budget import copy_budget_note
+from app import hook_examples
 from app.cover_notice import cover_notice_lines
 from app.schemas import CarouselPlan, NewsItem, QAReport, ReworkPlan, Verdict
 from app.services import db
@@ -79,6 +80,7 @@ from app.state import (
     K_ACCOUNT_ID,
     K_BUNDLE,
     K_COPY_BUDGET,
+    K_HOOK_EXAMPLES,
     K_COVER_DEADLINE,
     K_DESIGN,
     K_PHASE,
@@ -619,6 +621,10 @@ class CarouselOrchestrator(BaseAgent):
                 # to how much text the saved design holds, measured with the
                 # real typesetter (about a second, then cached).
                 prepare[K_COPY_BUDGET] = await asyncio.to_thread(copy_budget_note, state.get(K_DESIGN))
+            if name == AGENT_PLANNER:
+                # The hooks this workspace's reviewer picked or wrote: the
+                # only reliable evidence of what this client approves.
+                prepare[K_HOOK_EXAMPLES] = hook_examples.prompt_note(await hook_examples.load())
             text = f"[generate] preparing {name}"
             if name in (AGENT_RESEARCH, AGENT_PLANNER, AGENT_PHRASING):
                 # Every model's own "today" is its training cutoff, so the

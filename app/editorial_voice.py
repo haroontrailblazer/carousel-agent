@@ -40,8 +40,10 @@ a research abstract, a sales pitch, or a list of AI-generated slogans.
   loud. Name the real subject and state the concrete thing that changed, then
   give the stake: why a stranger should care, or what is surprising about it.
   A number belongs only when the reader instantly knows what it counts and
-  whether it is good or bad. Put the payoff in the headline instead of teasing
-  it, and read it aloud before you keep it. Still avoid mystery hooks, exaggerated promises, forced drama, and
+  whether it is good or bad. A body-slide headline delivers its payoff; the
+  cover may hold back one detail for slide 2 (a curiosity gap) when the
+  subject and the setup are stated plainly. Read it aloud before you keep it.
+  Still avoid mystery hooks that hide the subject, exaggerated promises, forced drama, and
   generic headings such as A GAME CHANGER or THE FUTURE IS HERE. The cover
   headline is the shortest text in the whole carousel and the only one most
   people read, so it gets the most rewriting, not the least.

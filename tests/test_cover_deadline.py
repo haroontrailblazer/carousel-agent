@@ -285,7 +285,9 @@ async def test_the_real_salvage_event_carries_the_cover_and_its_artifacts(fakes,
         events = [event async for event in agent._salvage_cover(ctx, "timed out")]
     [event] = events
     assert event.actions.state_delta[s.K_COVER]["drawn_background"] is True
-    assert event.actions.artifact_delta == {fpv.COVER_VIDEO_ARTIFACT: 1, fpv.COVER_POSTER_ARTIFACT: 2}
+    # The untitled picture is saved too, so a reviewer can swap the hook later.
+    assert event.actions.artifact_delta == {fpv.COVER_VIDEO_ARTIFACT: 1, fpv.COVER_POSTER_ARTIFACT: 2,
+                                            f"{fpv.COVER_BASE_ARTIFACT}.png": 3}
     assert "built the cover from" in event.content.parts[0].text
     assert fakes.compose  # the fakes' renderer composed it
 

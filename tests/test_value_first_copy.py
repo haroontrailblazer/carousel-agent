@@ -360,7 +360,7 @@ async def test_the_planner_is_told_the_same_budget(monkeypatch, with_budget):
     ("skills/agents/phrasing.md", {"rework_feedback?", "recent_feedback_notes?", "carousel_plan?", "news_item?",
                                    "research_brief?", "copy_budget?"}),
     ("skills/agents/planner.md", {"news_item", "research_brief?", "rework_feedback?", "recent_feedback_notes?",
-                                  "copy_budget?", "carousel_plan?"}),
+                                  "copy_budget?", "carousel_plan?", "hook_examples?"}),
 ])
 def test_prompt_placeholders_are_known_state_keys(path, allowed):
     # ADK raises KeyError on an unknown non-optional {name}; examples must not add one.

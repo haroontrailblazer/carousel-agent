@@ -302,11 +302,16 @@ class CoverSpec(PublishedTextModel):
     # File names, the source URL and the picture check's labels are never
     # published as text.
     text_rules_exempt: ClassVar[frozenset[str]] = frozenset(
-        {"video_artifact", "poster_artifact", "source_media_url", "picture_verdict", "picture_kind"}
+        {"video_artifact", "poster_artifact", "base_artifact", "source_media_url",
+         "picture_verdict", "picture_kind"}
     )
 
     video_artifact: str = ""  # artifact filename of the final 4-8 s cover video
     poster_artifact: str = ""  # first-frame PNG (used as IG fallback / preview)
+    # The exact media the title was composed onto, saved so a reviewer's new
+    # hook re-renders the cover in seconds with no model (app/cover_retitle.py).
+    # '' for covers built before this existed.
+    base_artifact: str = ""
     source_media_url: str = ""
     title: str = ""
     highlight: str = ""
